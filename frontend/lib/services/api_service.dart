@@ -67,6 +67,43 @@ class ApiService {
     }
   }
 
+  // ─── Upload Multiple Pages ─────────────────────────────────────────────────
+
+  /// Upload multiple page images for a single report.
+  /// The backend merges all pages via LLM into one unified report.
+  static Future<MedicalReport> uploadMultipleReports(List<XFile> imageFiles) async {
+    if (imageFiles.isEmpty) throw ApiException('No images provided', 400);
+
+    // If only 1 image, use the original single-upload endpoint
+    if (imageFiles.length == 1) return uploadReport(imageFiles.first);
+
+    final uri = Uri.parse('$_baseUrl/api/upload-multi');
+    final request = http.MultipartRequest('POST', uri);
+
+    // Bypass localtunnel reminder page
+    request.headers['bypass-tunnel-reminder'] = 'true';
+
+    for (final file in imageFiles) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'files',
+          file.path,
+          filename: file.name,
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return MedicalReport.fromJson(jsonDecode(response.body));
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
   // ─── Update Report ─────────────────────────────────────────────────────────
 
   /// Update structured data for a report (tester corrections).

@@ -12,7 +12,7 @@ import sqlite3
 import base64
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List as TypingList
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -182,6 +182,70 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         return normalize_structured_data(extracted_data)
     except Exception as e:
         print(f"LLM Parsing failed: {e}")
+        return normalize_structured_data({})
+
+async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[str, Any]:
+    """Uses OpenAI Vision to parse MULTIPLE page images into a single structured JSON."""
+    # Build image content blocks for all pages
+    image_blocks = []
+    for i, fp in enumerate(file_paths):
+        b64 = encode_image(fp)
+        image_blocks.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+        })
+
+    # Dynamically build the prompt based on the schema
+    extraction_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_")]
+    keys_list = "\n".join([f"- {k}" for k in extraction_keys])
+
+    prompt = f"""
+    You are given {len(file_paths)} page(s) of a SINGLE medical blood report.
+    Extract ALL medical data from ALL pages and merge them into ONE JSON object.
+    Do NOT separate results by page — combine everything into a unified record.
+    Ensure you extract ALL test items accurately and do not miss any rows from any page.
+
+    The output MUST exactly match the following JSON keys.
+    If a value is missing in the report, use an empty string "".
+    DO NOT use null or omit keys.
+
+    Fields to extract (all as strings):
+    {keys_list}
+
+    IMPORTANT MAPPING RULES:
+    1. Standardize units: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
+    2. Map common names:
+       - 'WBC' -> 'wbc_cells_ul'
+       - 'RBC' -> 'rbc_count_mil_ul'
+       - 'HGB' -> 'hemoglobin_g_dl'
+       - 'HCT' -> 'hematocrit_pct'
+       - 'PLT' -> 'platelet_count_x10_3_ul'
+       - 'SG' -> 'specific_gravity'
+    3. If multiple tests exist for the same category, pick the most specific one.
+    4. Patient info (medid, labreference, dates) should appear once — take from whichever page has it.
+
+    Return ONLY the JSON object. Do not wrap in markdown tags.
+    """
+
+    # Compose the message: text prompt + all image blocks
+    content_parts = [{"type": "text", "text": prompt}] + image_blocks
+
+    try:
+        response = llm_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": "You are an expert medical data extraction assistant. You receive multi-page reports. Return JSON only."},
+                {"role": "user", "content": content_parts}
+            ],
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content
+        print(f"--- EXTRACTED JSON FROM OPENAI VISION (MULTI-PAGE: {len(file_paths)} pages) ---\n{content}\n-----------------------------------------")
+
+        extracted_data = json.loads(content)
+        return normalize_structured_data(extracted_data)
+    except Exception as e:
+        print(f"Multi-page LLM Parsing failed: {e}")
         return normalize_structured_data({})
 
 # List of exact columns in staging_medical_records table
@@ -419,6 +483,82 @@ async def upload_report(file: UploadFile = File(...)):
         return {
             "id": report_id,
             "filename": file.filename,
+            "upload_time": report_metadata["upload_time"],
+            "status": "completed",
+            "structured_data": structured_data,
+            "user_verified": False,
+            "raw_text": raw_text
+        }
+    except Exception as e:
+        if STORAGE_ENGINE == "supabase" and supabase:
+            supabase.table("reports").update({"status": "failed"}).eq("id", report_id).execute()
+        else:
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.execute("UPDATE reports SET status='failed' WHERE id=?", (report_id,))
+            conn.commit()
+            conn.close()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/upload-multi")
+async def upload_multi_report(files: list[UploadFile] = File(...)):
+    """Upload multiple page images for a single report. Merges all pages via LLM."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    report_id = str(uuid.uuid4())
+    saved_paths: list[Path] = []
+    filenames: list[str] = []
+
+    # Save all uploaded files
+    for i, file in enumerate(files):
+        file_ext = Path(file.filename).suffix or ".jpg"
+        file_path = UPLOAD_DIR / f"{report_id}_page{i+1}{file_ext}"
+        async with aiofiles.open(file_path, "wb") as f:
+            content = await file.read()
+            await f.write(content)
+        saved_paths.append(file_path)
+        filenames.append(file.filename)
+
+    report_metadata = {
+        "id": report_id,
+        "filename": ", ".join(filenames),
+        "upload_time": datetime.now().isoformat(),
+        "status": "processing",
+        "file_path": str(saved_paths[0]),
+        "raw_text": None,
+        "structured_data": None,
+        "user_verified": 0
+    }
+
+    await save_report(report_metadata)
+
+    try:
+        # Use multi-page LLM parsing
+        if len(saved_paths) == 1:
+            structured_data = await parse_medical_report_llm(saved_paths[0])
+        else:
+            structured_data = await parse_medical_report_multi_llm(saved_paths)
+
+        raw_text = f"Extracted via OpenAI Vision API ({len(saved_paths)} page(s))"
+
+        # Update with results
+        if STORAGE_ENGINE == "supabase" and supabase:
+            supabase.table("reports").update({
+                "status": "completed",
+                "raw_text": raw_text,
+                "structured_data": structured_data
+            }).eq("id", report_id).execute()
+        else:
+            conn = sqlite3.connect(str(DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute("UPDATE reports SET status = ?, raw_text = ?, structured_data = ? WHERE id = ?",
+                           ("completed", raw_text, json.dumps(structured_data), report_id))
+            conn.commit()
+            conn.close()
+
+        return {
+            "id": report_id,
+            "filename": ", ".join(filenames),
             "upload_time": report_metadata["upload_time"],
             "status": "completed",
             "structured_data": structured_data,

@@ -8,7 +8,7 @@ import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
 import 'verify_screen.dart';
 
-/// Screen 1: Capture or pick a medical report image.
+/// Screen 1: Capture or pick medical report images (supports multi-page).
 /// After processing, navigates to VerifyScreen with extracted data.
 class CaptureScreen extends StatefulWidget {
   const CaptureScreen({super.key});
@@ -20,7 +20,7 @@ class CaptureScreen extends StatefulWidget {
 class _CaptureScreenState extends State<CaptureScreen>
     with SingleTickerProviderStateMixin {
   final ImagePicker _picker = ImagePicker();
-  XFile? _selectedImage;
+  final List<XFile> _selectedImages = [];
   bool _isProcessing = false;
   String _statusMessage = '';
   double _progress = 0.0;
@@ -50,14 +50,27 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: source,
-        imageQuality: 90,
-      );
-      if (image != null) {
-        setState(() {
-          _selectedImage = image;
-        });
+      if (source == ImageSource.gallery) {
+        // Allow picking multiple images from gallery
+        final List<XFile> images = await _picker.pickMultiImage(
+          imageQuality: 90,
+        );
+        if (images.isNotEmpty) {
+          setState(() {
+            _selectedImages.addAll(images);
+          });
+        }
+      } else {
+        // Camera: pick one at a time, add to list
+        final XFile? image = await _picker.pickImage(
+          source: source,
+          imageQuality: 90,
+        );
+        if (image != null) {
+          setState(() {
+            _selectedImages.add(image);
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -71,24 +84,38 @@ class _CaptureScreenState extends State<CaptureScreen>
     }
   }
 
-  Future<void> _processImage() async {
-    if (_selectedImage == null) return;
+  void _removeImage(int index) {
+    setState(() {
+      _selectedImages.removeAt(index);
+    });
+  }
+
+  void _clearAllImages() {
+    setState(() {
+      _selectedImages.clear();
+    });
+  }
+
+  Future<void> _processImages() async {
+    if (_selectedImages.isEmpty) return;
 
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Uploading report...';
+      _statusMessage = 'Uploading ${_selectedImages.length} page(s)...';
       _progress = 0.15;
     });
 
     try {
       await Future.delayed(const Duration(milliseconds: 400));
       setState(() {
-        _statusMessage = 'Running OCR extraction...';
+        _statusMessage = _selectedImages.length > 1
+            ? 'Analyzing ${_selectedImages.length} pages...'
+            : 'Running OCR extraction...';
         _progress = 0.4;
       });
 
-      // Actual API call — uploads, runs OCR, runs LLM parsing
-      final report = await ApiService.uploadReport(_selectedImage!);
+      // Actual API call — uploads all pages, runs LLM parsing
+      final report = await ApiService.uploadMultipleReports(_selectedImages);
 
       setState(() {
         _statusMessage = 'Parsing data fields...';
@@ -106,7 +133,7 @@ class _CaptureScreenState extends State<CaptureScreen>
 
       setState(() {
         _isProcessing = false;
-        _selectedImage = null;
+        _selectedImages.clear();
       });
 
       if (mounted) {
@@ -280,9 +307,11 @@ class _CaptureScreenState extends State<CaptureScreen>
                                     letterSpacing: -0.5,
                                   ),
                                 ),
-                                const Text(
-                                  'Snap a medical report to begin',
-                                  style: TextStyle(
+                                Text(
+                                  _selectedImages.isEmpty
+                                      ? 'Snap a medical report to begin'
+                                      : '${_selectedImages.length} page(s) captured',
+                                  style: const TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 14,
                                   ),
@@ -329,15 +358,15 @@ class _CaptureScreenState extends State<CaptureScreen>
 
                     // Image preview or upload area
                     Expanded(
-                      child: _selectedImage == null
+                      child: _selectedImages.isEmpty
                           ? _buildUploadArea()
-                          : _buildImagePreview(),
+                          : _buildMultiImagePreview(),
                     ),
 
                     const SizedBox(height: 24),
 
                     // Action buttons
-                    if (_selectedImage == null && !_isProcessing) ...[
+                    if (_selectedImages.isEmpty && !_isProcessing) ...[
                       FadeInUp(
                         delay: const Duration(milliseconds: 200),
                         child: Row(
@@ -368,29 +397,47 @@ class _CaptureScreenState extends State<CaptureScreen>
                       ),
                     ],
 
-                    if (_selectedImage != null && !_isProcessing) ...[
+                    if (_selectedImages.isNotEmpty && !_isProcessing) ...[
                       FadeInUp(
                         child: Column(
                           children: [
                             SizedBox(
                               width: double.infinity,
                               child: GradientButton(
-                                label: 'Process Report',
+                                label: _selectedImages.length == 1
+                                    ? 'Process Report'
+                                    : 'Process ${_selectedImages.length} Pages',
                                 icon: Icons.auto_awesome,
-                                onPressed: _processImage,
+                                onPressed: _processImages,
                               ),
                             ),
                             const SizedBox(height: 12),
-                            TextButton.icon(
-                              onPressed: () =>
-                                  setState(() => _selectedImage = null),
-                              icon: const Icon(Icons.refresh,
-                                  color: AppTheme.textSecondary, size: 18),
-                              label: const Text(
-                                'Choose different image',
-                                style:
-                                    TextStyle(color: AppTheme.textSecondary),
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // Add more pages
+                                TextButton.icon(
+                                  onPressed: () => _showAddMoreOptions(),
+                                  icon: const Icon(Icons.add_photo_alternate,
+                                      color: AppTheme.primaryLight, size: 18),
+                                  label: const Text(
+                                    'Add pages',
+                                    style: TextStyle(color: AppTheme.primaryLight),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                // Clear all
+                                TextButton.icon(
+                                  onPressed: _clearAllImages,
+                                  icon: const Icon(Icons.refresh,
+                                      color: AppTheme.textSecondary, size: 18),
+                                  label: const Text(
+                                    'Start over',
+                                    style:
+                                        TextStyle(color: AppTheme.textSecondary),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -406,6 +453,89 @@ class _CaptureScreenState extends State<CaptureScreen>
               if (_isProcessing) _buildProcessingOverlay(),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showAddMoreOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.textTertiary.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Add More Pages',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${_selectedImages.length} page(s) already added',
+              style: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.camera_alt_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              title: const Text('Camera',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              subtitle: const Text('Take another photo',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.accentGradient,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.photo_library_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              title: const Text('Gallery',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              subtitle: const Text('Pick from library',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -471,7 +601,7 @@ class _CaptureScreenState extends State<CaptureScreen>
               ),
               const SizedBox(height: 8),
               const Text(
-                'Use camera or pick from gallery',
+                'Supports multi-page reports',
                 style: TextStyle(
                   color: AppTheme.textTertiary,
                   fontSize: 14,
@@ -484,67 +614,214 @@ class _CaptureScreenState extends State<CaptureScreen>
     );
   }
 
-  Widget _buildImagePreview() {
+  Widget _buildMultiImagePreview() {
     return FadeIn(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.file(
-              File(_selectedImage!.path),
-              fit: BoxFit.cover,
-            ),
-            // Gradient overlay at top
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 80,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.5),
-                      Colors.transparent,
+      child: Column(
+        children: [
+          // Page count header
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.collections, size: 14, color: AppTheme.primaryLight),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_selectedImages.length} page(s)',
+                        style: const TextStyle(
+                          color: AppTheme.primaryLight,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
+                const Spacer(),
+                const Text(
+                  'Swipe to browse • Tap ✕ to remove',
+                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          // Scrollable page thumbnails
+          Expanded(
+            child: _selectedImages.length == 1
+                ? _buildSingleImagePreview(0)
+                : PageView.builder(
+                    itemCount: _selectedImages.length,
+                    controller: PageController(viewportFraction: 0.85),
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: _buildPageCard(index),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleImagePreview(int index) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.file(
+            File(_selectedImages[index].path),
+            fit: BoxFit.cover,
+          ),
+          // Gradient overlay at top
+          Positioned(
+            top: 0, left: 0, right: 0, height: 80,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                ),
               ),
             ),
-            // File info badge
-            Positioned(
-              top: 12,
-              left: 12,
+          ),
+          // Page badge
+          Positioned(
+            top: 12, left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.description, color: Colors.white70, size: 14),
+                  SizedBox(width: 6),
+                  Text('Page 1',
+                      style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+          // Remove button
+          Positioned(
+            top: 12, right: 12,
+            child: GestureDetector(
+              onTap: () => _removeImage(index),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppTheme.error.withOpacity(0.85),
+                  shape: BoxShape.circle,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.image, color: Colors.white70, size: 14),
-                    const SizedBox(width: 6),
-                    Text(
-                      _selectedImage!.name.length > 20
-                          ? '${_selectedImage!.name.substring(0, 20)}...'
-                          : _selectedImage!.name,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                child: const Icon(Icons.close, color: Colors.white, size: 16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageCard(int index) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.file(
+            File(_selectedImages[index].path),
+            fit: BoxFit.cover,
+          ),
+          // Gradient overlay
+          Positioned(
+            top: 0, left: 0, right: 0, height: 60,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black.withOpacity(0.6), Colors.transparent],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          // Bottom gradient
+          Positioned(
+            bottom: 0, left: 0, right: 0, height: 60,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          // Page number badge
+          Positioned(
+            top: 12, left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Page ${index + 1}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          // Remove button
+          Positioned(
+            top: 12, right: 12,
+            child: GestureDetector(
+              onTap: () => _removeImage(index),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withOpacity(0.85),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, color: Colors.white, size: 16),
+              ),
+            ),
+          ),
+          // Page indicator at bottom
+          Positioned(
+            bottom: 12, left: 0, right: 0,
+            child: Center(
+              child: Text(
+                '${index + 1} of ${_selectedImages.length}',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
