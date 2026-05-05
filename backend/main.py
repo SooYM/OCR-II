@@ -21,12 +21,11 @@ import aiofiles
 from PIL import Image
 from dotenv import load_dotenv
 from openai import OpenAI
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client, Client
 
 # Google Cloud Dependencies
 try:
     from google.cloud import vision
-    from google.cloud import bigquery
     HAS_GCP = True
 except ImportError:
     HAS_GCP = False
@@ -52,13 +51,11 @@ app.add_middleware(
 )
 
 OCR_ENGINE = os.getenv("OCR_ENGINE", "tesseract").lower()
-STORAGE_ENGINE = os.getenv("STORAGE_ENGINE", "mongodb").lower()
+STORAGE_ENGINE = os.getenv("STORAGE_ENGINE", "supabase").lower()
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-BQ_DATASET = os.getenv("BIGQUERY_DATASET", "medical_reports")
-BQ_TABLE = os.getenv("BIGQUERY_TABLE", "reports")
 
-MONGODB_URI = os.getenv("MONGODB_URI")
-MONGODB_DB = os.getenv("MONGODB_DB", "medical_reports")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -73,20 +70,14 @@ llm_client = OpenAI(
     api_key=OPENAI_API_KEY,
 )
 
-# ─── BigQuery & MongoDB Client ───────────────────────────────────────────────
+# ─── Supabase Client ─────────────────────────────────────────────────────────
 
-bq_client = None
-if HAS_GCP and STORAGE_ENGINE == "bigquery":
+supabase: Optional[Client] = None
+if STORAGE_ENGINE == "supabase" and SUPABASE_URL and SUPABASE_KEY:
     try:
-        bq_client = bigquery.Client()
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
-        print(f"Failed to initialize BigQuery: {e}")
-
-mongo_client = None
-db = None
-if STORAGE_ENGINE == "mongodb" and MONGODB_URI:
-    mongo_client = AsyncIOMotorClient(MONGODB_URI, tlsAllowInvalidCertificates=True)
-    db = mongo_client[MONGODB_DB]
+        print(f"Failed to initialize Supabase: {e}")
 
 # ─── Database & Storage Logic ───────────────────────────────────────────────
 
@@ -109,9 +100,6 @@ def init_local_db():
     conn.close()
 
 init_local_db()
-
-def get_bq_table_id():
-    return f"{GCP_PROJECT_ID}.{BQ_DATASET}.{BQ_TABLE}"
 
 # ─── OCR & Extraction Logic ────────────────────────────────────────────────
 
@@ -136,18 +124,33 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     """Uses OpenAI Vision to parse an image directly into structured JSON."""
     base64_image = encode_image(file_path)
 
-    prompt = """
+    # Dynamically build the prompt based on the schema
+    # Exclude columns that are handled by the backend (original_*)
+    extraction_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_")]
+    
+    keys_list = "\n".join([f"- {k}" for k in extraction_keys])
+    
+    prompt = f"""
     Extract medical data directly from the image and return it as a JSON object.
     Ensure you extract ALL test items accurately and do not miss any rows.
-    Fields to extract:
-    - patient_name
-    - patient_id
-    - date (ISO format if possible)
-    - test_name
-    - doctor_name
-    - hospital_name
-    - results: a list of objects with [test_item, value, unit, reference_range]
-    - notes: any other relevant info
+    
+    The output MUST exactly match the following JSON keys. 
+    If a value is missing in the report, use an empty string "". 
+    DO NOT use null or omit keys.
+    
+    Fields to extract (all as strings):
+    {keys_list}
+
+    IMPORTANT MAPPING RULES:
+    1. Standardize units: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
+    2. Map common names: 
+       - 'WBC' -> 'wbc_cells_ul'
+       - 'RBC' -> 'rbc_count_mil_ul'
+       - 'HGB' -> 'hemoglobin_g_dl'
+       - 'HCT' -> 'hematocrit_pct'
+       - 'PLT' -> 'platelet_count_x10_3_ul'
+       - 'SG' -> 'specific_gravity'
+    3. If multiple tests exist for the same category, pick the most specific one.
 
     Return ONLY the JSON object. Do not wrap in markdown tags.
     """
@@ -174,45 +177,111 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         )
         content = response.choices[0].message.content
         print(f"--- EXTRACTED JSON FROM OPENAI VISION ---\n{content}\n-----------------------------------------")
-        return json.loads(content)
+        
+        extracted_data = json.loads(content)
+        return normalize_structured_data(extracted_data)
     except Exception as e:
         print(f"LLM Parsing failed: {e}")
-        return parse_medical_report_regex("")
+        return normalize_structured_data({})
 
-def parse_medical_report_regex(raw_text: str) -> Dict[str, Any]:
-    """Fallback regex-based parser."""
-    data = {"patient_name": None, "patient_id": None, "date": None, "test_name": None, "doctor_name": None, "hospital_name": None, "results": [], "notes": raw_text}
-    name_match = re.search(r"(?:patient\s*name|name|nama)\s*[:\-]\s*(.+)", raw_text, re.I)
-    if name_match: data["patient_name"] = name_match.group(1).strip()
-    return data
+# List of exact columns in staging_medical_records table
+STAGING_SCHEMA_KEYS = [
+    "medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", 
+    "urine_colour", "appearance", "specific_gravity", "ph", "proteins", "glucose", 
+    "bilirubin", "ketones", "blood", "urobilinogen", "nitrites", "wbc_pus_cells_hpf", 
+    "rbc", "epithelial_cells_hpf", "casts", "crystals", "others", "hemoglobin_g_dl", 
+    "rbc_count_mil_ul", "hematocrit_pct", "mcv_fl", "mch_pg", "mchc_g_dl", "rdw_cv_pct", 
+    "rdw_sd_fl", "wbc_cells_ul", "neutrophils_pct", "lymphocytes_pct", "eosinophils_pct", 
+    "monocytes_pct", "basophils_pct", "abs_neutrophils", "abs_lymphocytes", "abs_monocytes", 
+    "abs_eosinophils", "abs_basophils", "platelet_count_x10_3_ul", "mpv_fl", "platelet_rdw_pct", 
+    "pct_pct", "p_lcr_pct", "img_pct", "imm_pct", "iml_pct", "lic_pct", "total_cholesterol_mg_dl", 
+    "hdl_mg_dl", "ldl_mg_dl", "vldl_mg_dl", "triglycerides_mg_dl", "non_hdl_mg_dl", 
+    "total_hdl_ratio", "ldl_hdl_ratio", "hdl_ldl_ratio", "bilirubin_total_mg_dl", 
+    "bilirubin_direct_mg_dl", "bilirubin_indirect_mg_dl", "alp_u_l", "alt_sgpt_u_l", 
+    "ast_sgot_u_l", "ggt_u_l", "protein_total_g_dl", "albumin_g_dl", "globulin_g_dl", 
+    "a_g_ratio", "creatinine_mg_dl", "urea_mg_dl", "bun_mg_dl", "bun_creatinine_ratio", 
+    "sodium_mmol_l", "potassium_mmol_l", "chloride_mmol_l", "uric_acid_mg_dl", 
+    "egfr_ml_min_173m2", "iron_ug_dl", "uibc_ug_dl", "tibc_ug_dl", "transferrin_saturation_pct", 
+    "hba1c_pct", "estimated_avg_glucose_mg_dl", "hbf_pct", "urine_albumin_mg_l", 
+    "urine_creatinine_mg_dl", "albumin_creatinine_ratio", "calcium_mg_dl", "phosphorus_mg_dl", 
+    "tt3_ng_dl", "tt4_ug_dl", "tsh_uiu_ml", "fasting_glucose_mg_dl", "postprandial_glucose_mg_dl", 
+    "fbs_mg_dl", "plbs_mg_dl"
+]
+
+def normalize_structured_data(data: dict) -> dict:
+    """Ensure all required keys exist and return a structure friendly to the Flutter UI."""
+    # 1. Standardize the flat data
+    flat = {}
+    raw_medid = data.get("medid", data.get("patient_id", ""))
+    raw_labref = data.get("labreference", "")
+    
+    def clean_id(val):
+        if not val: return ""
+        return re.sub(r'[^a-zA-Z0-9]', '', str(val)).upper()
+    
+    for key in STAGING_SCHEMA_KEYS:
+        if key == "original_medid":
+            flat[key] = str(raw_medid) if raw_medid is not None else ""
+        elif key == "original_labreference":
+            flat[key] = str(raw_labref) if raw_labref is not None else ""
+        elif key == "medid":
+            flat[key] = clean_id(raw_medid)
+        elif key == "labreference":
+            flat[key] = clean_id(raw_labref)
+        else:
+            val = data.get(key, "")
+            flat[key] = str(val) if val is not None else ""
+            
+    # 2. If data already has 'results' (from UI update), merge them back into flat
+    if "results" in data:
+        for res in data["results"]:
+            k = res.get("key")
+            if k and k in STAGING_SCHEMA_KEYS:
+                flat[k] = res.get("value", "")
+
+    # 3. Map to UI Format (for the Flutter app)
+    results = []
+    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
+    for key, value in flat.items():
+        if key in metadata_keys or not value: continue
+        
+        parts = key.split('_')
+        name = " ".join(parts[:-1]).title() if len(parts) > 1 else key.title()
+        unit = ""
+        if key.endswith('_g_dl'): unit = "g/dL"
+        elif key.endswith('_mg_dl'): unit = "mg/dL"
+        elif key.endswith('_mil_ul'): unit = "mil/uL"
+        elif key.endswith('_pct'): unit = "%"
+        elif key.endswith('_fl'): unit = "fL"
+        elif key.endswith('_pg'): unit = "pg"
+        elif key.endswith('_ul'): unit = "uL"
+        elif key.endswith('_uiu_ml'): unit = "uIU/mL"
+        elif key.endswith('_mmol_l'): unit = "mmol/L"
+        
+        # Include 'key' so we can map it back on update
+        results.append({"test_item": name, "value": value, "unit": unit, "key": key})
+
+    # Return a combined object that Flutter can parse
+    return {
+        **flat, 
+        "patient_id": flat["medid"],
+        "date": flat["collected"],
+        "results": results,
+        "notes": flat["others"]
+    }
+
+def get_clean_flat_data(data: dict) -> dict:
+    """Return only the keys that exist in the staging_medical_records table."""
+    normalized = normalize_structured_data(data)
+    return {k: v for k, v in normalized.items() if k in STAGING_SCHEMA_KEYS}
 
 # ─── Storage Helpers ───────────────────────────────────────────────────────
 
+
 async def save_report(report: dict):
-    if STORAGE_ENGINE == "mongodb" and db is not None:
-        await db.reports.insert_one(report)
-    elif STORAGE_ENGINE == "bigquery" and bq_client:
-        bq_report = report.copy()
-        bq_report["structured_data"] = json.dumps(bq_report["structured_data"]) if bq_report["structured_data"] else None
-        
-        query = f"""
-            INSERT INTO `{get_bq_table_id()}` 
-            (id, filename, upload_time, status, file_path, raw_text, structured_data, user_verified)
-            VALUES (@id, @filename, @upload_time, @status, @file_path, @raw_text, @structured_data, @user_verified)
-        """
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("id", "STRING", bq_report.get("id")),
-                bigquery.ScalarQueryParameter("filename", "STRING", bq_report.get("filename")),
-                bigquery.ScalarQueryParameter("upload_time", "STRING", bq_report.get("upload_time")),
-                bigquery.ScalarQueryParameter("status", "STRING", bq_report.get("status", "processing")),
-                bigquery.ScalarQueryParameter("file_path", "STRING", bq_report.get("file_path")),
-                bigquery.ScalarQueryParameter("raw_text", "STRING", bq_report.get("raw_text")),
-                bigquery.ScalarQueryParameter("structured_data", "STRING", bq_report.get("structured_data")),
-                bigquery.ScalarQueryParameter("user_verified", "INT64", bq_report.get("user_verified", 0)),
-            ]
-        )
-        bq_client.query(query, job_config=job_config).result()
+    if STORAGE_ENGINE == "supabase" and supabase:
+        # Use execute() to ensure the insert happens
+        supabase.table("reports").insert(report).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
@@ -223,52 +292,42 @@ async def save_report(report: dict):
         conn.close()
 
 async def update_report_in_db(report_id: str, update_dict: dict):
-    if STORAGE_ENGINE == "mongodb" and db is not None:
-        await db.reports.update_one(
-            {"id": report_id},
-            {"$set": {"structured_data": update_dict.get("structured_data", {})}}
-        )
-    elif STORAGE_ENGINE == "bigquery" and bq_client:
-        structured_data_str = json.dumps(update_dict.get("structured_data", {}))
-        query = f"""
-            UPDATE `{get_bq_table_id()}`
-            SET structured_data = @structured_data
-            WHERE id = @report_id
-        """
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("structured_data", "STRING", structured_data_str),
-                bigquery.ScalarQueryParameter("report_id", "STRING", report_id),
-            ]
-        )
-        bq_client.query(query, job_config=job_config).result()
+    # 1. Fetch existing report to prevent data loss of flat columns
+    existing = await get_report_by_id(report_id)
+    new_structured = update_dict.get("structured_data", {})
+    
+    if existing and existing.get("structured_data"):
+        # Merge new UI edits into existing flat data
+        # This ensures we keep the 90 columns even if the app doesn't send them all back
+        merged = {**existing["structured_data"], **new_structured}
+    else:
+        merged = new_structured
+
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("reports").update({"structured_data": merged}).eq("id", report_id).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
         cursor.execute("UPDATE reports SET structured_data = ? WHERE id = ?",
-                       (json.dumps(update_dict.get("structured_data", {})), report_id))
+                       (json.dumps(merged), report_id))
         conn.commit()
         conn.close()
 
 async def mark_report_sent(report_id: str):
     """Mark a report as verified and sent."""
-    if STORAGE_ENGINE == "mongodb" and db is not None:
-        await db.reports.update_one(
-            {"id": report_id},
-            {"$set": {"user_verified": 1, "status": "sent"}}
-        )
-    elif STORAGE_ENGINE == "bigquery" and bq_client:
-        query = f"""
-            UPDATE `{get_bq_table_id()}`
-            SET user_verified = 1, status = 'sent'
-            WHERE id = @report_id
-        """
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("report_id", "STRING", report_id),
-            ]
-        )
-        bq_client.query(query, job_config=job_config).result()
+    report = await get_report_by_id(report_id)
+    if not report:
+        raise Exception("Report not found")
+
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("reports").update({"user_verified": 1, "status": "sent"}).eq("id", report_id).execute()
+        if report.get("structured_data"):
+            # Ensure only valid columns are inserted into staging_medical_records
+            final_data = get_clean_flat_data(report["structured_data"])
+            try:
+                supabase.table("staging_medical_records").insert(final_data).execute()
+            except Exception as e:
+                print(f"Failed to insert into staging_medical_records: {e}")
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
@@ -277,22 +336,14 @@ async def mark_report_sent(report_id: str):
         conn.close()
 
 async def get_report_by_id(report_id: str):
-    if STORAGE_ENGINE == "mongodb" and db is not None:
-        report = await db.reports.find_one({"id": report_id})
-        if report and "_id" in report:
-            report["_id"] = str(report["_id"])
-        return report
-    elif STORAGE_ENGINE == "bigquery" and bq_client:
-        query = f"SELECT * FROM `{get_bq_table_id()}` WHERE id = @report_id"
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[bigquery.ScalarQueryParameter("report_id", "STRING", report_id)]
-        )
-        results = bq_client.query(query, job_config=job_config).result()
-        row = next(iter(results), None)
-        if not row: return None
-        report = dict(row)
-        report["structured_data"] = json.loads(report["structured_data"]) if report["structured_data"] else None
-        return report
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("reports").select("*").eq("id", report_id).execute()
+        if response.data and len(response.data) > 0:
+            report = response.data[0]
+            # Convert user_verified to bool for Flutter
+            report["user_verified"] = bool(report.get("user_verified", 0))
+            return report
+        return None
     else:
         conn = sqlite3.connect(str(DB_PATH))
         conn.row_factory = sqlite3.Row
@@ -303,6 +354,8 @@ async def get_report_by_id(report_id: str):
         if not row: return None
         report = dict(row)
         report["structured_data"] = json.loads(report["structured_data"]) if report["structured_data"] else None
+        # Convert user_verified to bool for Flutter
+        report["user_verified"] = bool(report.get("user_verified", 0))
         return report
 
 # ─── API Endpoints ──────────────────────────────────────────────────────────
@@ -348,21 +401,12 @@ async def upload_report(file: UploadFile = File(...)):
         raw_text = "Extracted directly via OpenAI Vision API"
         
         # Update with results
-        if STORAGE_ENGINE == "mongodb" and db is not None:
-            await db.reports.update_one(
-                {"id": report_id},
-                {"$set": {"status": "completed", "raw_text": raw_text, "structured_data": structured_data}}
-            )
-        elif STORAGE_ENGINE == "bigquery" and bq_client:
-            query = f"UPDATE `{get_bq_table_id()}` SET status='completed', raw_text=@text, structured_data=@data WHERE id=@id"
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("text", "STRING", raw_text),
-                    bigquery.ScalarQueryParameter("data", "STRING", json.dumps(structured_data)),
-                    bigquery.ScalarQueryParameter("id", "STRING", report_id),
-                ]
-            )
-            bq_client.query(query, job_config=job_config).result()
+        if STORAGE_ENGINE == "supabase" and supabase:
+            supabase.table("reports").update({
+                "status": "completed",
+                "raw_text": raw_text,
+                "structured_data": structured_data
+            }).eq("id", report_id).execute()
         else:
             conn = sqlite3.connect(str(DB_PATH))
             cursor = conn.cursor()
@@ -371,12 +415,19 @@ async def upload_report(file: UploadFile = File(...)):
             conn.commit()
             conn.close()
 
-        return {"id": report_id, "status": "completed", "structured_data": structured_data}
+        # Return full report metadata so Flutter fromJson doesn't fail
+        return {
+            "id": report_id,
+            "filename": file.filename,
+            "upload_time": report_metadata["upload_time"],
+            "status": "completed",
+            "structured_data": structured_data,
+            "user_verified": False,
+            "raw_text": raw_text
+        }
     except Exception as e:
-        if STORAGE_ENGINE == "mongodb" and db is not None:
-            await db.reports.update_one({"id": report_id}, {"$set": {"status": "failed"}})
-        elif STORAGE_ENGINE == "bigquery" and bq_client:
-            bq_client.query(f"UPDATE `{get_bq_table_id()}` SET status='failed' WHERE id='{report_id}'").result()
+        if STORAGE_ENGINE == "supabase" and supabase:
+            supabase.table("reports").update({"status": "failed"}).eq("id", report_id).execute()
         else:
             conn = sqlite3.connect(str(DB_PATH))
             conn.execute("UPDATE reports SET status='failed' WHERE id=?", (report_id,))

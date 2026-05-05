@@ -103,12 +103,14 @@ class TestResult {
   String value;
   String? unit;
   String? referenceRange;
+  String? key; // Original database column key
 
   TestResult({
     required this.testItem,
     required this.value,
     this.unit,
     this.referenceRange,
+    this.key,
   });
 
   factory TestResult.fromJson(Map<String, dynamic> json) {
@@ -117,6 +119,7 @@ class TestResult {
       value: json['value'] as String? ?? '',
       unit: json['unit'] as String?,
       referenceRange: json['reference_range'] as String?,
+      key: json['key'] as String?,
     );
   }
 
@@ -126,6 +129,7 @@ class TestResult {
       'value': value,
       'unit': unit,
       'reference_range': referenceRange,
+      'key': key,
     };
   }
 }
