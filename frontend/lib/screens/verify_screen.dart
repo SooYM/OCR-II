@@ -1,0 +1,761 @@
+import 'package:flutter/material.dart';
+import 'package:animate_do/animate_do.dart';
+import '../theme/app_theme.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/glass_card.dart';
+import '../services/api_service.dart';
+import '../models/report_model.dart';
+
+/// Screen 2: Verify and correct extracted data, then send.
+/// Receives the MedicalReport directly from CaptureScreen (no API fetch needed).
+class VerifyScreen extends StatefulWidget {
+  final MedicalReport report;
+
+  const VerifyScreen({super.key, required this.report});
+
+  @override
+  State<VerifyScreen> createState() => _VerifyScreenState();
+}
+
+class _VerifyScreenState extends State<VerifyScreen> {
+  late StructuredData _data;
+  bool _isSending = false;
+  bool _hasChanges = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Copy structured data so we can edit it
+    _data = widget.report.structuredData ??
+        StructuredData(
+          patientName: '',
+          patientId: '',
+          date: '',
+          testName: '',
+          doctorName: '',
+          hospitalName: '',
+          results: [],
+          notes: '',
+        );
+  }
+
+  Future<void> _handleSend() async {
+    setState(() => _isSending = true);
+
+    try {
+      // Step 1: Save corrected data
+      await ApiService.updateReport(widget.report.id, _data);
+
+      // Step 2: Mark as sent
+      await ApiService.sendReport(widget.report.id);
+
+      if (mounted) {
+        _showSuccessDialog();
+      }
+    } catch (e) {
+      setState(() => _isSending = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.error,
+            content: Text('Failed to send: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: FadeInUp(
+          child: GlassCard(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: AppTheme.success,
+                    size: 56,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Report Sent!',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Data has been verified and submitted successfully.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: GradientButton(
+                    label: 'Scan Next Report',
+                    icon: Icons.camera_alt_rounded,
+                    onPressed: () {
+                      Navigator.pop(context); // Close dialog
+                      Navigator.pop(context); // Back to CaptureScreen
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _addTestResult() {
+    setState(() {
+      _data.results.add(TestResult(testItem: '', value: ''));
+      _hasChanges = true;
+    });
+  }
+
+  void _removeTestResult(int index) {
+    setState(() {
+      _data.results.removeAt(index);
+      _hasChanges = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        backgroundColor: AppTheme.surface,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          onPressed: () {
+            if (_hasChanges) {
+              _showDiscardDialog();
+            } else {
+              Navigator.pop(context);
+            }
+          },
+        ),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Verify Data',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              'Review and correct extracted fields',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textTertiary,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          // Scrollable form
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                // Patient Info Section
+                FadeInUp(
+                  duration: const Duration(milliseconds: 400),
+                  child: _buildSectionHeader(
+                    'Patient Information',
+                    Icons.person_outline,
+                    AppTheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FadeInUp(
+                  delay: const Duration(milliseconds: 100),
+                  child: GlassCard(
+                    child: Column(
+                      children: [
+                        _buildField(
+                          label: 'Patient Name',
+                          value: _data.patientName ?? '',
+                          icon: Icons.badge_outlined,
+                          onChanged: (v) {
+                            _data.patientName = v;
+                            _hasChanges = true;
+                          },
+                        ),
+                        const Divider(color: AppTheme.surfaceBorder),
+                        _buildField(
+                          label: 'Patient ID',
+                          value: _data.patientId ?? '',
+                          icon: Icons.numbers,
+                          onChanged: (v) {
+                            _data.patientId = v;
+                            _hasChanges = true;
+                          },
+                        ),
+                        const Divider(color: AppTheme.surfaceBorder),
+                        _buildField(
+                          label: 'Date',
+                          value: _data.date ?? '',
+                          icon: Icons.calendar_today_outlined,
+                          onChanged: (v) {
+                            _data.date = v;
+                            _hasChanges = true;
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Report Context Section
+                FadeInUp(
+                  delay: const Duration(milliseconds: 200),
+                  child: _buildSectionHeader(
+                    'Report Details',
+                    Icons.medical_services_outlined,
+                    AppTheme.accent,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FadeInUp(
+                  delay: const Duration(milliseconds: 300),
+                  child: GlassCard(
+                    child: Column(
+                      children: [
+                        _buildField(
+                          label: 'Test Name',
+                          value: _data.testName ?? '',
+                          icon: Icons.science_outlined,
+                          onChanged: (v) {
+                            _data.testName = v;
+                            _hasChanges = true;
+                          },
+                        ),
+                        const Divider(color: AppTheme.surfaceBorder),
+                        _buildField(
+                          label: 'Doctor',
+                          value: _data.doctorName ?? '',
+                          icon: Icons.medical_information_outlined,
+                          onChanged: (v) {
+                            _data.doctorName = v;
+                            _hasChanges = true;
+                          },
+                        ),
+                        const Divider(color: AppTheme.surfaceBorder),
+                        _buildField(
+                          label: 'Hospital',
+                          value: _data.hospitalName ?? '',
+                          icon: Icons.local_hospital_outlined,
+                          onChanged: (v) {
+                            _data.hospitalName = v;
+                            _hasChanges = true;
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Test Results Section
+                FadeInUp(
+                  delay: const Duration(milliseconds: 400),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionHeader(
+                        'Test Results',
+                        Icons.analytics_outlined,
+                        AppTheme.warning,
+                      ),
+                      GestureDetector(
+                        onTap: _addTestResult,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppTheme.primary.withOpacity(0.3),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add, size: 16, color: AppTheme.primaryLight),
+                              SizedBox(width: 4),
+                              Text(
+                                'Add Row',
+                                style: TextStyle(
+                                  color: AppTheme.primaryLight,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                if (_data.results.isEmpty)
+                  FadeInUp(
+                    delay: const Duration(milliseconds: 500),
+                    child: GlassCard(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Icon(Icons.inbox_outlined,
+                              size: 36,
+                              color: AppTheme.textTertiary.withOpacity(0.5)),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'No test results extracted',
+                            style: TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: _addTestResult,
+                            child: const Text(
+                              'Tap + Add Row to add manually',
+                              style: TextStyle(
+                                color: AppTheme.primaryLight,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  ...List.generate(_data.results.length, (index) {
+                    return FadeInUp(
+                      delay: Duration(milliseconds: 500 + (index * 60)),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildResultCard(index, _data.results[index]),
+                      ),
+                    );
+                  }),
+
+                const SizedBox(height: 24),
+
+                // Notes Section
+                FadeInUp(
+                  delay: const Duration(milliseconds: 600),
+                  child: _buildSectionHeader(
+                    'Notes',
+                    Icons.note_outlined,
+                    AppTheme.info,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FadeInUp(
+                  delay: const Duration(milliseconds: 700),
+                  child: GlassCard(
+                    child: TextFormField(
+                      initialValue: _data.notes ?? '',
+                      maxLines: 4,
+                      onChanged: (v) {
+                        _data.notes = v;
+                        _hasChanges = true;
+                      },
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: 'Any additional notes...',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Bottom padding for the sticky button
+                const SizedBox(height: 100),
+              ],
+            ),
+          ),
+
+          // Sticky Send button
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              border: const Border(
+                top: BorderSide(color: AppTheme.surfaceBorder),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: SizedBox(
+                width: double.infinity,
+                child: _buildSendButton(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSendButton() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF00D9A6), Color(0xFF00B4D8)],
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accent.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _isSending ? null : _handleSend,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_isSending)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                else ...[
+                  const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Send Report',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: color,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildField({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Function(String) onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppTheme.textTertiary),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: TextFormField(
+              initialValue: value,
+              onChanged: onChanged,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                color: AppTheme.textPrimary,
+                fontSize: 15,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: AppTheme.primary.withOpacity(0.5),
+                  ),
+                ),
+                fillColor: Colors.transparent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultCard(int index, TestResult result) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Header with index and delete
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(
+                    color: AppTheme.warning,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  initialValue: result.testItem,
+                  onChanged: (v) {
+                    result.testItem = v;
+                    _hasChanges = true;
+                  },
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: 'Test item name',
+                    hintStyle: TextStyle(color: AppTheme.textTertiary),
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _removeTestResult(index),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.close,
+                      size: 14, color: AppTheme.error),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Value + Unit row
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: _buildMiniField(
+                  label: 'Value',
+                  value: result.value,
+                  onChanged: (v) {
+                    result.value = v;
+                    _hasChanges = true;
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 1,
+                child: _buildMiniField(
+                  label: 'Unit',
+                  value: result.unit ?? '',
+                  onChanged: (v) {
+                    result.unit = v;
+                    _hasChanges = true;
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Reference range
+          _buildMiniField(
+            label: 'Reference Range',
+            value: result.referenceRange ?? '',
+            onChanged: (v) {
+              result.referenceRange = v;
+              _hasChanges = true;
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniField({
+    required String label,
+    required String value,
+    required Function(String) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.textTertiary,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextFormField(
+          initialValue: value,
+          onChanged: onChanged,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.accent,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            filled: true,
+            fillColor: AppTheme.surfaceVariant.withOpacity(0.5),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: AppTheme.primary,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showDiscardDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        ),
+        title: const Text('Discard changes?'),
+        content: const Text(
+          'You have unsaved corrections. Going back will discard them.',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child:
+                const Text('Keep Editing', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Go back
+            },
+            child: const Text('Discard', style: TextStyle(color: AppTheme.error)),
+          ),
+        ],
+      ),
+    );
+  }
+}

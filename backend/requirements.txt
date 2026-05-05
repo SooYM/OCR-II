@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-multipart
+aiofiles
+python-dotenv
+pytesseract
+Pillow
+google-cloud-vision
+google-cloud-bigquery
+openai
+httpx
+motor

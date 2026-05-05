@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Google Cloud
+service-account.json
+*.json
+
+# SQLite
+*.db
+*.db-journal
+
+# Uploads
+uploads/
+
+# OS
+.DS_Store
