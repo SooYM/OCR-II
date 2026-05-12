@@ -27,7 +27,16 @@ class MedScanApp extends StatelessWidget {
       title: 'MedScan',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
+      scrollBehavior: NoScrollGlowBehavior(), // Completely removes all scroll overscroll effects globally
       home: AuthService.isLoggedIn ? const MainScreen() : const AuthScreen(),
     );
+  }
+}
+
+/// A global scroll behavior that removes the Android glowing/stretching overscroll effect.
+class NoScrollGlowBehavior extends ScrollBehavior {
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return child; // Returns the list directly without the stretch/glow wrapper
   }
 }

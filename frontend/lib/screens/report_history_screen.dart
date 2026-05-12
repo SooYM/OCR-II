@@ -189,19 +189,17 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     return RefreshIndicator(
       onRefresh: _loadReports,
       color: AppTheme.primary,
-      child: FadeInUp(
-        duration: const Duration(milliseconds: 500),
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _reports!.length,
-          itemBuilder: (context, index) {
-            final report = _reports![index];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildReportCard(report),
-            );
-          },
-        ),
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()), // Removes Android stretch effect
+        padding: const EdgeInsets.all(16),
+        itemCount: _reports!.length,
+        itemBuilder: (context, index) {
+          final report = _reports![index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildReportCard(report),
+          );
+        },
       ),
     );
   }
