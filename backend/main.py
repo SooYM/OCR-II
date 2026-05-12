@@ -1,7 +1,7 @@
 """
 Medical Report Digitization API
-Simplified prototype backend — OCR processing, LLM parsing, BigQuery/SQLite storage.
-No authentication. Designed for tester flow: Snap → Verify → Send.
+Prototype backend — OCR processing, LLM parsing, BigQuery/SQLite storage.
+JWT authentication. Designed for tester flow: Login → Snap → Verify → Send.
 """
 
 import os
@@ -10,14 +10,17 @@ import json
 import re
 import sqlite3
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List as TypingList
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import aiofiles
+import bcrypt
+import jwt
 from PIL import Image
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -60,6 +63,10 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+JWT_SECRET = os.getenv("JWT_SECRET", "medscan_default_secret")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_DAYS = 30
+
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 DB_PATH = Path("medical_reports.db")
@@ -81,12 +88,71 @@ if STORAGE_ENGINE == "supabase" and SUPABASE_URL and SUPABASE_KEY:
 
 # ─── Database & Storage Logic ───────────────────────────────────────────────
 
+# ─── Pydantic Models for Auth ──────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    email: str
+    name: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+# ─── Auth Helpers ──────────────────────────────────────────────────────────
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def create_jwt(user_id: str, email: str) -> str:
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def decode_jwt(token: str) -> dict:
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_current_user(authorization: str = Header(None)) -> dict:
+    """FastAPI dependency: extract user from Bearer token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    token = authorization.split(" ", 1)[1]
+    payload = decode_jwt(token)
+    user = get_user_by_id(payload["sub"])
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+# ─── Database Init ─────────────────────────────────────────────────────────
+
 def init_local_db():
     conn = sqlite3.connect(str(DB_PATH))
     cursor = conn.cursor()
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS reports (
             id TEXT PRIMARY KEY,
+            user_id TEXT,
             filename TEXT NOT NULL,
             upload_time TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'processing',
@@ -96,10 +162,70 @@ def init_local_db():
             file_path TEXT
         )
     """)
+    # Migration: add user_id column if missing
+    try:
+        cursor.execute("ALTER TABLE reports ADD COLUMN user_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
     conn.close()
 
 init_local_db()
+
+# ─── User DB Helpers ───────────────────────────────────────────────────────
+
+def get_user_by_email(email: str) -> Optional[dict]:
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("users").select("*").eq("email", email.lower().strip()).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        return None
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email.lower().strip(),))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+def get_user_by_id(user_id: str) -> Optional[dict]:
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("users").select("*").eq("id", user_id).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        return None
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+def create_user(email: str, name: str, password: str) -> dict:
+    user_id = str(uuid.uuid4())
+    pw_hash = hash_password(password)
+    now = datetime.now().isoformat()
+    user_data = {
+        "id": user_id,
+        "email": email.lower().strip(),
+        "name": name.strip(),
+        "password_hash": pw_hash,
+        "created_at": now,
+    }
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("users").insert(user_data).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute(
+            "INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, email.lower().strip(), name.strip(), pw_hash, now)
+        )
+        conn.commit()
+        conn.close()
+    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "created_at": now}
 
 # ─── OCR & Extraction Logic ────────────────────────────────────────────────
 
@@ -344,13 +470,12 @@ def get_clean_flat_data(data: dict) -> dict:
 
 async def save_report(report: dict):
     if STORAGE_ENGINE == "supabase" and supabase:
-        # Use execute() to ensure the insert happens
         supabase.table("reports").insert(report).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO reports (id, filename, upload_time, status, file_path, raw_text, structured_data) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       (report["id"], report["filename"], report["upload_time"], report["status"], 
+        cursor.execute("INSERT INTO reports (id, user_id, filename, upload_time, status, file_path, raw_text, structured_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                       (report["id"], report.get("user_id"), report["filename"], report["upload_time"], report["status"], 
                         report.get("file_path"), report.get("raw_text"), json.dumps(report.get("structured_data"))))
         conn.commit()
         conn.close()
@@ -428,15 +553,67 @@ async def get_report_by_id(report_id: str):
 async def root():
     return {
         "status": "ok", 
-        "version": "2.0.0",
+        "version": "3.0.0",
         "ocr_engine": OCR_ENGINE, 
         "storage": STORAGE_ENGINE,
         "llm_model": OPENAI_MODEL,
         "gcp_support": HAS_GCP
     }
 
+# ─── Auth Endpoints ─────────────────────────────────────────────────────────
+
+@app.post("/api/auth/register")
+async def register(req: RegisterRequest):
+    if not req.email or not req.password or not req.name:
+        raise HTTPException(status_code=400, detail="Email, name, and password are required")
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if get_user_by_email(req.email):
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = create_user(req.email, req.name, req.password)
+    token = create_jwt(user["id"], user["email"])
+    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"]}}
+
+@app.post("/api/auth/login")
+async def login(req: LoginRequest):
+    user = get_user_by_email(req.email)
+    if not user or not verify_password(req.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_jwt(user["id"], user["email"])
+    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"]}}
+
+@app.get("/api/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    return {"id": current_user["id"], "email": current_user["email"], "name": current_user["name"]}
+
+# ─── My Reports ─────────────────────────────────────────────────────────────
+
+@app.get("/api/reports/my")
+async def get_my_reports(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("reports").select("*").eq("user_id", user_id).order("upload_time", desc=True).execute()
+        reports = response.data or []
+        for r in reports:
+            r["user_verified"] = bool(r.get("user_verified", 0))
+        return reports
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM reports WHERE user_id = ? ORDER BY upload_time DESC", (user_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        results = []
+        for row in rows:
+            r = dict(row)
+            r["structured_data"] = json.loads(r["structured_data"]) if r["structured_data"] else None
+            r["user_verified"] = bool(r.get("user_verified", 0))
+            results.append(r)
+        return results
+
 @app.post("/api/upload")
-async def upload_report(file: UploadFile = File(...)):
+async def upload_report(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload an image, run OCR + LLM parsing, return structured data."""
     report_id = str(uuid.uuid4())
     file_ext = Path(file.filename).suffix or ".jpg"
@@ -448,6 +625,7 @@ async def upload_report(file: UploadFile = File(...)):
 
     report_metadata = {
         "id": report_id,
+        "user_id": current_user["id"],
         "filename": file.filename,
         "upload_time": datetime.now().isoformat(),
         "status": "processing",
@@ -500,7 +678,7 @@ async def upload_report(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/upload-multi")
-async def upload_multi_report(files: list[UploadFile] = File(...)):
+async def upload_multi_report(files: list[UploadFile] = File(...), current_user: dict = Depends(get_current_user)):
     """Upload multiple page images for a single report. Merges all pages via LLM."""
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -521,6 +699,7 @@ async def upload_multi_report(files: list[UploadFile] = File(...)):
 
     report_metadata = {
         "id": report_id,
+        "user_id": current_user["id"],
         "filename": ", ".join(filenames),
         "upload_time": datetime.now().isoformat(),
         "status": "processing",

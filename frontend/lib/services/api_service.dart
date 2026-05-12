@@ -1,25 +1,43 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/report_model.dart';
+import 'auth_service.dart';
 
-/// Simplified API service — no auth, tester-focused.
+/// API service with JWT auth.
 /// Base URL is configurable at runtime for localtunnel changes.
 class ApiService {
+  static const _urlKey = 'medscan_base_url';
+
   // Default URL — update this or change at runtime via the settings icon
-  static String _baseUrl = 'https://medscan-soo.loca.lt';
+  static String _baseUrl = 'https://preacher-dreadful-jarring.ngrok-free.dev';
 
   /// Get the current base URL.
   static String get baseUrl => _baseUrl;
 
+  /// Load the base URL from storage
+  static Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedUrl = prefs.getString(_urlKey);
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      _baseUrl = savedUrl;
+    }
+  }
+
   /// Update the base URL at runtime (no rebuild needed).
-  static void setBaseUrl(String url) {
+  static Future<void> setBaseUrl(String url) async {
     // Strip trailing slash
     _baseUrl = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_urlKey, _baseUrl);
   }
 
   static Map<String, String> get _headers => {
     'Content-Type': 'application/json',
+    'bypass-tunnel-reminder': 'true',
+    'ngrok-skip-browser-warning': 'true',
+    if (AuthService.token != null) 'Authorization': 'Bearer ${AuthService.token}',
   };
 
   // ─── Health Check ─────────────────────────────────────────────────────────
@@ -45,8 +63,11 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/api/upload');
     final request = http.MultipartRequest('POST', uri);
 
-    // Bypass localtunnel reminder page
     request.headers['bypass-tunnel-reminder'] = 'true';
+    request.headers['ngrok-skip-browser-warning'] = 'true';
+    if (AuthService.token != null) {
+      request.headers['Authorization'] = 'Bearer ${AuthService.token}';
+    }
 
     request.files.add(
       await http.MultipartFile.fromPath(
@@ -80,8 +101,11 @@ class ApiService {
     final uri = Uri.parse('$_baseUrl/api/upload-multi');
     final request = http.MultipartRequest('POST', uri);
 
-    // Bypass localtunnel reminder page
     request.headers['bypass-tunnel-reminder'] = 'true';
+    request.headers['ngrok-skip-browser-warning'] = 'true';
+    if (AuthService.token != null) {
+      request.headers['Authorization'] = 'Bearer ${AuthService.token}';
+    }
 
     for (final file in imageFiles) {
       request.files.add(
@@ -110,10 +134,7 @@ class ApiService {
   static Future<void> updateReport(String id, StructuredData data) async {
     final response = await http.put(
       Uri.parse('$_baseUrl/api/reports/$id'),
-      headers: {
-        ..._headers,
-        'bypass-tunnel-reminder': 'true',
-      },
+      headers: _headers,
       body: jsonEncode({'structured_data': data.toJson()}),
     );
     if (response.statusCode != 200) {
@@ -127,13 +148,28 @@ class ApiService {
   static Future<void> sendReport(String id) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/reports/$id/send'),
-      headers: {
-        ..._headers,
-        'bypass-tunnel-reminder': 'true',
-      },
+      headers: _headers,
     );
     if (response.statusCode != 200) {
       throw ApiException('Send failed', response.statusCode);
+    }
+  }
+
+  // ─── My Reports ─────────────────────────────────────────────────────────────
+
+  /// Fetch all reports for the current logged-in user.
+  static Future<List<MedicalReport>> fetchMyReports() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/reports/my'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((j) => MedicalReport.fromJson(j as Map<String, dynamic>)).toList();
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
     }
   }
 

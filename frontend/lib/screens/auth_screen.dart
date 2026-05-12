@@ -1,0 +1,405 @@
+import 'package:flutter/material.dart';
+import 'package:animate_do/animate_do.dart';
+import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
+import '../services/api_service.dart';
+import '../widgets/glass_card.dart';
+import 'main_screen.dart';
+
+/// Premium dark-themed Login / Register screen.
+class AuthScreen extends StatefulWidget {
+  const AuthScreen({super.key});
+
+  @override
+  State<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends State<AuthScreen>
+    with SingleTickerProviderStateMixin {
+  bool _isLogin = true;
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+  String? _error;
+
+  final _emailCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _nameCtrl.dispose();
+    _passwordCtrl.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text.trim();
+    final name = _nameCtrl.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Email and password are required');
+      return;
+    }
+    if (!_isLogin && name.isEmpty) {
+      setState(() => _error = 'Name is required');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      if (_isLogin) {
+        await AuthService.login(email, password);
+      } else {
+        await AuthService.register(email, name, password);
+      }
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _toggleMode() {
+    setState(() {
+      _isLogin = !_isLogin;
+      _error = null;
+    });
+  }
+
+  void _showServerSettings() {
+    final controller = TextEditingController(text: ApiService.baseUrl);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Server URL',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+            const SizedBox(height: 4),
+            const Text('Paste your localtunnel URL here',
+                style: TextStyle(color: AppTheme.textTertiary, fontSize: 13)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: const InputDecoration(
+                hintText: 'https://your-tunnel.loca.lt',
+                prefixIcon: Icon(Icons.link, color: AppTheme.textTertiary),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  ApiService.setBaseUrl(controller.text.trim());
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(backgroundColor: AppTheme.success, content: Text('Server URL updated')),
+                  );
+                },
+                icon: const Icon(Icons.save, size: 18),
+                label: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // ── Logo ──
+                  FadeInDown(
+                    duration: const Duration(milliseconds: 600),
+                    child: AnimatedBuilder(
+                      animation: _pulseController,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: 1.0 + (_pulseController.value * 0.05),
+                          child: Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.primaryGradient,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primary.withOpacity(0.25 * _pulseController.value),
+                                  blurRadius: 40,
+                                  spreadRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(Icons.document_scanner_outlined,
+                                color: Colors.white, size: 44),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  FadeInDown(
+                    delay: const Duration(milliseconds: 200),
+                    child: const Text(
+                      'MedScan',
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  FadeInDown(
+                    delay: const Duration(milliseconds: 300),
+                    child: Text(
+                      _isLogin ? 'Welcome back' : 'Create your account',
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+                    ),
+                  ),
+
+                  const SizedBox(height: 36),
+
+                  // ── Form Card ──
+                  FadeInUp(
+                    delay: const Duration(milliseconds: 400),
+                    child: GlassCard(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Error banner
+                          if (_error != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppTheme.error.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                                border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.error_outline, color: AppTheme.error, size: 18),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(_error!,
+                                        style: const TextStyle(color: AppTheme.error, fontSize: 13)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // Email field
+                          _buildTextField(
+                            controller: _emailCtrl,
+                            label: 'Email',
+                            icon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+
+                          // Name field (register only)
+                          if (!_isLogin) ...[
+                            const SizedBox(height: 14),
+                            _buildTextField(
+                              controller: _nameCtrl,
+                              label: 'Full Name',
+                              icon: Icons.person_outline,
+                            ),
+                          ],
+
+                          const SizedBox(height: 14),
+
+                          // Password field
+                          _buildTextField(
+                            controller: _passwordCtrl,
+                            label: 'Password',
+                            icon: Icons.lock_outline,
+                            obscure: _obscurePassword,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                color: AppTheme.textTertiary,
+                                size: 20,
+                              ),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Submit button
+                          _buildSubmitButton(),
+
+                          const SizedBox(height: 16),
+
+                          // Toggle login/register
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _isLogin ? "Don't have an account? " : 'Already have an account? ',
+                                style: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+                              ),
+                              GestureDetector(
+                                onTap: _isLoading ? null : _toggleMode,
+                                child: Text(
+                                  _isLogin ? 'Register' : 'Login',
+                                  style: const TextStyle(
+                                    color: AppTheme.primaryLight,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Server settings link
+                  FadeInUp(
+                    delay: const Duration(milliseconds: 600),
+                    child: GestureDetector(
+                      onTap: _showServerSettings,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.settings, size: 14, color: AppTheme.textTertiary),
+                          const SizedBox(width: 6),
+                          const Text('Server Settings',
+                              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    bool obscure = false,
+    Widget? suffixIcon,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscure,
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppTheme.textTertiary, size: 20),
+        suffixIcon: suffixIcon,
+      ),
+      onSubmitted: (_) => _submit(),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        boxShadow: AppTheme.primaryShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _isLoading ? null : _submit,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_isLoading)
+                  const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                  )
+                else ...[
+                  Icon(_isLogin ? Icons.login_rounded : Icons.person_add_rounded,
+                      color: Colors.white, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    _isLogin ? 'Login' : 'Create Account',
+                    style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

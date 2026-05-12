@@ -9,3 +9,5 @@ google-cloud-vision
 openai
 httpx
 supabase
+pyjwt
+bcrypt
