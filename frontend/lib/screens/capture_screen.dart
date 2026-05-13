@@ -176,9 +176,10 @@ class _CaptureScreenState extends State<CaptureScreen>
           padding: EdgeInsets.fromLTRB(
             24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Server URL',
@@ -259,6 +260,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                 ],
               ),
             ],
+          ),
           ),
         ),
       ),
@@ -467,9 +469,10 @@ class _CaptureScreenState extends State<CaptureScreen>
       ),
       builder: (context) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
               child: Container(
@@ -536,6 +539,7 @@ class _CaptureScreenState extends State<CaptureScreen>
               },
             ),
           ],
+        ),
         ),
       ),
     );

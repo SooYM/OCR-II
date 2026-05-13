@@ -58,6 +58,48 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     }
   }
 
+  Future<void> _deleteReport(MedicalReport report) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+        title: const Text('Delete Report?'),
+        content: const Text('Are you sure you want to delete this report? This action cannot be undone.', style: TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: AppTheme.error)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await ApiService.deleteReport(report.id);
+      _loadReports();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: AppTheme.success, content: Text('Report deleted')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppTheme.error, content: Text('Failed to delete: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -244,9 +286,9 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _statusColor(report.status).withOpacity(0.15),
+                    color: _statusColor(report.status).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _statusColor(report.status).withOpacity(0.3)),
+                    border: Border.all(color: _statusColor(report.status).withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     report.status.toUpperCase(),
@@ -256,6 +298,18 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.5,
                     ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _deleteReport(report),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.delete_outline, size: 16, color: AppTheme.error),
                   ),
                 ),
               ],

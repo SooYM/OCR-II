@@ -612,6 +612,109 @@ async def get_my_reports(current_user: dict = Depends(get_current_user)):
             results.append(r)
         return results
 
+@app.get("/api/reports/analyze")
+async def analyze_health_trends(query: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("reports").select("*").eq("user_id", user_id).order("upload_time", desc=True).execute()
+        reports = response.data or []
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM reports WHERE user_id = ? ORDER BY upload_time ASC", (user_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        reports = []
+        for row in rows:
+            r = dict(row)
+            r["structured_data"] = json.loads(r["structured_data"]) if r["structured_data"] else None
+            reports.append(r)
+
+    # Filter completed/sent reports with structured data
+    valid_reports = [r for r in reports if r.get("status") in ["completed", "sent"] and r.get("structured_data") and r["structured_data"].get("results")]
+    
+    if not valid_reports:
+        return {"analysis": "Not enough medical data available for analysis. Please upload your reports."}
+
+    # Aggregate data chronologically
+    def parse_date(date_str: str, fallback_str: str) -> datetime:
+        if not date_str:
+            return datetime.fromisoformat(fallback_str)
+        formats = [
+            "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y",
+            "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d",
+            "%Y-%m-%d", "%d-%m-%Y"
+        ]
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str.strip(), fmt)
+            except ValueError:
+                pass
+        try:
+            return datetime.fromisoformat(date_str.strip())
+        except ValueError:
+            pass
+        return datetime.fromisoformat(fallback_str)
+
+    valid_reports.sort(key=lambda x: parse_date(x.get("structured_data", {}).get("date"), x["upload_time"]))
+    
+    data_summary = []
+    for r in valid_reports:
+        date_str = r.get("structured_data", {}).get("date") or r["upload_time"][:10]
+        results_list = r["structured_data"]["results"]
+        items = [f"{res.get('test_item', '')}: {res.get('value', '')} {res.get('unit', '')}".strip() for res in results_list if res.get('value') and res.get('value') != '-']
+        if items:
+            data_summary.append(f"Date: {date_str}\n" + "\n".join(items))
+
+    if not data_summary:
+        return {"analysis": "No valid biomarker data found in your reports."}
+
+    compiled_data = "\n\n".join(data_summary)
+
+    prompt = f"""
+    You are an expert medical AI assistant. Analyze the following user health data over time.
+    IMPORTANT: You MUST base your analysis on the exact attribute values provided below. Do NOT use averages or means.
+    
+    Here is the exact health data recorded over time:
+    {compiled_data}
+    """
+    if query and query.strip():
+        prompt += f"\n\nThe user has a specific question: '{query.strip()}'. Please prioritize addressing this question in detail based on their data. Also include a brief overall health summary."
+    else:
+        prompt += "\n\nProvide a comprehensive, professional health trend analysis."
+
+    prompt += """
+    
+    Your analysis MUST include:
+    1. A brief overall health summary
+    2. Key biomarker trends (improving, worsening, or stable) with exact values referenced
+    3. Any values outside normal clinical ranges — flag them clearly
+    4. Possible health implications of the trends observed
+    5. Actionable lifestyle or dietary recommendations based on the data
+    
+    FORMAT YOUR RESPONSE USING MARKDOWN:
+    - Use **bold** for important values, biomarker names, and key findings
+    - Use *italic* for medical terms or supplementary notes
+    - Use ### for section headers
+    - Use bullet points for lists
+    
+    Keep the response under 400 words. Do not wrap in code blocks or json tags.
+    """
+
+    try:
+        response = llm_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": "You are a professional medical AI assistant."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        analysis_text = response.choices[0].message.content.strip()
+        return {"analysis": analysis_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM Analysis failed: {e}")
+
 @app.post("/api/upload")
 async def upload_report(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload an image, run OCR + LLM parsing, return structured data."""
@@ -776,3 +879,23 @@ async def send_report(report_id: str):
     if not report: raise HTTPException(status_code=404, detail="Not found")
     await mark_report_sent(report_id)
     return {"status": "sent", "message": "Report verified and submitted successfully"}
+
+@app.delete("/api/reports/{report_id}")
+async def delete_report(report_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a report."""
+    user_id = current_user["id"]
+    report = await get_report_by_id(report_id)
+    if not report: raise HTTPException(status_code=404, detail="Not found")
+    # Verify ownership
+    if report.get("user_id") and report.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("reports").delete().eq("id", report_id).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+        conn.commit()
+        conn.close()
+    return {"status": "deleted", "message": "Report deleted successfully"}
+

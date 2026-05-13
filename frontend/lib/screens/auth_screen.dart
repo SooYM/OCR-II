@@ -103,9 +103,10 @@ class _AuthScreenState extends State<AuthScreen>
         padding: EdgeInsets.fromLTRB(
           24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Server URL',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
@@ -138,6 +139,7 @@ class _AuthScreenState extends State<AuthScreen>
               ),
             ),
           ],
+        ),
         ),
       ),
     );

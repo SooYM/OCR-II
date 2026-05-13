@@ -173,6 +173,40 @@ class ApiService {
     }
   }
 
+  // ─── Health Analysis ──────────────────────────────────────────────────────
+
+  /// Fetch AI analysis of health trends using LLM, optionally with a specific user query.
+  static Future<String> analyzeHealthTrends({String? query}) async {
+    final uri = Uri.parse('$_baseUrl/api/reports/analyze').replace(
+      queryParameters: query != null && query.isNotEmpty ? {'query': query} : null,
+    );
+    final response = await http.get(
+      uri,
+      headers: _headers,
+    ).timeout(const Duration(seconds: 45)); // LLM can be slow
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['analysis'] as String? ?? 'No analysis returned.';
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
+  /// Delete a report by ID
+  static Future<void> deleteReport(String reportId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/reports/$reportId'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   static String _parseError(http.Response response) {

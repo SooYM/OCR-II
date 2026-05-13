@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../models/report_model.dart';
 
 /// Screen 2: Verify and correct extracted data, then send.
@@ -37,9 +38,25 @@ class _VerifyScreenState extends State<VerifyScreen> {
           results: [],
           notes: '',
         );
+        
+    // Auto-fill username in the patient name section if empty
+    if ((_data.patientName == null || _data.patientName!.isEmpty) &&
+        AuthService.currentUser != null) {
+      _data.patientName = AuthService.currentUser!['name'] as String?;
+    }
   }
 
   Future<void> _handleSend() async {
+    if (_data.date == null || _data.date!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.error,
+          content: Text('Please enter the collected date before sending.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSending = true);
 
     try {
