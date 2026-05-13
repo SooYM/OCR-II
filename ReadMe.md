@@ -109,7 +109,3 @@ flutter run
 - **OpenAI GPT-4o** — Vision & analytical reasoning
 - **Supabase/PostgreSQL** — Secure cloud storage
 - **PyJWT & Bcrypt** — Industrial-grade security
-
-## 📄 License
-
-MIT License
