@@ -36,6 +36,7 @@ class _MainScreenState extends State<MainScreen> {
   
   // Multi-Attribute Chart state
   final Set<String> _selectedMultiAttributes = {};
+  final Set<String> _collapsedProfiles = {};
   DateTimeRange? _selectedDateRange;
   final List<Color> _lineColors = [
     const Color(0xFF6C63FF), // Primary
@@ -1567,24 +1568,101 @@ class _MainScreenState extends State<MainScreen> {
       final availableKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
 
       if (availableKeys.isNotEmpty) {
+        final isCollapsed = _collapsedProfiles.contains(category);
         // Subheading Row
         rows.add(
           DataRow(
             color: WidgetStateProperty.all(Theme.of(context).colorScheme.primary.withValues(alpha: 0.05)),
+            onSelectChanged: (selected) {
+              setState(() {
+                if (isCollapsed) {
+                  _collapsedProfiles.remove(category);
+                } else {
+                  _collapsedProfiles.add(category);
+                }
+              });
+            },
             cells: [
-              DataCell(Text(category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary, fontSize: 12, letterSpacing: 1.1))),
+              DataCell(Row(
+                children: [
+                  Icon(isCollapsed ? Icons.chevron_right_rounded : Icons.expand_more_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary, fontSize: 12, letterSpacing: 1.1)),
+                ],
+              )),
               ...List.generate(validReports.length, (_) => const DataCell(SizedBox())),
             ],
           ),
         );
 
-        // Data Rows
-        for (final testKey in availableKeys) {
+        // Data Rows (Only if NOT collapsed)
+        if (!isCollapsed) {
+          for (final testKey in availableKeys) {
+            rows.add(
+              DataRow(
+                cells: [
+                  DataCell(Padding(
+                    padding: const EdgeInsets.only(left: 28), // Indent to align with text after icon
+                    child: Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  )),
+                  ...validReports.map((report) {
+                    final result = report.structuredData!.results.firstWhere(
+                      (res) => (res.key ?? res.testItem) == testKey,
+                      orElse: () => TestResult(testItem: testKey, value: '-'),
+                    );
+                    final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
+                    return DataCell(
+                      Text(valueText, style: TextStyle(
+                        color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
+                        fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
+                      )),
+                    );
+                  }),
+                ],
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    // Other metrics not in categories
+    final categorizedKeys = _medicalCategories.values.expand((e) => e).toSet();
+    final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
+    
+    if (otherKeys.isNotEmpty) {
+      final isOtherCollapsed = _collapsedProfiles.contains('OTHER_METRICS');
+      rows.add(
+        DataRow(
+          color: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
+          onSelectChanged: (selected) {
+            setState(() {
+              if (isOtherCollapsed) {
+                _collapsedProfiles.remove('OTHER_METRICS');
+              } else {
+                _collapsedProfiles.add('OTHER_METRICS');
+              }
+            });
+          },
+          cells: [
+            DataCell(Row(
+              children: [
+                Icon(isOtherCollapsed ? Icons.chevron_right_rounded : Icons.expand_more_rounded, size: 20),
+                const SizedBox(width: 8),
+                const Text('OTHER METRICS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1)),
+              ],
+            )),
+            ...List.generate(validReports.length, (_) => const DataCell(SizedBox())),
+          ],
+        ),
+      );
+      if (!isOtherCollapsed) {
+        for (final testKey in otherKeys) {
           rows.add(
             DataRow(
               cells: [
                 DataCell(Padding(
-                  padding: const EdgeInsets.only(left: 12),
+                  padding: const EdgeInsets.only(left: 28),
                   child: Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600)),
                 )),
                 ...validReports.map((report) {
@@ -1604,47 +1682,6 @@ class _MainScreenState extends State<MainScreen> {
             ),
           );
         }
-      }
-    }
-
-    // Other metrics not in categories
-    final categorizedKeys = _medicalCategories.values.expand((e) => e).toSet();
-    final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
-    
-    if (otherKeys.isNotEmpty) {
-      rows.add(
-        DataRow(
-          color: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
-          cells: [
-            const DataCell(Text('OTHER METRICS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1))),
-            ...List.generate(validReports.length, (_) => const DataCell(SizedBox())),
-          ],
-        ),
-      );
-      for (final testKey in otherKeys) {
-        rows.add(
-          DataRow(
-            cells: [
-              DataCell(Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600)),
-              )),
-              ...validReports.map((report) {
-                final result = report.structuredData!.results.firstWhere(
-                  (res) => (res.key ?? res.testItem) == testKey,
-                  orElse: () => TestResult(testItem: testKey, value: '-'),
-                );
-                final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
-                return DataCell(
-                  Text(valueText, style: TextStyle(
-                    color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
-                    fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
-                  )),
-                );
-              }),
-            ],
-          ),
-        );
       }
     }
 
