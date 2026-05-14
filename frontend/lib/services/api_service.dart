@@ -200,21 +200,29 @@ class ApiService {
     }
   }
 
-  /// Stream AI analysis token-by-token via SSE.
-  static Stream<String> analyzeHealthTrendsStream({String? query, String? startDate, String? endDate}) async* {
-    final Map<String, String> params = {};
-    if (query != null && query.isNotEmpty) params['query'] = query;
-    if (startDate != null) params['start_date'] = startDate;
-    if (endDate != null) params['end_date'] = endDate;
-
-    final uri = Uri.parse('$_baseUrl/api/reports/analyze/stream').replace(
-      queryParameters: params.isNotEmpty ? params : null,
-    );
+  /// Stream AI analysis token-by-token via SSE, including chat history.
+  static Stream<String> analyzeHealthTrendsStream({
+    String? query,
+    String? startDate,
+    String? endDate,
+    List<Map<String, String>>? messages,
+  }) async* {
+    final uri = Uri.parse('$_baseUrl/api/reports/analyze/stream');
 
     final client = http.Client();
     try {
-      final request = http.Request('GET', uri);
-      request.headers.addAll(_headers);
+      final request = http.Request('POST', uri);
+      final headers = Map<String, String>.from(_headers);
+      headers['Content-Type'] = 'application/json';
+      request.headers.addAll(headers);
+
+      final body = {
+        if (query != null && query.isNotEmpty) 'query': query,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+        if (messages != null && messages.isNotEmpty) 'messages': messages,
+      };
+      request.body = jsonEncode(body);
       final streamedResponse = await client.send(request).timeout(const Duration(seconds: 120));
 
       if (streamedResponse.statusCode != 200) {

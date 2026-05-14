@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 
@@ -85,11 +87,18 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
       _isTyping = false; // Hide typing indicator, show streaming bubble
     });
 
+    // Map history to send to backend
+    final history = _messages
+        .where((m) => m != assistantMsg && m.content.isNotEmpty)
+        .map((m) => {'role': m.role, 'content': m.content})
+        .toList();
+
     try {
       final stream = ApiService.analyzeHealthTrendsStream(
         query: text,
         startDate: startDate,
         endDate: endDate,
+        messages: history.isNotEmpty ? history : null,
       );
 
       _streamSub = stream.listen(
@@ -284,41 +293,54 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
                 ],
                 // Message bubble
                 Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: isUser
-                          ? cs.primary
-                          : cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(20),
-                        topRight: const Radius.circular(20),
-                        bottomLeft: Radius.circular(isUser ? 20 : 6),
-                        bottomRight: Radius.circular(isUser ? 6 : 20),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isUser ? cs.primary : Colors.black).withValues(alpha: 0.08),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: isUser
-                        ? Text(msg.content, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w500))
-                        : MarkdownBody(
-                            data: msg.content,
-                            styleSheet: MarkdownStyleSheet(
-                              p: TextStyle(color: cs.onSurface, fontSize: 14, height: 1.6),
-                              strong: TextStyle(color: cs.onSurface, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
-                              em: TextStyle(color: cs.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
-                              h1: TextStyle(color: cs.onSurface, fontSize: 17, fontWeight: FontWeight.w800, height: 1.5),
-                              h2: TextStyle(color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
-                              h3: TextStyle(color: cs.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
-                              listBullet: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
-                              blockSpacing: 10,
-                            ),
+                  child: Column(
+                    crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isUser
+                              ? cs.primary
+                              : cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(20),
+                            topRight: const Radius.circular(20),
+                            bottomLeft: Radius.circular(isUser ? 20 : 6),
+                            bottomRight: Radius.circular(isUser ? 6 : 20),
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isUser ? cs.primary : Colors.black).withValues(alpha: 0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: isUser
+                            ? Text(msg.content, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w500))
+                            : MarkdownBody(
+                                data: msg.content,
+                                styleSheet: MarkdownStyleSheet(
+                                  p: TextStyle(color: cs.onSurface, fontSize: 14, height: 1.6),
+                                  strong: TextStyle(color: cs.onSurface, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
+                                  em: TextStyle(color: cs.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
+                                  h1: TextStyle(color: cs.onSurface, fontSize: 17, fontWeight: FontWeight.w800, height: 1.5),
+                                  h2: TextStyle(color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
+                                  h3: TextStyle(color: cs.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
+                                  listBullet: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
+                                  blockSpacing: 10,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        DateFormat('HH:mm').format(msg.timestamp),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 // User avatar
