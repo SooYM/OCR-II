@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../models/report_model.dart';
 import '../utils/formatters.dart';
 import '../utils/date_utils.dart';
+import '../utils/biomarker_dictionary.dart';
 import 'package:intl/intl.dart';
 
 /// Screen 2: Verify and correct extracted data, then send.
@@ -26,6 +27,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
   late StructuredData _data;
   bool _isSending = false;
   bool _hasChanges = false;
+  final Set<int> _matchedIndices = {};
+  final Map<int, BiomarkerEntry> _matchedEntries = {};
 
   @override
   void initState() {
@@ -47,6 +50,31 @@ class _VerifyScreenState extends State<VerifyScreen> {
     if ((_data.patientName == null || _data.patientName!.isEmpty) &&
         AuthService.currentUser != null) {
       _data.patientName = AuthService.currentUser!['name'] as String?;
+    }
+
+    // Auto-normalize results against the standard dictionary
+    _normalizeResults();
+  }
+
+  /// Run each test result through the biomarker dictionary matcher.
+  void _normalizeResults() {
+    for (int i = 0; i < _data.results.length; i++) {
+      final result = _data.results[i];
+      final match = BiomarkerDictionary.match(result.testItem);
+      if (match != null) {
+        _matchedIndices.add(i);
+        _matchedEntries[i] = match;
+        // Set key if missing
+        result.key ??= match.key;
+        // Set unit if empty or non-standard
+        if ((result.unit == null || result.unit!.isEmpty) && match.unit.isNotEmpty) {
+          result.unit = match.unit;
+        }
+        // Set reference range if empty
+        if ((result.referenceRange == null || result.referenceRange!.isEmpty) && match.referenceRange != null) {
+          result.referenceRange = match.referenceRange;
+        }
+      }
     }
   }
 
@@ -618,11 +646,14 @@ class _VerifyScreenState extends State<VerifyScreen> {
   }
 
   Widget _buildResultCard(int index, TestResult result) {
+    final isMatched = _matchedIndices.contains(index);
+    final matchEntry = _matchedEntries[index];
+
     return GlassCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Header with index and delete
+          // Header with index, match indicator, and delete
           Row(
             children: [
               Container(
@@ -630,37 +661,91 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 height: 28,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.tertiary.withOpacity(0.15),
+                  color: isMatched
+                      ? const Color(0xFF4CAF50).withOpacity(0.15)
+                      : Theme.of(context).colorScheme.tertiary.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  '${index + 1}',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.tertiary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
+                child: isMatched
+                    ? const Icon(Icons.check_rounded, size: 16, color: Color(0xFF4CAF50))
+                    : Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.tertiary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: TextFormField(
-                  initialValue: result.testItem,
-                  onChanged: (v) {
-                    result.testItem = v;
-                    _hasChanges = true;
-                  },
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'Test item name',
-                    hintStyle: const TextStyle(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    border: InputBorder.none,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      initialValue: result.testItem,
+                      onChanged: (v) {
+                        result.testItem = v;
+                        _hasChanges = true;
+                        // Re-run matching for this item
+                        final newMatch = BiomarkerDictionary.match(v);
+                        setState(() {
+                          if (newMatch != null) {
+                            _matchedIndices.add(index);
+                            _matchedEntries[index] = newMatch;
+                            result.key = newMatch.key;
+                            if (newMatch.unit.isNotEmpty) result.unit = newMatch.unit;
+                            if (newMatch.referenceRange != null && (result.referenceRange == null || result.referenceRange!.isEmpty)) {
+                              result.referenceRange = newMatch.referenceRange;
+                            }
+                          } else {
+                            _matchedIndices.remove(index);
+                            _matchedEntries.remove(index);
+                          }
+                        });
+                      },
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: 'Test item name',
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                      ),
+                    ),
+                    // Show matched standard name chip
+                    if (isMatched && matchEntry != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4CAF50).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '→ ${matchEntry.standardName}  •  ${matchEntry.unit}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF4CAF50)),
+                          ),
+                        ),
+                      ),
+                    if (!isMatched && result.testItem.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 13, color: Theme.of(context).colorScheme.error.withOpacity(0.7)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Not in standard dictionary',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.error.withOpacity(0.7)),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
               GestureDetector(
