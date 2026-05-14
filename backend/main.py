@@ -579,6 +579,113 @@ async def get_report_by_id(report_id: str):
         report["user_verified"] = bool(report.get("user_verified", 0))
         return report
 
+async def delete_report(report_id: str):
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("reports").delete().eq("id", report_id).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+        conn.commit()
+        conn.close()
+
+def backend_normalize_date(date_str):
+    if not date_str: return ""
+    # Strip time if exists (split by space or 'T')
+    clean = date_str.replace('T', ' ').split(' ')[0]
+    # Replace separators with /
+    clean = clean.replace('-', '/').replace('.', '/')
+    # Handle YYYY/MM/DD -> DD/MM/YYYY
+    parts = clean.split('/')
+    if len(parts) == 3:
+        if len(parts[0]) == 4: # YYYY/MM/DD
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+        # Ensure DD/MM/YYYY format with zero padding
+        return f"{parts[0].zfill(2)}/{parts[1].zfill(2)}/{parts[2]}"
+    return clean
+
+def backend_normalize_value(val):
+    if not val: return ""
+    s = str(val).strip().lower()
+    try:
+        # If numeric, normalize to float string to handle 12.5 vs 12.50
+        f = float(s)
+        if f.is_integer(): return str(int(f))
+        return str(f)
+    except:
+        return s
+
+async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str = None):
+    """
+    Compares the newly parsed data with existing reports for the user.
+    A report is considered a duplicate if:
+    1. The normalized collected date matches.
+    2. >80% of the normalized biomarker values match.
+    """
+    if not new_data:
+        return False
+    
+    new_date = backend_normalize_date(new_data.get("collected", ""))
+    
+    # Fetch all sent/completed reports for this user
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("reports").select("*").eq("user_id", user_id).execute()
+        existing_reports = response.data or []
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM reports WHERE user_id = ?", (user_id,))
+        existing_reports = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+    for report in existing_reports:
+        # Skip the current report if we're checking mid-upload
+        if exclude_id and report.get("id") == exclude_id:
+            continue
+
+        # Load structured data if it's a string (SQLite)
+        s_data = report.get("structured_data")
+        if isinstance(s_data, str):
+            try:
+                s_data = json.loads(s_data)
+            except:
+                continue
+        
+        if not s_data:
+            continue
+            
+        # 1. Compare dates
+        existing_date = backend_normalize_date(s_data.get("collected", ""))
+        
+        # We only consider it a duplicate if the dates match
+        if new_date and existing_date and new_date == existing_date:
+            # 2. Check for numeric result overlap
+            match_count = 0
+            total_keys = 0
+            
+            # Use STAGING_SCHEMA_KEYS to find biomarkers (exclude metadata)
+            metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
+            
+            for key in STAGING_SCHEMA_KEYS:
+                if key in metadata_keys:
+                    continue
+                
+                new_val = backend_normalize_value(new_data.get(key, ""))
+                old_val = backend_normalize_value(s_data.get(key, ""))
+                
+                if new_val or old_val:
+                    total_keys += 1
+                    if new_val == old_val:
+                        match_count += 1
+            
+            if total_keys > 0:
+                overlap = (match_count / total_keys) * 100
+                if overlap >= 80:
+                    return True
+                    
+    return False
+
 # ─── API Endpoints ──────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -1045,9 +1152,26 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
     try:
         # Use OpenAI Vision to extract data directly from the image
         structured_data = await parse_medical_report_llm(file_path)
-        raw_text = "Extracted directly via OpenAI Vision API"
+        raw_text = f"Extracted via OpenAI Vision API (1 page)"
+
+        # --- DUPLICATE CHECK ---
+        is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
         
-        # Update with results
+        if is_duplicate:
+            # Delete from DB immediately as requested
+            await delete_report(report_id)
+            return {
+                "id": report_id,
+                "filename": file.filename,
+                "upload_time": report_metadata["upload_time"],
+                "status": "duplicate",
+                "is_duplicate": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
+        # Update with results if not duplicate
         if STORAGE_ENGINE == "supabase" and supabase:
             supabase.table("reports").update({
                 "status": "completed",
@@ -1125,7 +1249,24 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
 
         raw_text = f"Extracted via OpenAI Vision API ({len(saved_paths)} page(s))"
 
-        # Update with results
+        # --- DUPLICATE CHECK ---
+        is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
+        
+        if is_duplicate:
+            # Delete from DB immediately as requested
+            await delete_report(report_id)
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "duplicate",
+                "is_duplicate": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
+        # Update with results if not duplicate
         if STORAGE_ENGINE == "supabase" and supabase:
             supabase.table("reports").update({
                 "status": "completed",
