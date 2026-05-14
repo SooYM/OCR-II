@@ -682,41 +682,48 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextFormField(
-                      initialValue: result.testItem,
-                      readOnly: isMatched,
-                      onChanged: isMatched ? null : (v) {
-                        result.testItem = v;
-                        _hasChanges = true;
-                        // Re-run matching for this item
-                        final newMatch = BiomarkerDictionary.match(v);
-                        setState(() {
-                          if (newMatch != null) {
-                            _matchedIndices.add(index);
-                            _matchedEntries[index] = newMatch;
-                            result.key = newMatch.key;
-                            if (newMatch.unit.isNotEmpty) result.unit = newMatch.unit;
-                            if (newMatch.referenceRange != null && (result.referenceRange == null || result.referenceRange!.isEmpty)) {
-                              result.referenceRange = newMatch.referenceRange;
+                    if (isMatched)
+                      Text(
+                        result.testItem,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      )
+                    else
+                      TextFormField(
+                        initialValue: result.testItem,
+                        onChanged: (v) {
+                          result.testItem = v;
+                          _hasChanges = true;
+                          final newMatch = BiomarkerDictionary.match(v);
+                          setState(() {
+                            if (newMatch != null) {
+                              _matchedIndices.add(index);
+                              _matchedEntries[index] = newMatch;
+                              result.key = newMatch.key;
+                              if (newMatch.unit.isNotEmpty) result.unit = newMatch.unit;
+                              if (newMatch.referenceRange != null && (result.referenceRange == null || result.referenceRange!.isEmpty)) {
+                                result.referenceRange = newMatch.referenceRange;
+                              }
+                            } else {
+                              _matchedIndices.remove(index);
+                              _matchedEntries.remove(index);
                             }
-                          } else {
-                            _matchedIndices.remove(index);
-                            _matchedEntries.remove(index);
-                          }
-                        });
-                      },
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: isMatched ? Theme.of(context).colorScheme.onSurfaceVariant : null,
+                          });
+                        },
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Test item name',
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                          border: InputBorder.none,
+                        ),
                       ),
-                      decoration: const InputDecoration(
-                        hintText: 'Test item name',
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        border: InputBorder.none,
-                      ),
-                    ),
                     // Show matched standard name chip
                     if (isMatched && matchEntry != null)
                       Padding(
@@ -782,15 +789,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
               const SizedBox(width: 12),
               Expanded(
                 flex: 1,
-                child: _buildMiniField(
-                  label: 'Unit',
-                  value: result.unit ?? '',
-                  readOnly: isMatched,
-                  onChanged: (v) {
-                    result.unit = v;
-                    _hasChanges = true;
-                  },
-                ),
+                child: isMatched
+                    ? _buildStaticField(label: 'Unit', value: result.unit ?? '')
+                    : _buildMiniField(
+                        label: 'Unit',
+                        value: result.unit ?? '',
+                        onChanged: (v) {
+                          result.unit = v;
+                          _hasChanges = true;
+                        },
+                      ),
               ),
             ],
           ),
@@ -809,11 +817,44 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
+  Widget _buildStaticField({required String label, required String value}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            value.isEmpty ? '—' : value,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMiniField({
     required String label,
     required String value,
     required Function(String) onChanged,
-    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -830,12 +871,11 @@ class _VerifyScreenState extends State<VerifyScreen> {
         const SizedBox(height: 4),
         TextFormField(
           initialValue: value,
-          readOnly: readOnly,
-          onChanged: readOnly ? null : onChanged,
+          onChanged: onChanged,
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: readOnly ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.secondary,
+            color: Theme.of(context).colorScheme.secondary,
           ),
           decoration: InputDecoration(
             isDense: true,
