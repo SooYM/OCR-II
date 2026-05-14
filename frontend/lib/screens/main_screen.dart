@@ -36,7 +36,7 @@ class _MainScreenState extends State<MainScreen> {
   
   // Multi-Attribute Chart state
   final Set<String> _selectedMultiAttributes = {};
-  final Set<String> _collapsedProfiles = {};
+  final Set<String> _expandedProfiles = {};
   DateTimeRange? _selectedDateRange;
   final List<Color> _lineColors = [
     const Color(0xFF6C63FF), // Primary
@@ -1568,24 +1568,24 @@ class _MainScreenState extends State<MainScreen> {
       final availableKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
 
       if (availableKeys.isNotEmpty) {
-        final isCollapsed = _collapsedProfiles.contains(category);
+        final isExpanded = _expandedProfiles.contains(category);
         // Subheading Row
         rows.add(
           DataRow(
             color: WidgetStateProperty.all(Theme.of(context).colorScheme.primary.withValues(alpha: 0.05)),
             onSelectChanged: (selected) {
               setState(() {
-                if (isCollapsed) {
-                  _collapsedProfiles.remove(category);
+                if (isExpanded) {
+                  _expandedProfiles.remove(category);
                 } else {
-                  _collapsedProfiles.add(category);
+                  _expandedProfiles.add(category);
                 }
               });
             },
             cells: [
               DataCell(Row(
                 children: [
-                  Icon(isCollapsed ? Icons.chevron_right_rounded : Icons.expand_more_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+                  Icon(isExpanded ? Icons.expand_more_rounded : Icons.chevron_right_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 8),
                   Text(category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary, fontSize: 12, letterSpacing: 1.1)),
                 ],
@@ -1595,8 +1595,8 @@ class _MainScreenState extends State<MainScreen> {
           ),
         );
 
-        // Data Rows (Only if NOT collapsed)
-        if (!isCollapsed) {
+        // Data Rows (Only if expanded)
+        if (isExpanded) {
           for (final testKey in availableKeys) {
             rows.add(
               DataRow(
@@ -1631,23 +1631,23 @@ class _MainScreenState extends State<MainScreen> {
     final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
     
     if (otherKeys.isNotEmpty) {
-      final isOtherCollapsed = _collapsedProfiles.contains('OTHER_METRICS');
+      final isOtherExpanded = _expandedProfiles.contains('OTHER_METRICS');
       rows.add(
         DataRow(
           color: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
           onSelectChanged: (selected) {
             setState(() {
-              if (isOtherCollapsed) {
-                _collapsedProfiles.remove('OTHER_METRICS');
+              if (isOtherExpanded) {
+                _expandedProfiles.remove('OTHER_METRICS');
               } else {
-                _collapsedProfiles.add('OTHER_METRICS');
+                _expandedProfiles.add('OTHER_METRICS');
               }
             });
           },
           cells: [
             DataCell(Row(
               children: [
-                Icon(isOtherCollapsed ? Icons.chevron_right_rounded : Icons.expand_more_rounded, size: 20),
+                Icon(isOtherExpanded ? Icons.expand_more_rounded : Icons.chevron_right_rounded, size: 20),
                 const SizedBox(width: 8),
                 const Text('OTHER METRICS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1)),
               ],
@@ -1656,7 +1656,7 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
       );
-      if (!isOtherCollapsed) {
+      if (isOtherExpanded) {
         for (final testKey in otherKeys) {
           rows.add(
             DataRow(
