@@ -1841,6 +1841,7 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _startFocus = FocusNode();
   final FocusNode _endFocus = FocusNode();
+  final GlobalKey _applyButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -1854,12 +1855,13 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
 
   void _onFocusChange() {
     if (_startFocus.hasFocus || _endFocus.hasFocus) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && _scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (mounted && _applyButtonKey.currentContext != null) {
+          Scrollable.ensureVisible(
+            _applyButtonKey.currentContext!,
             duration: const Duration(milliseconds: 400),
             curve: Curves.easeOutCubic,
+            alignment: 1.0, // Scroll until the bottom of the button is visible
           );
         }
       });
@@ -1901,7 +1903,7 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
         ),
         child: SingleChildScrollView(
           controller: _scrollController,
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 24),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 60),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1981,6 +1983,7 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
+                        key: _applyButtonKey,
                         onPressed: () {
                           final start = _parseManualDate(_startCtrl.text);
                           final end = _parseManualDate(_endCtrl.text);
