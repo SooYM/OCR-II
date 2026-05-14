@@ -384,18 +384,21 @@ class _MainScreenState extends State<MainScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5)),
-            ],
-          ),
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5)),
+              ],
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
               const SizedBox(height: 12),
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 24),
@@ -457,7 +460,9 @@ class _MainScreenState extends State<MainScreen> {
               ),
               _buildManualEntrySection(),
               const SizedBox(height: 24),
-            ],
+                ],
+              ),
+            ),
           ),
         );
       },
