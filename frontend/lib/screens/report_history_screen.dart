@@ -50,11 +50,11 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'sent': return AppTheme.success;
-      case 'completed': return AppTheme.info;
-      case 'processing': return AppTheme.warning;
-      case 'failed': return AppTheme.error;
-      default: return AppTheme.textTertiary;
+      case 'sent': return Theme.of(context).colorScheme.primary;
+      case 'completed': return Theme.of(context).colorScheme.secondary;
+      case 'processing': return Theme.of(context).colorScheme.tertiary;
+      case 'failed': return Theme.of(context).colorScheme.error;
+      default: return Theme.of(context).colorScheme.onSurfaceVariant;
     }
   }
 
@@ -65,15 +65,15 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
         backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
         title: const Text('Delete Report?'),
-        content: const Text('Are you sure you want to delete this report? This action cannot be undone.', style: TextStyle(color: AppTheme.textSecondary)),
+        content: const Text('Are you sure you want to delete this report? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: AppTheme.error)),
+            child: Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -87,14 +87,14 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
       _loadReports();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: AppTheme.success, content: Text('Report deleted')),
+          SnackBar(backgroundColor: Theme.of(context).colorScheme.primary, content: const Text('Report deleted')),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.error, content: Text('Failed to delete: $e')),
+          SnackBar(backgroundColor: Theme.of(context).colorScheme.error, content: Text('Failed to delete: $e')),
         );
       }
     }
@@ -115,7 +115,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
-                  border: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, width: 1)),
+                  border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
                 ),
                 child: Row(
                   children: [
@@ -137,7 +137,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                                   color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
                           Text(
                             _reports != null ? '${_reports!.length} report(s)' : 'Loading...',
-                            style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
@@ -147,10 +147,10 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppTheme.surfaceVariant,
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.refresh_rounded, size: 20, color: AppTheme.textSecondary),
+                        child: const Icon(Icons.refresh_rounded, size: 20),
                       ),
                     ),
                   ],
@@ -168,8 +168,8 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
 
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primary),
+      return Center(
+        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
       );
     }
 
@@ -183,12 +183,12 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(color: AppTheme.error.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.cloud_off_rounded, size: 40, color: AppTheme.error),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.error.withOpacity(0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.cloud_off_rounded, size: 40, color: Theme.of(context).colorScheme.error),
                 ),
                 const SizedBox(height: 20),
                 Text(_error!, textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 14)),
+                    style: const TextStyle(fontSize: 14)),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: _loadReports,
@@ -211,17 +211,17 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withOpacity(0.08),
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.inbox_outlined, size: 48, color: AppTheme.textTertiary),
+                child: Icon(Icons.inbox_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 20),
               Text('No reports yet',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(height: 8),
               const Text('Scan a medical report to get started',
-                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 14)),
+                  style: TextStyle(fontSize: 14)),
             ],
           ),
         ),
@@ -230,7 +230,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
 
     return RefreshIndicator(
       onRefresh: _loadReports,
-      color: AppTheme.primary,
+      color: Theme.of(context).colorScheme.primary,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()), // Removes Android stretch effect
         padding: const EdgeInsets.all(16),
@@ -306,10 +306,10 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: AppTheme.error.withValues(alpha: 0.1),
+                      color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.delete_outline, size: 16, color: AppTheme.error),
+                    child: Icon(Icons.delete_outline, size: 16, color: Theme.of(context).colorScheme.error),
                   ),
                 ),
               ],
@@ -318,17 +318,17 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
             // Details row
             Row(
               children: [
-                const Icon(Icons.calendar_today_outlined, size: 13, color: AppTheme.textTertiary),
+                Icon(Icons.calendar_today_outlined, size: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 const SizedBox(width: 6),
                 Text(_formatDate(report.uploadTime),
-                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+                    style: const TextStyle(fontSize: 12)),
                 const Spacer(),
                 if (testName?.isNotEmpty == true) ...[
-                  const Icon(Icons.science_outlined, size: 13, color: AppTheme.textTertiary),
+                  Icon(Icons.science_outlined, size: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(testName!,
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                        style: const TextStyle(fontSize: 12),
                         overflow: TextOverflow.ellipsis),
                   ),
                 ],
@@ -338,10 +338,10 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Icon(Icons.analytics_outlined, size: 13, color: AppTheme.accent),
+                  Icon(Icons.analytics_outlined, size: 13, color: Theme.of(context).colorScheme.secondary),
                   const SizedBox(width: 6),
                   Text('$resultCount test result(s)',
-                      style: const TextStyle(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontSize: 12, fontWeight: FontWeight.w600)),
                 ],
               ),
             ],

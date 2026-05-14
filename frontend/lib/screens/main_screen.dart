@@ -96,7 +96,7 @@ class _MainScreenState extends State<MainScreen> {
         setState(() {
           _isAnalyzing = false;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('AI Analysis failed: $e'), backgroundColor: AppTheme.error),
+            SnackBar(content: Text('AI Analysis failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
           );
         });
       }
@@ -145,15 +145,14 @@ class _MainScreenState extends State<MainScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
         title: const Text('Log Out?'),
-        content: const Text('You will need to sign in again.',
-            style: TextStyle(color: AppTheme.textSecondary)),
+        content: const Text('You will need to sign in again.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () async {
@@ -165,7 +164,7 @@ class _MainScreenState extends State<MainScreen> {
                 );
               }
             },
-            child: const Text('Log Out', style: TextStyle(color: AppTheme.error)),
+            child: Text('Log Out', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -217,7 +216,7 @@ class _MainScreenState extends State<MainScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
-          border: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, width: 1)),
+          border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
         ),
         child: Row(
           children: [
@@ -238,7 +237,7 @@ class _MainScreenState extends State<MainScreen> {
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
                           color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
                   Text('Healthcare Biomarker Analytics',
-                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500)),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
@@ -253,7 +252,7 @@ class _MainScreenState extends State<MainScreen> {
                 child: Icon(
                   ThemeService.instance.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                   size: 20,
-                  color: ThemeService.instance.isDarkMode ? Colors.orangeAccent : AppTheme.primary,
+                  color: ThemeService.instance.isDarkMode ? Colors.orangeAccent : Theme.of(context).colorScheme.primary,
                 ),
               ),
             ),
@@ -263,18 +262,18 @@ class _MainScreenState extends State<MainScreen> {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.person_rounded, size: 18, color: AppTheme.primaryLight),
+                    const Icon(Icons.person_rounded, size: 18),
                     if (AuthService.currentUser != null) ...[
                       const SizedBox(width: 6),
                       Text(
                         (AuthService.currentUser!['name'] as String? ?? '').split(' ').first,
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ],
@@ -287,10 +286,10 @@ class _MainScreenState extends State<MainScreen> {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.refresh_rounded, size: 20, color: AppTheme.textSecondary),
+                child: const Icon(Icons.refresh_rounded, size: 20),
               ),
             ),
           ],
@@ -309,8 +308,8 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(color: AppTheme.error.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.cloud_off_rounded, size: 48, color: AppTheme.error),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: Icon(Icons.cloud_off_rounded, size: 48, color: Theme.of(context).colorScheme.error),
               ),
               const SizedBox(height: 24),
               Text('Unable to Load Dashboard',
@@ -318,7 +317,7 @@ class _MainScreenState extends State<MainScreen> {
               const SizedBox(height: 8),
               Text(_dashboardError ?? 'An unknown error occurred.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.textTertiary, fontSize: 14, height: 1.5)),
+                  style: const TextStyle(fontSize: 14, height: 1.5)),
               const SizedBox(height: 28),
               GestureDetector(
                 onTap: _fetchDashboardData,
@@ -326,8 +325,8 @@ class _MainScreenState extends State<MainScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                   decoration: BoxDecoration(
                     gradient: AppTheme.primaryGradient(context),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    boxShadow: Theme.of(context).brightness == Brightness.dark ? AppTheme.primaryShadow : AppTheme.primaryShadowLight,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: AppTheme.primaryShadow(context),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -356,8 +355,8 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.auto_awesome, color: AppTheme.accent, size: 18),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                child: Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary, size: 18),
               ),
               const SizedBox(width: 12),
               Text('AI Health Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
@@ -370,24 +369,24 @@ class _MainScreenState extends State<MainScreen> {
             MarkdownBody(
               data: _aiAnalysis!,
               styleSheet: MarkdownStyleSheet(
-                p: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? AppTheme.textSecondary, fontSize: 14, height: 1.6),
+                p: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14, height: 1.6),
                 strong: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
-                em: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? AppTheme.textSecondary, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
+                em: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
                 h1: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800, height: 1.5),
                 h2: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
                 h3: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
-                listBullet: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? AppTheme.textSecondary, fontSize: 14),
+                listBullet: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
                 blockSpacing: 10,
               ),
             )
           else if (_isAnalyzing)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Center(child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2)),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.secondary, strokeWidth: 2)),
             )
           else
             Text('Generate a detailed AI analysis based on the exact values from your reports.', 
-                style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 13, height: 1.5)),
+                style: const TextStyle(fontSize: 13, height: 1.5)),
           
           // Query input — always visible when not loading
           if (!_isAnalyzing) ...[
@@ -398,10 +397,10 @@ class _MainScreenState extends State<MainScreen> {
               maxLines: null,
               decoration: InputDecoration(
                 hintText: _aiAnalysis != null ? 'Ask a follow-up question...' : 'Any specific question? (Optional)',
-                hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                prefixIcon: Icon(_aiAnalysis != null ? Icons.chat_bubble_outline : Icons.help_outline, color: AppTheme.textTertiary, size: 18),
+                hintStyle: const TextStyle(),
+                prefixIcon: Icon(_aiAnalysis != null ? Icons.chat_bubble_outline : Icons.help_outline, size: 18),
                 filled: true,
-                fillColor: AppTheme.surfaceVariant.withValues(alpha: 0.5),
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 isDense: true,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
@@ -413,8 +412,8 @@ class _MainScreenState extends State<MainScreen> {
               child: ElevatedButton.icon(
                 onPressed: _generateAnalysis,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryLight.withValues(alpha: 0.15),
-                  foregroundColor: AppTheme.primaryLight,
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                  foregroundColor: Theme.of(context).colorScheme.primary,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -473,7 +472,7 @@ class _MainScreenState extends State<MainScreen> {
               Row(
                 children: [
                   Expanded(child: Text(displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface))),
-                  Icon(Icons.fullscreen_rounded, size: 18, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
+                  Icon(Icons.fullscreen_rounded, size: 18, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
                 ],
               ),
               const SizedBox(height: 20),
@@ -486,7 +485,7 @@ class _MainScreenState extends State<MainScreen> {
                     gridData: FlGridData(
                       show: true, drawVerticalLine: false,
                       horizontalInterval: padding > 0 ? padding : null,
-                      getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, strokeWidth: 1),
+                      getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 1),
                     ),
                     titlesData: FlTitlesData(
                       show: true,
@@ -503,7 +502,7 @@ class _MainScreenState extends State<MainScreen> {
                               final date = _parseDate(report.structuredData?.date, report.uploadTime);
                               return Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
-                                child: Text(DateFormat('MMM d, yy').format(date), style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 10)),
+                                child: Text(DateFormat('MMM d, yy').format(date), style: TextStyle(fontSize: 10)),
                               );
                             }
                             return const SizedBox();
@@ -514,7 +513,7 @@ class _MainScreenState extends State<MainScreen> {
                         sideTitles: SideTitles(
                           showTitles: true, reservedSize: 36,
                           getTitlesWidget: (value, meta) {
-                            return Text(value.toStringAsFixed(1), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10));
+                            return Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10));
                           },
                         ),
                       ),
@@ -524,19 +523,19 @@ class _MainScreenState extends State<MainScreen> {
                       LineChartBarData(
                         spots: spots,
                         isCurved: true,
-                        color: AppTheme.primaryLight,
+                        color: Theme.of(context).colorScheme.primary,
                         barWidth: 3,
                         isStrokeCapRound: true,
                         dotData: FlDotData(
                           show: true,
                           getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                            radius: 4, color: AppTheme.primaryLight, strokeWidth: 2, strokeColor: AppTheme.surface,
+                            radius: 4, color: Theme.of(context).colorScheme.primary, strokeWidth: 2, strokeColor: Theme.of(context).colorScheme.surface,
                           ),
                         ),
                         belowBarData: BarAreaData(
                           show: true,
                           gradient: LinearGradient(
-                            colors: [AppTheme.primaryLight.withValues(alpha: 0.3), AppTheme.primaryLight.withValues(alpha: 0.0)],
+                            colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.3), Theme.of(context).colorScheme.primary.withValues(alpha: 0.0)],
                             begin: Alignment.topCenter, end: Alignment.bottomCenter,
                           ),
                         ),
@@ -574,7 +573,7 @@ class _MainScreenState extends State<MainScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: AppTheme.surfaceVariant,
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Icon(Icons.close_rounded, size: 20, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
@@ -586,7 +585,7 @@ class _MainScreenState extends State<MainScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(displayName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
-                                Text('Trend Analysis', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500)),
+                                Text('Trend Analysis', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ),
@@ -616,8 +615,8 @@ class _MainScreenState extends State<MainScreen> {
                               show: true,
                               drawVerticalLine: true,
                               horizontalInterval: padding > 0 ? padding : null,
-                              getDrawingHorizontalLine: (value) => const FlLine(color: AppTheme.surfaceBorder, strokeWidth: 0.8),
-                              getDrawingVerticalLine: (value) => const FlLine(color: AppTheme.surfaceBorder, strokeWidth: 0.5),
+                              getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 0.8),
+                              getDrawingVerticalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 0.5),
                             ),
                             titlesData: FlTitlesData(
                               show: true,
@@ -634,7 +633,7 @@ class _MainScreenState extends State<MainScreen> {
                                       final date = _parseDate(report.structuredData?.date, report.uploadTime);
                                       return Padding(
                                         padding: const EdgeInsets.only(top: 10.0),
-                                        child: Text(DateFormat('MMM d, yyyy').format(date), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                                        child: Text(DateFormat('MMM d, yyyy').format(date), style: const TextStyle(fontSize: 11)),
                                       );
                                     }
                                     return const SizedBox();
@@ -645,7 +644,7 @@ class _MainScreenState extends State<MainScreen> {
                                 sideTitles: SideTitles(
                                   showTitles: true, reservedSize: 48,
                                   getTitlesWidget: (value, meta) {
-                                    return Text(value.toStringAsFixed(1), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11));
+                                    return Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11));
                                   },
                                 ),
                               ),
@@ -653,7 +652,7 @@ class _MainScreenState extends State<MainScreen> {
                             borderData: FlBorderData(show: false),
                             lineTouchData: LineTouchData(
                               touchTooltipData: LineTouchTooltipData(
-                                getTooltipColor: (touchedSpot) => AppTheme.surface,
+                                getTooltipColor: (touchedSpot) => Theme.of(context).colorScheme.surface,
                                 getTooltipItems: (touchedSpots) {
                                   return touchedSpots.map((spot) {
                                     final index = spot.x.toInt();
@@ -675,19 +674,19 @@ class _MainScreenState extends State<MainScreen> {
                               LineChartBarData(
                                 spots: spots,
                                 isCurved: true,
-                                color: AppTheme.primaryLight,
+                                color: Theme.of(context).colorScheme.primary,
                                 barWidth: 3.5,
                                 isStrokeCapRound: true,
                                 dotData: FlDotData(
                                   show: true,
                                   getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                                    radius: 6, color: AppTheme.primaryLight, strokeWidth: 3, strokeColor: Theme.of(context).colorScheme.surface,
+                                    radius: 6, color: Theme.of(context).colorScheme.primary, strokeWidth: 3, strokeColor: Theme.of(context).colorScheme.surface,
                                   ),
                                 ),
                                 belowBarData: BarAreaData(
                                   show: true,
                                   gradient: LinearGradient(
-                                    colors: [AppTheme.primaryLight.withValues(alpha: 0.25), AppTheme.primaryLight.withValues(alpha: 0.0)],
+                                    colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.25), Theme.of(context).colorScheme.primary.withValues(alpha: 0.0)],
                                     begin: Alignment.topCenter, end: Alignment.bottomCenter,
                                   ),
                                 ),
@@ -707,9 +706,9 @@ class _MainScreenState extends State<MainScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             _buildStatItem('Min', minY.toStringAsFixed(1)),
-                            Container(width: 1, height: 30, color: AppTheme.surfaceBorder),
+                            Container(width: 1, height: 30, color: Theme.of(context).colorScheme.outline),
                             _buildStatItem('Max', maxY.toStringAsFixed(1)),
-                            Container(width: 1, height: 30, color: AppTheme.surfaceBorder),
+                            Container(width: 1, height: 30, color: Theme.of(context).colorScheme.outline),
                             _buildStatItem('Points', spots.length.toString()),
                           ],
                         ),
@@ -730,7 +729,7 @@ class _MainScreenState extends State<MainScreen> {
       children: [
         Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.primary)),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textTertiary, fontWeight: FontWeight.w500)),
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
       ],
     );
   }
@@ -841,11 +840,11 @@ class _MainScreenState extends State<MainScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.analytics_outlined, size: 64, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
+            Icon(Icons.analytics_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
             const SizedBox(height: 16),
-            const Text('No Data Available', style: TextStyle(fontSize: 18, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+            const Text('No Data Available', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            const Text('Scan a medical report to see your analytics.', style: TextStyle(color: AppTheme.textTertiary, fontSize: 14)),
+            const Text('Scan a medical report to see your analytics.', style: TextStyle(fontSize: 14)),
           ],
         ),
       );
@@ -893,9 +892,9 @@ class _MainScreenState extends State<MainScreen> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Theme(
-                  data: Theme.of(context).copyWith(dividerColor: AppTheme.surfaceBorder),
+                  data: Theme.of(context).copyWith(dividerColor: Theme.of(context).colorScheme.outline),
                   child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(AppTheme.surfaceVariant.withValues(alpha: 0.5)),
+                    headingRowColor: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
                     columnSpacing: 24,
                     horizontalMargin: 16,
                     dividerThickness: 1,
@@ -916,7 +915,7 @@ class _MainScreenState extends State<MainScreen> {
                     rows: sortedTestKeys.map((testKey) {
                       return DataRow(
                         cells: [
-                          DataCell(Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
+                          DataCell(Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600))),
                           ...validReports.map((report) {
                             final result = report.structuredData!.results.firstWhere(
                               (res) => (res.key ?? res.testItem) == testKey,
@@ -925,7 +924,7 @@ class _MainScreenState extends State<MainScreen> {
                             final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
                             return DataCell(
                               Text(valueText, style: TextStyle(
-                                color: result.value == '-' ? (Theme.of(context).textTheme.bodySmall?.color ?? AppTheme.textTertiary) : Theme.of(context).colorScheme.onSurface,
+                                color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
                                 fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
                               )),
                             );
@@ -948,7 +947,7 @@ class _MainScreenState extends State<MainScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border(top: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, width: 1)),
+        border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
@@ -1000,14 +999,14 @@ class _MainScreenState extends State<MainScreen> {
               ShaderMask(
                 shaderCallback: (bounds) {
                   if (isActive) return gradient.createShader(bounds);
-                  return LinearGradient(colors: [Theme.of(context).textTheme.bodySmall?.color ?? AppTheme.textTertiary, Theme.of(context).textTheme.bodySmall?.color ?? AppTheme.textTertiary]).createShader(bounds);
+                  return LinearGradient(colors: [Theme.of(context).colorScheme.onSurfaceVariant, Theme.of(context).colorScheme.onSurfaceVariant]).createShader(bounds);
                 },
                 child: Icon(isActive ? activeIcon : icon, size: 24, color: Colors.white),
               ),
               const SizedBox(height: 4),
               Text(label,
                   style: TextStyle(fontSize: 10, fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                      color: isActive ? Theme.of(context).colorScheme.onSurface : Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.6) ?? AppTheme.textTertiary, letterSpacing: 0.2)),
+                      color: isActive ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6), letterSpacing: 0.2)),
             ],
           ),
         ),

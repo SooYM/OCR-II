@@ -35,7 +35,7 @@ class _GradientButtonState extends State<GradientButton> {
         decoration: BoxDecoration(
           gradient: AppTheme.primaryGradient(context),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          boxShadow: _isHovered ? AppTheme.primaryShadow : [],
+          boxShadow: _isHovered ? AppTheme.primaryShadow(context) : [],
         ),
         child: Material(
           color: Colors.transparent,

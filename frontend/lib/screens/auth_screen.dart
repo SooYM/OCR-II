@@ -112,7 +112,7 @@ class _AuthScreenState extends State<AuthScreen>
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 4),
             const Text('Paste your localtunnel URL here',
-                style: TextStyle(color: AppTheme.textTertiary, fontSize: 13)),
+                style: TextStyle(fontSize: 13)),
             const SizedBox(height: 20),
             TextField(
               controller: controller,
@@ -120,7 +120,7 @@ class _AuthScreenState extends State<AuthScreen>
               style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
               decoration: const InputDecoration(
                 hintText: 'https://your-tunnel.loca.lt',
-                prefixIcon: Icon(Icons.link, color: AppTheme.textTertiary),
+                prefixIcon: Icon(Icons.link),
               ),
             ),
             const SizedBox(height: 20),
@@ -131,7 +131,7 @@ class _AuthScreenState extends State<AuthScreen>
                   ApiService.setBaseUrl(controller.text.trim());
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(backgroundColor: AppTheme.success, content: Text('Server URL updated')),
+                    SnackBar(backgroundColor: Theme.of(context).colorScheme.primary, content: const Text('Server URL updated')),
                   );
                 },
                 icon: const Icon(Icons.save, size: 18),
@@ -172,7 +172,7 @@ class _AuthScreenState extends State<AuthScreen>
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.primary.withOpacity(0.25 * _pulseController.value),
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.25 * _pulseController.value),
                                   blurRadius: 40,
                                   spreadRadius: 8,
                                 ),
@@ -205,7 +205,7 @@ class _AuthScreenState extends State<AuthScreen>
                     delay: const Duration(milliseconds: 300),
                     child: Text(
                       _isLogin ? 'Welcome back' : 'Create your account',
-                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textSecondary, fontSize: 15),
+                      style: TextStyle(fontSize: 15),
                     ),
                   ),
 
@@ -224,17 +224,17 @@ class _AuthScreenState extends State<AuthScreen>
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppTheme.error.withOpacity(0.1),
+                                color: Theme.of(context).colorScheme.error.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                                border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+                                border: Border.all(color: Theme.of(context).colorScheme.error.withOpacity(0.3)),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.error_outline, color: AppTheme.error, size: 18),
+                                  Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error, size: 18),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(_error!,
-                                        style: const TextStyle(color: AppTheme.error, fontSize: 13)),
+                                        style: const TextStyle(fontSize: 13)),
                                   ),
                                 ],
                               ),
@@ -271,7 +271,7 @@ class _AuthScreenState extends State<AuthScreen>
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                                color: AppTheme.textTertiary,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 size: 20,
                               ),
                               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
@@ -291,7 +291,7 @@ class _AuthScreenState extends State<AuthScreen>
                             children: [
                               Text(
                                 _isLogin ? "Don't have an account? " : 'Already have an account? ',
-                                style: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+                                style: const TextStyle(fontSize: 13),
                               ),
                               GestureDetector(
                                 onTap: _isLoading ? null : _toggleMode,
@@ -322,10 +322,10 @@ class _AuthScreenState extends State<AuthScreen>
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.settings, size: 14, color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary),
+                          Icon(Icons.settings, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
                           const SizedBox(width: 6),
                           Text('Server Settings',
-                              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12)),
+                              style: TextStyle(fontSize: 12)),
                         ],
                       ),
                     ),
@@ -356,7 +356,7 @@ class _AuthScreenState extends State<AuthScreen>
       style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, size: 20),
+        prefixIcon: Icon(icon, size: 20),
         suffixIcon: suffixIcon,
       ),
       onSubmitted: (_) => _submit(),
@@ -369,7 +369,7 @@ class _AuthScreenState extends State<AuthScreen>
       decoration: BoxDecoration(
         gradient: AppTheme.primaryGradient(context),
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        boxShadow: Theme.of(context).brightness == Brightness.dark ? AppTheme.primaryShadow : AppTheme.primaryShadowLight,
+        boxShadow: AppTheme.primaryShadow(context),
       ),
       child: Material(
         color: Colors.transparent,

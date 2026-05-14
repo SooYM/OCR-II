@@ -76,7 +76,7 @@ class _CaptureScreenState extends State<CaptureScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.error,
+            backgroundColor: Theme.of(context).colorScheme.error,
             content: Text('Error picking image: $e'),
           ),
         );
@@ -151,7 +151,7 @@ class _CaptureScreenState extends State<CaptureScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.error,
+            backgroundColor: Theme.of(context).colorScheme.error,
             content: Text('Processing failed: $e'),
           ),
         );
@@ -190,9 +190,9 @@ class _CaptureScreenState extends State<CaptureScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Paste your localtunnel URL here',
-                style: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+                style: TextStyle(color: Theme.of(context).colorScheme.outline, fontSize: 13),
               ),
               const SizedBox(height: 20),
               TextField(
@@ -201,11 +201,11 @@ class _CaptureScreenState extends State<CaptureScreen>
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                 decoration: InputDecoration(
                   hintText: 'https://your-tunnel.loca.lt',
-                  prefixIcon: const Icon(Icons.link, color: AppTheme.textTertiary),
+                  prefixIcon: const Icon(Icons.link),
                   suffixIcon: testResult != null
                       ? Icon(
                           testResult! ? Icons.check_circle : Icons.error,
-                          color: testResult! ? AppTheme.success : AppTheme.error,
+                          color: testResult! ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
                         )
                       : null,
                 ),
@@ -247,9 +247,9 @@ class _CaptureScreenState extends State<CaptureScreen>
                         _checkServer();
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: AppTheme.success,
-                            content: Text('Server URL updated'),
+                          SnackBar(
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            content: const Text('Server URL updated'),
                           ),
                         );
                       },
@@ -314,8 +314,8 @@ class _CaptureScreenState extends State<CaptureScreen>
                                       ? 'Snap a medical report to begin'
                                       : '${_selectedImages.length} page(s) captured',
                                   style: TextStyle(
-                                    color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textSecondary,
                                     fontSize: 14,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -327,7 +327,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: AppTheme.surfaceVariant,
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -339,15 +339,15 @@ class _CaptureScreenState extends State<CaptureScreen>
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: _serverConnected == null
-                                          ? AppTheme.warning
+                                          ? Theme.of(context).colorScheme.outline
                                           : _serverConnected!
-                                              ? AppTheme.success
-                                              : AppTheme.error,
+                                              ? Theme.of(context).colorScheme.primary
+                                              : Theme.of(context).colorScheme.error,
                                     ),
                                   ),
                                   const SizedBox(width: 6),
                                   const Icon(Icons.settings,
-                                      size: 18, color: AppTheme.textSecondary),
+                                      size: 18),
                                 ],
                               ),
                             ),
@@ -431,12 +431,12 @@ class _CaptureScreenState extends State<CaptureScreen>
                                 // Clear all
                                 TextButton.icon(
                                   onPressed: _clearAllImages,
-                                  icon: const Icon(Icons.refresh,
-                                      color: AppTheme.textSecondary, size: 18),
-                                  label: const Text(
+                                  icon: Icon(Icons.refresh,
+                                      size: 18, color: Theme.of(context).colorScheme.error),
+                                  label: Text(
                                     'Start over',
                                     style:
-                                        TextStyle(color: AppTheme.textSecondary),
+                                        TextStyle(color: Theme.of(context).colorScheme.error),
                                   ),
                                 ),
                               ],
@@ -463,7 +463,7 @@ class _CaptureScreenState extends State<CaptureScreen>
   void _showAddMoreOptions() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -479,7 +479,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppTheme.textTertiary.withOpacity(0.3),
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -496,7 +496,7 @@ class _CaptureScreenState extends State<CaptureScreen>
             const SizedBox(height: 4),
             Text(
               '${_selectedImages.length} page(s) already added',
-              style: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.outline),
             ),
             const SizedBox(height: 20),
             ListTile(
@@ -511,8 +511,8 @@ class _CaptureScreenState extends State<CaptureScreen>
               ),
               title: Text('Camera',
                   style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-              subtitle: const Text('Take another photo',
-                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+              subtitle: Text('Take another photo',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline)),
               onTap: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.camera);
@@ -531,8 +531,8 @@ class _CaptureScreenState extends State<CaptureScreen>
               ),
               title: Text('Gallery',
                   style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-              subtitle: const Text('Pick from library',
-                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+              subtitle: Text('Pick from library',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline)),
               onTap: () {
                 Navigator.pop(context);
                 _pickImage(ImageSource.gallery);
@@ -554,7 +554,7 @@ class _CaptureScreenState extends State<CaptureScreen>
             color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
             border: Border.all(
-              color: AppTheme.primary.withOpacity(0.2),
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
               width: 2,
             ),
           ),
@@ -571,24 +571,24 @@ class _CaptureScreenState extends State<CaptureScreen>
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            AppTheme.primary.withOpacity(0.15),
-                            AppTheme.primary.withOpacity(0.05),
+                            Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                            Theme.of(context).colorScheme.primary.withOpacity(0.05),
                           ],
                         ),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.primary
+                            color: Theme.of(context).colorScheme.primary
                                 .withOpacity(0.15 * _pulseController.value),
                             blurRadius: 40,
                             spreadRadius: 10,
                           ),
                         ],
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.document_scanner_outlined,
                         size: 56,
-                        color: AppTheme.primaryLight,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   );
@@ -604,10 +604,10 @@ class _CaptureScreenState extends State<CaptureScreen>
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Supports multi-page reports',
                 style: TextStyle(
-                  color: AppTheme.textTertiary,
+                  color: Theme.of(context).colorScheme.outline,
                   fontSize: 14,
                 ),
               ),
@@ -630,19 +630,19 @@ class _CaptureScreenState extends State<CaptureScreen>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.primary.withOpacity(0.15),
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                    border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.collections, size: 14, color: AppTheme.primaryLight),
+                      Icon(Icons.collections, size: 14, color: Theme.of(context).colorScheme.primary),
                       const SizedBox(width: 6),
                       Text(
                         '${_selectedImages.length} page(s)',
-                        style: const TextStyle(
-                          color: AppTheme.primaryLight,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -653,7 +653,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                 const Spacer(),
                 const Text(
                   'Swipe to browse • Tap ✕ to remove',
-                  style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                  style: TextStyle(fontSize: 11),
                 ),
               ],
             ),
@@ -729,7 +729,7 @@ class _CaptureScreenState extends State<CaptureScreen>
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.error.withOpacity(0.85),
+                  color: Theme.of(context).colorScheme.error.withOpacity(0.85),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.close, color: Colors.white, size: 16),
@@ -804,7 +804,7 @@ class _CaptureScreenState extends State<CaptureScreen>
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.error.withOpacity(0.85),
+                  color: Theme.of(context).colorScheme.error.withOpacity(0.85),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.close, color: Colors.white, size: 16),
@@ -842,9 +842,9 @@ class _CaptureScreenState extends State<CaptureScreen>
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(color: AppTheme.surfaceBorder),
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
         ),
         child: Column(
           children: [
@@ -869,7 +869,7 @@ class _CaptureScreenState extends State<CaptureScreen>
             Text(
               subtitle,
               style: TextStyle(
-                color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 12,
               ),
             ),
@@ -898,9 +898,8 @@ class _CaptureScreenState extends State<CaptureScreen>
                   child: CircularProgressIndicator(
                     strokeWidth: 5,
                     value: _progress > 0 ? _progress : null,
-                    backgroundColor: AppTheme.surfaceBorder,
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                    backgroundColor: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -919,16 +918,15 @@ class _CaptureScreenState extends State<CaptureScreen>
                   child: LinearProgressIndicator(
                     value: _progress,
                     minHeight: 6,
-                    backgroundColor: AppTheme.surfaceBorder,
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                    backgroundColor: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   '${(_progress * 100).toInt()}%',
                   style: TextStyle(
-                    color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),

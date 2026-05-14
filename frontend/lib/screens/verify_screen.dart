@@ -49,9 +49,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
   Future<void> _handleSend() async {
     if (_data.date == null || _data.date!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppTheme.error,
-          content: Text('Please enter the collected date before sending.'),
+        SnackBar(
+          backgroundColor: Theme.of(context).colorScheme.error,
+          content: const Text('Please enter the collected date before sending.'),
         ),
       );
       return;
@@ -74,13 +74,14 @@ class _VerifyScreenState extends State<VerifyScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.error,
+            backgroundColor: Theme.of(context).colorScheme.error,
             content: Text('Failed to send: $e'),
           ),
         );
       }
     }
   }
+
 
   void _showSuccessDialog() {
     showDialog(
@@ -97,12 +98,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppTheme.success.withOpacity(0.15),
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.check_circle_rounded,
-                    color: AppTheme.success,
+                    color: Theme.of(context).colorScheme.primary,
                     size: 56,
                   ),
                 ),
@@ -120,8 +121,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   'Data has been verified and submitted successfully.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyMedium?.color ?? AppTheme.textSecondary,
                     fontSize: 14,
+                    color: Theme.of(context).textTheme.bodyMedium?.color,
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -182,14 +183,15 @@ class _VerifyScreenState extends State<VerifyScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             Text(
               'Review and correct extracted fields',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.6) ?? AppTheme.textTertiary,
                 fontWeight: FontWeight.w400,
+                color: Theme.of(context).textTheme.bodySmall?.color,
               ),
             ),
           ],
@@ -208,7 +210,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   child: _buildSectionHeader(
                     'Patient Information',
                     Icons.person_outline,
-                    AppTheme.primary,
+                    Theme.of(context).colorScheme.primary,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -226,7 +228,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                             _hasChanges = true;
                           },
                         ),
-                        const Divider(color: AppTheme.surfaceBorder),
+                        const Divider(),
                         _buildField(
                           label: 'Patient ID',
                           value: _data.patientId ?? '',
@@ -236,7 +238,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                             _hasChanges = true;
                           },
                         ),
-                        const Divider(color: AppTheme.surfaceBorder),
+                        const Divider(),
                         _buildField(
                           label: 'Date',
                           value: _data.date ?? '',
@@ -259,7 +261,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   child: _buildSectionHeader(
                     'Report Details',
                     Icons.medical_services_outlined,
-                    AppTheme.accent,
+                    Theme.of(context).colorScheme.secondary,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -277,7 +279,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                             _hasChanges = true;
                           },
                         ),
-                        const Divider(color: AppTheme.surfaceBorder),
+                        const Divider(),
                         _buildField(
                           label: 'Doctor',
                           value: _data.doctorName ?? '',
@@ -287,7 +289,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                             _hasChanges = true;
                           },
                         ),
-                        const Divider(color: AppTheme.surfaceBorder),
+                        const Divider(),
                         _buildField(
                           label: 'Hospital',
                           value: _data.hospitalName ?? '',
@@ -313,7 +315,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       _buildSectionHeader(
                         'Test Results',
                         Icons.analytics_outlined,
-                        AppTheme.warning,
+                        Theme.of(context).colorScheme.tertiary,
                       ),
                       GestureDetector(
                         onTap: _addTestResult,
@@ -321,10 +323,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: AppTheme.primary.withOpacity(0.15),
+                            color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: AppTheme.primary.withOpacity(0.3),
+                              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
                             ),
                           ),
                           child: Row(
@@ -358,22 +360,22 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         children: [
                           Icon(Icons.inbox_outlined,
                               size: 36,
-                              color: AppTheme.textTertiary.withOpacity(0.5)),
+                              color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5)),
                           const SizedBox(height: 12),
-                          const Text(
+                          Text(
                             'No test results extracted',
                             style: TextStyle(
-                              color: AppTheme.textTertiary,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                               fontSize: 14,
                             ),
                           ),
                           const SizedBox(height: 8),
                           GestureDetector(
                             onTap: _addTestResult,
-                            child: const Text(
+                            child: Text(
                               'Tap + Add Row to add manually',
                               style: TextStyle(
-                                color: AppTheme.primaryLight,
+                                color: Theme.of(context).colorScheme.primary,
                                 fontSize: 13,
                               ),
                             ),
@@ -401,7 +403,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   child: _buildSectionHeader(
                     'Notes',
                     Icons.note_outlined,
-                    AppTheme.info,
+                    Theme.of(context).colorScheme.secondary,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -444,7 +446,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               border: Border(
-                top: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder),
+                top: BorderSide(color: Theme.of(context).dividerTheme.color ?? Theme.of(context).colorScheme.outline),
               ),
               boxShadow: [
                 BoxShadow(
@@ -477,7 +479,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.accent.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.secondary.withOpacity(0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -551,14 +553,13 @@ class _VerifyScreenState extends State<VerifyScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: AppTheme.textTertiary),
+          Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 12),
           SizedBox(
             width: 90,
             child: Text(
               label,
               style: const TextStyle(
-                color: AppTheme.textSecondary,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -580,7 +581,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 enabledBorder: InputBorder.none,
                 focusedBorder: UnderlineInputBorder(
                   borderSide: BorderSide(
-                    color: AppTheme.primary.withOpacity(0.5),
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
                   ),
                 ),
                 fillColor: Colors.transparent,
@@ -605,13 +606,13 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 height: 28,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppTheme.warning.withOpacity(0.15),
+                  color: Theme.of(context).colorScheme.tertiary.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '${index + 1}',
-                  style: const TextStyle(
-                    color: AppTheme.warning,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.tertiary,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
@@ -631,7 +632,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   ),
                   decoration: const InputDecoration(
                     hintText: 'Test item name',
-                    hintStyle: TextStyle(color: AppTheme.textTertiary),
+                    hintStyle: const TextStyle(),
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
                     border: InputBorder.none,
@@ -643,11 +644,11 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: AppTheme.error.withOpacity(0.1),
+                    color: Theme.of(context).colorScheme.error.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.close,
-                      size: 14, color: AppTheme.error),
+                  child: Icon(Icons.close,
+                      size: 14, color: Theme.of(context).colorScheme.error),
                 ),
               ),
             ],
@@ -706,8 +707,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: AppTheme.textTertiary,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontSize: 11,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
@@ -717,25 +718,25 @@ class _VerifyScreenState extends State<VerifyScreen> {
         TextFormField(
           initialValue: value,
           onChanged: onChanged,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: AppTheme.accent,
+            color: Theme.of(context).colorScheme.secondary,
           ),
           decoration: InputDecoration(
             isDense: true,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             filled: true,
-            fillColor: AppTheme.surfaceVariant.withOpacity(0.5),
+            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(
-                color: AppTheme.primary,
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
                 width: 1.5,
               ),
             ),
@@ -756,20 +757,19 @@ class _VerifyScreenState extends State<VerifyScreen> {
         title: const Text('Discard changes?'),
         content: const Text(
           'You have unsaved corrections. Going back will discard them.',
-          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child:
-                const Text('Keep Editing', style: TextStyle(color: AppTheme.textSecondary)),
+                const Text('Keep Editing'),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
               Navigator.pop(context); // Go back
             },
-            child: const Text('Discard', style: TextStyle(color: AppTheme.error)),
+            child: Text('Discard', style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
