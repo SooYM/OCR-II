@@ -10,13 +10,12 @@ import '../services/api_service.dart';
 import '../models/report_model.dart';
 import '../utils/formatters.dart';
 import '../utils/date_utils.dart';
-import 'package:intl/intl.dart';
 import 'capture_screen.dart';
 import 'report_history_screen.dart';
+import 'ai_chat_screen.dart';
 import '../services/theme_service.dart';
 import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
-import '../utils/date_utils.dart';
 
 /// Main screen with bottom navigation: Dashboard, Scan, My Reports.
 class MainScreen extends StatefulWidget {
@@ -28,16 +27,12 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  final GlobalKey<AiChatScreenState> _chatKey = GlobalKey<AiChatScreenState>();
 
   // Dashboard state
   List<MedicalReport> _reports = [];
   bool _isLoadingDashboard = true;
   String? _dashboardError;
-
-  // Graph and AI state
-  String? _aiAnalysis;
-  bool _isAnalyzing = false;
-  final TextEditingController _queryCtrl = TextEditingController();
   
   // Multi-Attribute Chart state
   final Set<String> _selectedMultiAttributes = {};
@@ -117,7 +112,6 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    _queryCtrl.dispose();
     super.dispose();
   }
 
@@ -145,38 +139,6 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  Future<void> _generateAnalysis() async {
-    setState(() => _isAnalyzing = true);
-    try {
-      String? startDate;
-      String? endDate;
-      if (_selectedDateRange != null) {
-        startDate = _selectedDateRange!.start.toIso8601String();
-        endDate = _selectedDateRange!.end.toIso8601String();
-      }
-      
-      final analysis = await ApiService.analyzeHealthTrends(
-        query: _queryCtrl.text,
-        startDate: startDate,
-        endDate: endDate,
-      );
-      if (mounted) {
-        setState(() {
-          _aiAnalysis = analysis;
-          _isAnalyzing = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isAnalyzing = false;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('AI Analysis failed: $e'), backgroundColor: Theme.of(context).colorScheme.error),
-          );
-        });
-      }
-    }
-  }
 
   double? _parseValue(String val) {
     final regex = RegExp(r'[+-]?([0-9]*[.])?[0-9]+');
@@ -253,6 +215,7 @@ class _MainScreenState extends State<MainScreen> {
         index: _currentIndex,
         children: [
           _buildDashboardTab(),
+          AiChatScreen(key: _chatKey, dateRange: _selectedDateRange),
           const CaptureScreen(),
           const ReportHistoryScreen(),
         ],
@@ -481,87 +444,41 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildAiAnalysis() {
-    return GlassCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                child: Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary, size: 18),
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = 1),
+      child: GlassCard(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: AppTheme.accentGradient(context),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
+                ],
               ),
-              const SizedBox(width: 12),
-              Text('AI Health Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Analysis result or placeholder
-          if (_aiAnalysis != null)
-            MarkdownBody(
-              data: _aiAnalysis!,
-              styleSheet: MarkdownStyleSheet(
-                p: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14, height: 1.6),
-                strong: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
-                em: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
-                h1: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800, height: 1.5),
-                h2: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
-                h3: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
-                listBullet: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
-                blockSpacing: 10,
-              ),
-            )
-          else if (_isAnalyzing)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.secondary, strokeWidth: 2)),
-            )
-          else
-            Text('Generate a detailed AI analysis based on the exact values from your reports.', 
-                style: const TextStyle(fontSize: 13, height: 1.5)),
-          
-          // Query input — always visible when not loading
-          if (!_isAnalyzing) ...[
-            const SizedBox(height: 16),
-            TextField(
-              controller: _queryCtrl,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13),
-              maxLines: null,
-              decoration: InputDecoration(
-                hintText: _aiAnalysis != null ? 'Ask a follow-up question...' : 'Any specific question? (Optional)',
-                hintStyle: const TextStyle(),
-                prefixIcon: Icon(_aiAnalysis != null ? Icons.chat_bubble_outline : Icons.help_outline, size: 18),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              ),
-              onSubmitted: (_) => _generateAnalysis(),
+              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _generateAnalysis,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: Icon(_aiAnalysis != null ? Icons.refresh : Icons.analytics, size: 18),
-                label: Text(_aiAnalysis != null ? 'Ask / Re-generate' : 'Generate AI Analysis', style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('AI Clinical Consultant', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                  const SizedBox(height: 4),
+                  Text('Chat with AI about your health data', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ],
               ),
             ),
-          ]
-        ],
+            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+          ],
+        ),
       ),
     );
   }
+
 
   Widget? _buildMiniChart(String testKey, List<MedicalReport> validReports, String displayName) {
     List<FlSpot> spots = [];
@@ -1777,9 +1694,11 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               _buildNavItem(index: 0, icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard_rounded,
                   label: 'Dashboard', gradient: AppTheme.accentGradient(context)),
-              _buildNavItem(index: 1, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
+              _buildNavItem(index: 1, icon: Icons.auto_awesome_outlined, activeIcon: Icons.auto_awesome_rounded,
+                  label: 'AI Chat', gradient: LinearGradient(colors: [Theme.of(context).colorScheme.secondary, const Color(0xFF7C4DFF)])),
+              _buildNavItem(index: 2, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
                   label: 'Scan', gradient: AppTheme.primaryGradient(context)),
-              _buildNavItem(index: 2, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
+              _buildNavItem(index: 3, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
                   label: 'My Reports', gradient: const LinearGradient(colors: [AppTheme.warning, Color(0xFFFF8A65)])),
             ],
           ),
