@@ -1894,20 +1894,26 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5)),
-          ],
-        ),
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 60),
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // Push the entire sheet above the keyboard, and cap at 90% screen height
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: screenHeight * 0.9),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5)),
+            ],
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Drag handle (fixed, not scrollable)
               const SizedBox(height: 12),
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 24),
@@ -1931,91 +1937,101 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
                 ),
               ),
               const SizedBox(height: 16),
-              _buildRangeOption(Icons.today_rounded, 'Last 7 Days', () {
-                final end = DateTime.now();
-                final start = end.subtract(const Duration(days: 7));
-                widget.onApply(DateTimeRange(start: start, end: end));
-                Navigator.pop(context);
-              }),
-              _buildRangeOption(Icons.calendar_view_month_rounded, 'Last 30 Days', () {
-                final end = DateTime.now();
-                final start = end.subtract(const Duration(days: 30));
-                widget.onApply(DateTimeRange(start: start, end: end));
-                Navigator.pop(context);
-              }),
-              _buildRangeOption(Icons.history_rounded, 'Last 6 Months', () {
-                final end = DateTime.now();
-                final start = DateTime(end.year, end.month - 6, end.day);
-                widget.onApply(DateTimeRange(start: start, end: end));
-                Navigator.pop(context);
-              }),
-              _buildRangeOption(Icons.event_note_rounded, 'This Year', () {
-                final now = DateTime.now();
-                final start = DateTime(now.year, 1, 1);
-                widget.onApply(DateTimeRange(start: start, end: now));
-                Navigator.pop(context);
-              }),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Divider(),
-              ),
-              _buildRangeOption(Icons.date_range_rounded, 'Custom Calendar...', widget.onOpenCalendar, isCustom: true),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Divider(),
-              ),
-              
-              // Manual Entry Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Manual Entry', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary, letterSpacing: 0.5)),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _buildManualDateField(_startCtrl, 'Start Date', _startFocus)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildManualDateField(_endCtrl, 'End Date', _endFocus)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        key: _applyButtonKey,
-                        onPressed: () {
-                          final start = DateParser.parse(_startCtrl.text);
-                          final end = DateParser.parse(_endCtrl.text);
-                          if (start != null && end != null) {
-                            widget.onApply(DateTimeRange(start: start, end: end));
-                            Navigator.pop(context);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Invalid date format. Use DD / MM / YYYY')),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
-                        child: const Text('Apply Manual Range', style: TextStyle(fontWeight: FontWeight.w700)),
+              // Scrollable content
+              Flexible(
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildRangeOption(Icons.today_rounded, 'Last 7 Days', () {
+                        final end = DateTime.now();
+                        final start = end.subtract(const Duration(days: 7));
+                        widget.onApply(DateTimeRange(start: start, end: end));
+                        Navigator.pop(context);
+                      }),
+                      _buildRangeOption(Icons.calendar_view_month_rounded, 'Last 30 Days', () {
+                        final end = DateTime.now();
+                        final start = end.subtract(const Duration(days: 30));
+                        widget.onApply(DateTimeRange(start: start, end: end));
+                        Navigator.pop(context);
+                      }),
+                      _buildRangeOption(Icons.history_rounded, 'Last 6 Months', () {
+                        final end = DateTime.now();
+                        final start = DateTime(end.year, end.month - 6, end.day);
+                        widget.onApply(DateTimeRange(start: start, end: end));
+                        Navigator.pop(context);
+                      }),
+                      _buildRangeOption(Icons.event_note_rounded, 'This Year', () {
+                        final now = DateTime.now();
+                        final start = DateTime(now.year, 1, 1);
+                        widget.onApply(DateTimeRange(start: start, end: now));
+                        Navigator.pop(context);
+                      }),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                        child: Divider(),
                       ),
-                    ),
-                  ],
+                      _buildRangeOption(Icons.date_range_rounded, 'Custom Calendar...', widget.onOpenCalendar, isCustom: true),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                        child: Divider(),
+                      ),
+                      // Manual Entry Section
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Manual Entry', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary, letterSpacing: 0.5)),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(child: _buildManualDateField(_startCtrl, 'Start Date', _startFocus)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _buildManualDateField(_endCtrl, 'End Date', _endFocus)),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                key: _applyButtonKey,
+                                onPressed: () {
+                                  final start = DateParser.parse(_startCtrl.text);
+                                  final end = DateParser.parse(_endCtrl.text);
+                                  if (start != null && end != null) {
+                                    widget.onApply(DateTimeRange(start: start, end: end));
+                                    Navigator.pop(context);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Invalid date format. Use DD / MM / YYYY')),
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  elevation: 0,
+                                ),
+                                child: const Text('Apply Manual Range', style: TextStyle(fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
               ),
-              // Use the keyboard height as a dynamic spacer
-              SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 20),
-              const SizedBox(height: 16),
             ],
           ),
         ),
+      ),
     );
   }
 
