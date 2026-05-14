@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, List as TypingList
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import aiofiles
 import bcrypt
@@ -99,6 +99,20 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
+class ChatMessageModel(BaseModel):
+    role: str
+    content: str
+
+class AnalyzeRequest(BaseModel):
+    query: Optional[str] = None
+    messages: Optional[TypingList[ChatMessageModel]] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    session_id: Optional[str] = None
+
+class CreateSessionRequest(BaseModel):
+    title: str
+
 # ─── Auth Helpers ──────────────────────────────────────────────────────────
 
 def hash_password(password: str) -> str:
@@ -167,6 +181,24 @@ def init_local_db():
         cursor.execute("ALTER TABLE reports ADD COLUMN user_id TEXT")
     except sqlite3.OperationalError:
         pass  # Column already exists
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            title TEXT NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -741,6 +773,249 @@ async def analyze_health_trends(
         return {"analysis": analysis_text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Clinical analysis engine error: {e}")
+
+@app.post("/api/chat/sessions")
+async def create_chat_session(request: CreateSessionRequest, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    session_id = str(uuid.uuid4())
+    created_at = datetime.now().isoformat()
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("chat_sessions").insert({
+            "id": session_id,
+            "user_id": user_id,
+            "created_at": created_at,
+            "title": request.title
+        }).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute(
+            "INSERT INTO chat_sessions (id, user_id, created_at, title) VALUES (?, ?, ?, ?)",
+            (session_id, user_id, created_at, request.title)
+        )
+        conn.commit()
+        conn.close()
+    return {"id": session_id, "title": request.title}
+
+@app.get("/api/chat/sessions")
+async def get_chat_sessions(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("chat_sessions").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return response.data or []
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM chat_sessions WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+@app.get("/api/chat/sessions/{session_id}/messages")
+async def get_chat_messages(session_id: str, current_user: dict = Depends(get_current_user)):
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("chat_messages").select("*").eq("session_id", session_id).order("timestamp", asc=True).execute()
+        return response.data or []
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM chat_messages WHERE session_id = ? ORDER BY timestamp ASC", (session_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+@app.post("/api/reports/analyze/stream")
+async def analyze_health_trends_stream(
+    request: AnalyzeRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Stream AI analysis token-by-token using Server-Sent Events, including history."""
+    user_id = current_user["id"]
+    query = request.query
+    start_date = request.start_date
+    end_date = request.end_date
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("reports").select("*").eq("user_id", user_id).order("upload_time", desc=True).execute()
+        reports = response.data or []
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM reports WHERE user_id = ? ORDER BY upload_time ASC", (user_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        reports = []
+        for row in rows:
+            r = dict(row)
+            r["structured_data"] = json.loads(r["structured_data"]) if r["structured_data"] else None
+            reports.append(r)
+
+    valid_reports = [r for r in reports if r.get("status") in ["completed", "sent"] and r.get("structured_data") and r["structured_data"].get("results")]
+    
+    if not valid_reports:
+        async def empty_gen():
+            yield "data: No medical reports found for analysis.\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(empty_gen(), media_type="text/event-stream")
+
+    def parse_dt(date_str, fallback_str):
+        if not date_str:
+            return datetime.fromisoformat(fallback_str)
+        formats = ["%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%Y-%m-%d", "%d-%m-%Y", "%d / %m / %Y"]
+        for fmt in formats:
+            try: return datetime.strptime(date_str.strip(), fmt)
+            except ValueError: pass
+        try: return datetime.fromisoformat(date_str.strip())
+        except ValueError: pass
+        return datetime.fromisoformat(fallback_str)
+
+    valid_reports.sort(key=lambda x: parse_dt(x.get("structured_data", {}).get("date"), x["upload_time"]))
+    
+    if start_date and end_date:
+        try:
+            s_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            e_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            valid_reports = [r for r in valid_reports if s_dt <= parse_dt(r.get("structured_data", {}).get("date"), r["upload_time"]) <= e_dt]
+        except Exception: pass
+
+    if not valid_reports:
+        async def no_data_gen():
+            yield "data: No reports found within the selected date range.\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(no_data_gen(), media_type="text/event-stream")
+
+    data_summary = []
+    for r in valid_reports:
+        date_str = r.get("structured_data", {}).get("date") or r["upload_time"][:10]
+        results_list = r["structured_data"]["results"]
+        items = [f"{res.get('test_item', '')}: {res.get('value', '')} {res.get('unit', '')}".strip() for res in results_list if res.get('value') and res.get('value') != '-']
+        if items:
+            data_summary.append(f"Examination Date: {date_str}\n" + "\n".join(items))
+
+    if not data_summary:
+        async def no_biomarkers_gen():
+            yield "data: No diagnostic biomarkers found in the selected reports.\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(no_biomarkers_gen(), media_type="text/event-stream")
+
+    compiled_data = "\n\n".join(data_summary)
+    prompt = f"""
+    You are a highly qualified clinical medical consultant. Your task is to analyze the following longitudinal patient data and provide a professional clinical assessment.
+    
+    PATIENT DATA HISTORY:
+    {compiled_data}
+    
+    ANALYTICAL CONSTRAINTS:
+    1. EXCLUSIVITY: You MUST base your clinical interpretation ONLY on the exact attribute values provided below.
+    2. RAW DATA ONLY: Do NOT perform statistical averaging, median calculations, or maximum-only analysis. Treat each time point as a distinct clinical event.
+    3. PROFESSIONALISM: Use formal healthcare terminology and professional bedside manner. Avoid colloquialisms.
+    4. TREND FOCUS: Identify significant physiological shifts or stabilities between specific dates.
+    """
+    
+    if query and query.strip():
+        prompt += f"\n\nCLINICAL INQUIRY: The patient has requested clarification on the following: '{query.strip()}'. Address this within the context of the observed trends."
+    else:
+        prompt += "\n\nOBJECTIVE: Provide a comprehensive diagnostic trend overview."
+
+    prompt += """
+    
+    STRUCTURE OF CLINICAL REPORT:
+    1. ### Clinical Executive Summary: A concise professional overview of the patient's current health status based on the provided history.
+    2. ### Longitudinal Biomarker Analysis: Detail specific biomarker shifts (e.g., "Hemoglobin increased from 13.2 g/dL on Jan 1 to 14.5 g/dL on Mar 15"). Reference exact dates and values.
+    3. ### Clinical Red Flags: Explicitly flag any values deviating from standard clinical reference ranges.
+    4. ### Clinical Correlations & Implications: Discuss the potential physiological implications of these trends.
+    5. ### Evidence-Based Recommendations: Provide actionable, data-driven lifestyle or dietary interventions.
+    
+    FORMATTING:
+    - Use **bold** for clinical values, specific dates, and biomarkers.
+    - Use *italic* for medical terms or secondary terminology.
+    - Use bullet points for scannability.
+    - Maintain a word count between 300 and 450 words.
+    
+    Return ONLY the markdown analysis.
+    """
+
+    llm_messages = [
+        {"role": "system", "content": "You are a professional clinical consultant providing high-fidelity medical trend analysis. You strictly use provided raw data and never average results."}
+    ]
+    
+    # Add context (the data + instructions) as a system message
+    llm_messages.append({"role": "system", "content": prompt})
+
+    # Add conversation history
+    if request.messages:
+        for msg in request.messages:
+            llm_messages.append({"role": msg.role, "content": msg.content})
+
+    # If there's a new query and no history, it's handled by the prompt above.
+    # If there's a new query and we DO have history, append it as a user message.
+    if request.messages and query and query.strip():
+        llm_messages.append({"role": "user", "content": query.strip()})
+    elif not request.messages and not (query and query.strip()):
+        # Just generate overview
+        llm_messages.append({"role": "user", "content": "Please provide the clinical analysis based on my data."})
+
+    async def token_generator():
+        try:
+            if request.session_id and query and query.strip():
+                msg_id = str(uuid.uuid4())
+                ts = datetime.now().isoformat()
+                if STORAGE_ENGINE == "supabase" and supabase:
+                    supabase.table("chat_messages").insert({
+                        "id": msg_id,
+                        "session_id": request.session_id,
+                        "role": "user",
+                        "content": query.strip(),
+                        "timestamp": ts
+                    }).execute()
+                elif STORAGE_ENGINE == "sqlite":
+                    conn = sqlite3.connect(str(DB_PATH))
+                    conn.execute(
+                        "INSERT INTO chat_messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+                        (msg_id, request.session_id, "user", query.strip(), ts)
+                    )
+                    conn.commit()
+                    conn.close()
+
+            stream = llm_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=llm_messages,
+                stream=True
+            )
+            assistant_content = ""
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    assistant_content += token
+                    yield f"data: {json.dumps({'token': token})}\n\n"
+            
+            if request.session_id:
+                msg_id = str(uuid.uuid4())
+                ts = datetime.now().isoformat()
+                if STORAGE_ENGINE == "supabase" and supabase:
+                    supabase.table("chat_messages").insert({
+                        "id": msg_id,
+                        "session_id": request.session_id,
+                        "role": "assistant",
+                        "content": assistant_content,
+                        "timestamp": ts
+                    }).execute()
+                elif STORAGE_ENGINE == "sqlite":
+                    conn = sqlite3.connect(str(DB_PATH))
+                    conn.execute(
+                        "INSERT INTO chat_messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+                        (msg_id, request.session_id, "assistant", assistant_content, ts)
+                    )
+                    conn.commit()
+                    conn.close()
+
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(token_generator(), media_type="text/event-stream")
 
 @app.post("/api/upload")
 async def upload_report(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
