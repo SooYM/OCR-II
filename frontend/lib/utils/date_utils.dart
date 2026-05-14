@@ -6,7 +6,24 @@ class DateParser {
   static DateTime? parse(String text) {
     try {
       final clean = text.replaceAll(' ', '');
-      final parts = clean.split('/');
+      
+      // Try YYYY-MM-DD format (often from LLM/OCR)
+      if (clean.contains('-')) {
+        final parts = clean.split('-');
+        if (parts.length == 3) {
+          if (parts[0].length == 4) {
+            // YYYY-MM-DD
+            return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+          } else if (parts[2].length == 4) {
+            // DD-MM-YYYY
+            return DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+          }
+        }
+      }
+
+      // Try DD/MM/YYYY or DD.MM.YYYY
+      final separator = clean.contains('/') ? '/' : '.';
+      final parts = clean.split(separator);
       if (parts.length != 3) return null;
       
       int day = int.parse(parts[0]);
@@ -19,8 +36,6 @@ class DateParser {
         final currentCentury = (currentYear / 100).floor() * 100;
         final cutoff = currentYear % 100;
         
-        // If the 2-digit year is <= current year's last 2 digits, assume this century
-        // Otherwise, assume the previous century
         if (year <= cutoff) {
           year += currentCentury;
         } else {
@@ -29,7 +44,6 @@ class DateParser {
       }
       
       final date = DateTime(year, month, day);
-      // Basic validation (e.g. prevent 31/02/2023)
       if (date.year != year || date.month != month || date.day != day) {
         return null;
       }

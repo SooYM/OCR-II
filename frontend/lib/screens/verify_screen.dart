@@ -56,6 +56,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
 
     // Auto-normalize results against the standard dictionary
     _normalizeResults();
+    
+    // Normalize date format if possible
+    if (_data.date != null && _data.date!.isNotEmpty) {
+      final dt = DateParser.parse(_data.date!);
+      if (dt != null) {
+        final d = dt.day.toString().padLeft(2, '0');
+        final m = dt.month.toString().padLeft(2, '0');
+        _data.date = '$d / $m / ${dt.year}';
+      }
+    }
   }
 
   /// Run each test result through the biomarker dictionary matcher.
@@ -851,14 +861,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
           ),
           const SizedBox(height: 10),
           // Reference range
-          _buildMiniField(
-            label: 'Reference Range',
-            value: result.referenceRange ?? '',
-            onChanged: (v) {
-              result.referenceRange = v;
-              _hasChanges = true;
-            },
-          ),
+          isMatched
+              ? _buildStaticField(label: 'Reference Range', value: result.referenceRange ?? '')
+              : _buildMiniField(
+                  label: 'Reference Range',
+                  value: result.referenceRange ?? '',
+                  onChanged: (v) {
+                    result.referenceRange = v;
+                    _hasChanges = true;
+                  },
+                ),
         ],
       ),
     );
