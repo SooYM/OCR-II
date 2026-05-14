@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:animate_do/animate_do.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gradient_button.dart';
@@ -243,6 +244,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
                           label: 'Date',
                           value: _data.date ?? '',
                           icon: Icons.calendar_today_outlined,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [_DateInputFormatter()],
                           onChanged: (v) {
                             _data.date = v;
                             _hasChanges = true;
@@ -548,6 +551,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
     required String value,
     required IconData icon,
     required Function(String) onChanged,
+    List<TextInputFormatter>? inputFormatters,
+    TextInputType? keyboardType,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -569,6 +574,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
             child: TextFormField(
               initialValue: value,
               onChanged: onChanged,
+              inputFormatters: inputFormatters,
+              keyboardType: keyboardType,
               style: TextStyle(
                 fontWeight: FontWeight.w500,
                 color: Theme.of(context).colorScheme.onSurface,
@@ -773,6 +780,30 @@ class _VerifyScreenState extends State<VerifyScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text.replaceAll(RegExp(r'[^0-9]'), ''); // Only allow numbers
+    
+    if (text.length > 8) return oldValue; // Limit to DDMMYYYY
+    
+    final buffer = StringBuffer();
+    for (int i = 0; i < text.length; i++) {
+      buffer.write(text[i]);
+      final index = i + 1;
+      if ((index == 2 || index == 4) && index != text.length) {
+        buffer.write(' / ');
+      }
+    }
+    
+    final string = buffer.toString();
+    return newValue.copyWith(
+      text: string,
+      selection: TextSelection.collapsed(offset: string.length),
     );
   }
 }
