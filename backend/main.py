@@ -814,7 +814,7 @@ async def get_chat_sessions(current_user: dict = Depends(get_current_user)):
 @app.get("/api/chat/sessions/{session_id}/messages")
 async def get_chat_messages(session_id: str, current_user: dict = Depends(get_current_user)):
     if STORAGE_ENGINE == "supabase" and supabase:
-        response = supabase.table("chat_messages").select("*").eq("session_id", session_id).order("timestamp", asc=True).execute()
+        response = supabase.table("chat_messages").select("*").eq("session_id", session_id).order("timestamp", desc=False).execute()
         return response.data or []
     else:
         conn = sqlite3.connect(str(DB_PATH))
