@@ -327,15 +327,15 @@ class _VerifyScreenState extends State<VerifyScreen> {
                               color: AppTheme.primary.withOpacity(0.3),
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.add, size: 16, color: AppTheme.primaryLight),
-                              SizedBox(width: 4),
+                              Icon(Icons.add, size: 16, color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: 4),
                               Text(
                                 'Add Row',
                                 style: TextStyle(
-                                  color: AppTheme.primaryLight,
+                                  color: Theme.of(context).colorScheme.primary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),

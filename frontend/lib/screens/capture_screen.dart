@@ -420,11 +420,11 @@ class _CaptureScreenState extends State<CaptureScreen>
                                 // Add more pages
                                 TextButton.icon(
                                   onPressed: () => _showAddMoreOptions(),
-                                  icon: const Icon(Icons.add_photo_alternate,
-                                      color: AppTheme.primaryLight, size: 18),
-                                  label: const Text(
+                                  icon: Icon(Icons.add_photo_alternate,
+                                      color: Theme.of(context).colorScheme.primary, size: 18),
+                                  label: Text(
                                     'Add pages',
-                                    style: TextStyle(color: AppTheme.primaryLight),
+                                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
                                   ),
                                 ),
                                 const SizedBox(width: 16),

@@ -375,7 +375,7 @@ class _MainScreenState extends State<MainScreen> {
                 em: const TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
                 h1: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w800, height: 1.5),
                 h2: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
-                h3: const TextStyle(color: AppTheme.primaryLight, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
+                h3: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
                 listBullet: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
                 blockSpacing: 10,
               ),
@@ -472,7 +472,7 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary))),
+                  Expanded(child: Text(displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface))),
                   Icon(Icons.fullscreen_rounded, size: 18, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
                 ],
               ),
@@ -486,7 +486,7 @@ class _MainScreenState extends State<MainScreen> {
                     gridData: FlGridData(
                       show: true, drawVerticalLine: false,
                       horizontalInterval: padding > 0 ? padding : null,
-                      getDrawingHorizontalLine: (value) => const FlLine(color: AppTheme.surfaceBorder, strokeWidth: 1),
+                      getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, strokeWidth: 1),
                     ),
                     titlesData: FlTitlesData(
                       show: true,
@@ -494,7 +494,8 @@ class _MainScreenState extends State<MainScreen> {
                       rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                       bottomTitles: AxisTitles(
                         sideTitles: SideTitles(
-                          showTitles: true, reservedSize: 32, interval: 1,
+                          showTitles: true, reservedSize: 32, 
+                          interval: (validReports.length > 5) ? (validReports.length / 4).ceilToDouble() : 1,
                           getTitlesWidget: (value, meta) {
                             int index = value.toInt();
                             if (index >= 0 && index < validReports.length) {
@@ -502,7 +503,7 @@ class _MainScreenState extends State<MainScreen> {
                               final date = _parseDate(report.structuredData?.date, report.uploadTime);
                               return Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
-                                child: Text(DateFormat('MMM d, yy').format(date), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                                child: Text(DateFormat('MMM d, yy').format(date), style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 10)),
                               );
                             }
                             return const SizedBox();
@@ -559,7 +560,7 @@ class _MainScreenState extends State<MainScreen> {
           return FadeTransition(
             opacity: animation,
             child: Scaffold(
-              backgroundColor: AppTheme.background.withValues(alpha: 0.97),
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.97),
               body: SafeArea(
                 child: Column(
                   children: [
@@ -576,7 +577,7 @@ class _MainScreenState extends State<MainScreen> {
                                 color: AppTheme.surfaceVariant,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.close_rounded, size: 20, color: AppTheme.textSecondary),
+                              child: Icon(Icons.close_rounded, size: 20, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -584,8 +585,8 @@ class _MainScreenState extends State<MainScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(displayName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-                                const Text('Trend Analysis', style: TextStyle(color: AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500)),
+                                Text(displayName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+                                Text('Trend Analysis', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ),
@@ -624,7 +625,8 @@ class _MainScreenState extends State<MainScreen> {
                               rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                               bottomTitles: AxisTitles(
                                 sideTitles: SideTitles(
-                                  showTitles: true, reservedSize: 40, interval: 1,
+                                  showTitles: true, reservedSize: 40, 
+                                  interval: (validReports.length > 8) ? (validReports.length / 5).ceilToDouble() : 1,
                                   getTitlesWidget: (value, meta) {
                                     int index = value.toInt();
                                     if (index >= 0 && index < validReports.length) {
@@ -663,7 +665,7 @@ class _MainScreenState extends State<MainScreen> {
                                     }
                                     return LineTooltipItem(
                                       '${spot.y.toStringAsFixed(2)}\n$dateLabel',
-                                      const TextStyle(color: AppTheme.primaryLight, fontWeight: FontWeight.w700, fontSize: 13),
+                                      TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 13),
                                     );
                                   }).toList();
                                 },
@@ -679,7 +681,7 @@ class _MainScreenState extends State<MainScreen> {
                                 dotData: FlDotData(
                                   show: true,
                                   getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                                    radius: 6, color: AppTheme.primaryLight, strokeWidth: 3, strokeColor: AppTheme.surface,
+                                    radius: 6, color: AppTheme.primaryLight, strokeWidth: 3, strokeColor: Theme.of(context).colorScheme.surface,
                                   ),
                                 ),
                                 belowBarData: BarAreaData(
@@ -726,7 +728,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildStatItem(String label, String value) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.primaryLight)),
+        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.primary)),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textTertiary, fontWeight: FontWeight.w500)),
       ],
@@ -907,7 +909,7 @@ class _MainScreenState extends State<MainScreen> {
                         final date = _parseDate(r.structuredData?.date, r.uploadTime);
                         final dateStr = DateFormat('MMM d, yyyy').format(date);
                         return DataColumn(
-                          label: Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.primaryLight)),
+                          label: Text(dateStr, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary)),
                         );
                       }),
                     ],
