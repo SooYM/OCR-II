@@ -7,15 +7,7 @@ import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 
-/// A single chat message in the conversation.
-class ChatMessage {
-  final String role; // 'user' or 'assistant'
-  String content; // mutable for streaming
-  final DateTime timestamp;
-
-  ChatMessage({required this.role, required this.content, DateTime? timestamp})
-      : timestamp = timestamp ?? DateTime.now();
-}
+import '../models/chat_models.dart';
 
 /// Dedicated AI Clinical Chatbot screen with threaded conversation.
 class AiChatScreen extends StatefulWidget {
@@ -35,16 +27,63 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
   bool _isStreaming = false;
   DateTimeRange? _activeDateRange;
   StreamSubscription<String>? _streamSub;
+  String? _currentSessionId;
+  List<ChatSession> _sessions = [];
+  bool _isLoadingHistory = false;
 
   @override
   void initState() {
     super.initState();
     _activeDateRange = widget.dateRange;
-    // Welcome message
+    _initNewChat();
+    _loadSessions();
+  }
+
+  void _initNewChat() {
+    _messages.clear();
+    _currentSessionId = null;
     _messages.add(ChatMessage(
       role: 'assistant',
       content: "Hello! I'm your **AI Clinical Consultant**. I have access to your medical reports and can help you understand your health trends.\n\nYou can ask me things like:\n- *\"How is my cholesterol trending?\"*\n- *\"Are any of my values outside normal range?\"*\n- *\"What should I do about my iron levels?\"*\n\nWhat would you like to know?",
     ));
+  }
+
+  Future<void> _loadSessions() async {
+    setState(() => _isLoadingHistory = true);
+    try {
+      final sessions = await ApiService.getChatSessions();
+      if (mounted) setState(() => _sessions = sessions);
+    } catch (e) {
+      debugPrint('Failed to load sessions: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingHistory = false);
+    }
+  }
+
+  Future<void> _loadSessionMessages(ChatSession session) async {
+    setState(() {
+      _currentSessionId = session.id;
+      _messages.clear();
+      _isTyping = true;
+    });
+
+    try {
+      final msgs = await ApiService.getChatMessages(session.id);
+      if (mounted) {
+        setState(() {
+          _messages.addAll(msgs);
+          _isTyping = false;
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isTyping = false;
+          _initNewChat();
+        });
+      }
+    }
   }
 
   /// Called externally when dashboard date range changes.
@@ -93,12 +132,25 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
         .map((m) => {'role': m.role, 'content': m.content})
         .toList();
 
+    // If no session, create one
+    if (_currentSessionId == null) {
+      try {
+        final session = await ApiService.createChatSession(
+            text.length > 30 ? '${text.substring(0, 30)}...' : text);
+        _currentSessionId = session.id;
+        _loadSessions(); // refresh list
+      } catch (e) {
+        debugPrint('Failed to create session: $e');
+      }
+    }
+
     try {
       final stream = ApiService.analyzeHealthTrendsStream(
         query: text,
         startDate: startDate,
         endDate: endDate,
         messages: history.isNotEmpty ? history : null,
+        sessionId: _currentSessionId,
       );
 
       _streamSub = stream.listen(
@@ -153,15 +205,43 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          // ─── Header ───────────────────────────────────────────
+          _buildHeader(cs),
+          // ─── Tab Bar ──────────────────────────────────────────
+          TabBar(
+            indicatorColor: cs.primary,
+            labelColor: cs.primary,
+            unselectedLabelColor: cs.onSurfaceVariant,
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+            tabs: const [
+              Tab(text: 'Current Chat'),
+              Tab(text: 'History'),
+            ],
+          ),
+          // ─── Tab Views ────────────────────────────────────────
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildCurrentChatTab(cs),
+                _buildHistoryTab(cs),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentChatTab(ColorScheme cs) {
     return Column(
       children: [
-        // ─── Header ───────────────────────────────────────────
-        _buildHeader(cs),
-        // ─── Date Range Chip ──────────────────────────────────
         if (_activeDateRange != null) _buildDateRangeChip(cs),
-        // ─── Message List ─────────────────────────────────────
         Expanded(child: _buildMessageList(cs)),
-        // ─── Input Bar ────────────────────────────────────────
         _buildInputBar(cs),
       ],
     );
@@ -490,6 +570,67 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHistoryTab(ColorScheme cs) {
+    if (_isLoadingHistory) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_sessions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chat_bubble_outline_rounded, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+            const SizedBox(height: 16),
+            Text('No chat history yet', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 16)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      itemCount: _sessions.length,
+      itemBuilder: (context, index) {
+        final session = _sessions[index];
+        final isCurrent = session.id == _currentSessionId;
+        return ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isCurrent ? cs.primary.withValues(alpha: 0.1) : cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.chat_rounded,
+              size: 20,
+              color: isCurrent ? cs.primary : cs.onSurfaceVariant,
+            ),
+          ),
+          title: Text(
+            session.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+              color: isCurrent ? cs.primary : cs.onSurface,
+            ),
+          ),
+          subtitle: Text(
+            DateFormat('MMM d, yyyy • h:mm a').format(session.createdAt),
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+          ),
+          onTap: () {
+            DefaultTabController.of(context).animateTo(0);
+            if (!isCurrent) {
+              _loadSessionMessages(session);
+            }
+          },
+        );
+      },
     );
   }
 }

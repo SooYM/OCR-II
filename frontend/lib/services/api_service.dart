@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/report_model.dart';
+import '../models/chat_models.dart';
 import 'auth_service.dart';
 
 /// API service with JWT auth.
@@ -206,6 +207,7 @@ class ApiService {
     String? startDate,
     String? endDate,
     List<Map<String, String>>? messages,
+    String? sessionId,
   }) async* {
     final uri = Uri.parse('$_baseUrl/api/reports/analyze/stream');
 
@@ -221,6 +223,7 @@ class ApiService {
         if (startDate != null) 'start_date': startDate,
         if (endDate != null) 'end_date': endDate,
         if (messages != null && messages.isNotEmpty) 'messages': messages,
+        if (sessionId != null) 'session_id': sessionId,
       };
       request.body = jsonEncode(body);
       final streamedResponse = await client.send(request).timeout(const Duration(seconds: 120));
@@ -253,6 +256,58 @@ class ApiService {
       }
     } finally {
       client.close();
+    }
+  }
+
+  // ─── Chat Sessions ────────────────────────────────────────────────────────
+
+  static Future<ChatSession> createChatSession(String title) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/chat/sessions'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({'title': title}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return ChatSession(
+        id: data['id'] as String,
+        title: data['title'] as String,
+        createdAt: DateTime.now(),
+      );
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
+  static Future<List<ChatSession>> getChatSessions() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/chat/sessions'),
+      headers: _headers,
+    );
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => ChatSession.fromJson(e as Map<String, dynamic>)).toList();
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
+  static Future<List<ChatMessage>> getChatMessages(String sessionId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/chat/sessions/$sessionId/messages'),
+      headers: _headers,
+    );
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => ChatMessage.fromJson(e as Map<String, dynamic>)).toList();
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
     }
   }
 
