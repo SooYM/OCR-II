@@ -689,8 +689,12 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
                     
                     if total_keys > 0:
                         overlap = (match_count / total_keys) * 100
-                        print(f" -> CHECKING: Date={old_date}, Overlap={overlap:.1f}% ({match_count}/{total_keys})")
-                        if overlap >= 85: # High threshold for automatic block
+                        print(f" -> CHECKING: Date MATCH ({old_date}), Overlap={overlap:.1f}% ({match_count}/{total_keys})")
+                        
+                        # If date matches, we use a much lower threshold (60% instead of 85%)
+                        # because it's very unlikely to have two different reports on the same day.
+                        if overlap >= 60: 
+                            print(f" -> MATCH FOUND: Clinical Signature on same date")
                             return True
 
         print(" -> NO DUPLICATE FOUND")
