@@ -1162,8 +1162,6 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
         "user_verified": 0
     }
     
-    await save_report(report_metadata)
-
     try:
         # Use OpenAI Vision to extract data directly from the image
         structured_data = await parse_medical_report_llm(file_path)
@@ -1194,22 +1192,12 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
                 "raw_text": raw_text
             }
 
-        # Update with results if not duplicate
-        if STORAGE_ENGINE == "supabase" and supabase:
-            supabase.table("reports").update({
-                "status": "completed",
-                "raw_text": raw_text,
-                "structured_data": structured_data
-            }).eq("id", report_id).execute()
-        else:
-            conn = sqlite3.connect(str(DB_PATH))
-            cursor = conn.cursor()
-            cursor.execute("UPDATE reports SET status = ?, raw_text = ?, structured_data = ? WHERE id = ?",
-                           ("completed", raw_text, json.dumps(structured_data), report_id))
-            conn.commit()
-            conn.close()
-
-        # Return full report metadata so Flutter fromJson doesn't fail
+        # Save to DB only if NOT duplicate
+        report_metadata["status"] = "completed"
+        report_metadata["raw_text"] = raw_text
+        report_metadata["structured_data"] = structured_data
+        await save_report(report_metadata)
+        
         return {
             "id": report_id,
             "filename": file.filename,
@@ -1261,8 +1249,6 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
         "user_verified": 0
     }
 
-    await save_report(report_metadata)
-
     try:
         # Use multi-page LLM parsing
         if len(saved_paths) == 1:
@@ -1297,20 +1283,11 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
                 "raw_text": raw_text
             }
 
-        # Update with results if not duplicate
-        if STORAGE_ENGINE == "supabase" and supabase:
-            supabase.table("reports").update({
-                "status": "completed",
-                "raw_text": raw_text,
-                "structured_data": structured_data
-            }).eq("id", report_id).execute()
-        else:
-            conn = sqlite3.connect(str(DB_PATH))
-            cursor = conn.cursor()
-            cursor.execute("UPDATE reports SET status = ?, raw_text = ?, structured_data = ? WHERE id = ?",
-                           ("completed", raw_text, json.dumps(structured_data), report_id))
-            conn.commit()
-            conn.close()
+        # Save to DB only if NOT duplicate
+        report_metadata["status"] = "completed"
+        report_metadata["raw_text"] = raw_text
+        report_metadata["structured_data"] = structured_data
+        await save_report(report_metadata)
 
         return {
             "id": report_id,
