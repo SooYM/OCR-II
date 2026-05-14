@@ -9,11 +9,14 @@ import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/report_model.dart';
 import '../utils/formatters.dart';
+import '../utils/date_utils.dart';
+import 'package:intl/intl.dart';
 import 'capture_screen.dart';
 import 'report_history_screen.dart';
 import '../services/theme_service.dart';
 import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
+import '../utils/date_utils.dart';
 
 /// Main screen with bottom navigation: Dashboard, Scan, My Reports.
 class MainScreen extends StatefulWidget {
@@ -1878,17 +1881,6 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
     super.dispose();
   }
 
-  DateTime? _parseManualDate(String text) {
-    try {
-      final clean = text.replaceAll(' ', '');
-      final parts = clean.split('/');
-      if (parts.length != 3) return null;
-      return DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
-    } catch (_) {
-      return null;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1985,8 +1977,8 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
                       child: ElevatedButton(
                         key: _applyButtonKey,
                         onPressed: () {
-                          final start = _parseManualDate(_startCtrl.text);
-                          final end = _parseManualDate(_endCtrl.text);
+                          final start = DateParser.parse(_startCtrl.text);
+                          final end = DateParser.parse(_endCtrl.text);
                           if (start != null && end != null) {
                             widget.onApply(DateTimeRange(start: start, end: end));
                             Navigator.pop(context);

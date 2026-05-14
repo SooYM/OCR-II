@@ -8,6 +8,8 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../models/report_model.dart';
 import '../utils/formatters.dart';
+import '../utils/date_utils.dart';
+import 'package:intl/intl.dart';
 
 /// Screen 2: Verify and correct extracted data, then send.
 /// Receives the MedicalReport directly from CaptureScreen (no API fetch needed).
@@ -58,6 +60,20 @@ class _VerifyScreenState extends State<VerifyScreen> {
       );
       return;
     }
+
+    final parsedDate = DateParser.parse(_data.date!);
+    if (parsedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Theme.of(context).colorScheme.error,
+          content: const Text('Invalid date format. Please use DD / MM / YYYY'),
+        ),
+      );
+      return;
+    }
+    
+    // Normalize format before saving
+    _data.date = DateFormat('dd / MM / yyyy').format(parsedDate);
 
     setState(() => _isSending = true);
 
