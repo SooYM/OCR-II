@@ -613,7 +613,12 @@ async def get_my_reports(current_user: dict = Depends(get_current_user)):
         return results
 
 @app.get("/api/reports/analyze")
-async def analyze_health_trends(query: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def analyze_health_trends(
+    query: Optional[str] = None, 
+    start_date: Optional[str] = None, 
+    end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
     user_id = current_user["id"]
     if STORAGE_ENGINE == "supabase" and supabase:
         response = supabase.table("reports").select("*").eq("user_id", user_id).order("upload_time", desc=True).execute()
@@ -635,10 +640,10 @@ async def analyze_health_trends(query: Optional[str] = None, current_user: dict 
     valid_reports = [r for r in reports if r.get("status") in ["completed", "sent"] and r.get("structured_data") and r["structured_data"].get("results")]
     
     if not valid_reports:
-        return {"analysis": "Not enough medical data available for analysis. Please upload your reports."}
+        return {"analysis": "Insufficient clinical data available for analysis. Please upload your medical reports to begin."}
 
-    # Aggregate data chronologically
-    def parse_date(date_str: str, fallback_str: str) -> datetime:
+    # Helper for date parsing
+    def parse_dt(date_str: str, fallback_str: str) -> datetime:
         if not date_str:
             return datetime.fromisoformat(fallback_str)
         formats = [
@@ -657,63 +662,85 @@ async def analyze_health_trends(query: Optional[str] = None, current_user: dict 
             pass
         return datetime.fromisoformat(fallback_str)
 
-    valid_reports.sort(key=lambda x: parse_date(x.get("structured_data", {}).get("date"), x["upload_time"]))
+    # Sort reports chronologically
+    valid_reports.sort(key=lambda x: parse_dt(x.get("structured_data", {}).get("date"), x["upload_time"]))
     
+    # Apply date range filtering if requested
+    if start_date and end_date:
+        try:
+            s_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            e_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            valid_reports = [
+                r for r in valid_reports 
+                if s_dt <= parse_dt(r.get("structured_data", {}).get("date"), r["upload_time"]) <= e_dt
+            ]
+        except Exception as e:
+            print(f"Date filtering failed: {e}")
+
+    if not valid_reports:
+        return {"analysis": "No medical reports found within the selected date range."}
+
     data_summary = []
     for r in valid_reports:
         date_str = r.get("structured_data", {}).get("date") or r["upload_time"][:10]
         results_list = r["structured_data"]["results"]
         items = [f"{res.get('test_item', '')}: {res.get('value', '')} {res.get('unit', '')}".strip() for res in results_list if res.get('value') and res.get('value') != '-']
         if items:
-            data_summary.append(f"Date: {date_str}\n" + "\n".join(items))
+            data_summary.append(f"Examination Date: {date_str}\n" + "\n".join(items))
 
     if not data_summary:
-        return {"analysis": "No valid biomarker data found in your reports."}
+        return {"analysis": "No diagnostic biomarkers found in the selected reports."}
 
     compiled_data = "\n\n".join(data_summary)
 
     prompt = f"""
-    You are an expert medical AI assistant. Analyze the following user health data over time.
-    IMPORTANT: You MUST base your analysis on the exact attribute values provided below. Do NOT use averages or means.
+    You are a highly qualified clinical medical consultant. Your task is to analyze the following longitudinal patient data and provide a professional clinical assessment.
     
-    Here is the exact health data recorded over time:
+    PATIENT DATA HISTORY:
     {compiled_data}
+    
+    ANALYTICAL CONSTRAINTS:
+    1. EXCLUSIVITY: You MUST base your clinical interpretation ONLY on the exact attribute values provided below.
+    2. RAW DATA ONLY: Do NOT perform statistical averaging, median calculations, or maximum-only analysis. Treat each time point as a distinct clinical event.
+    3. PROFESSIONALISM: Use formal healthcare terminology and professional bedside manner. Avoid colloquialisms.
+    4. TREND FOCUS: Identify significant physiological shifts or stabilities between specific dates.
     """
+    
     if query and query.strip():
-        prompt += f"\n\nThe user has a specific question: '{query.strip()}'. Please prioritize addressing this question in detail based on their data. Also include a brief overall health summary."
+        prompt += f"\n\nCLINICAL INQUIRY: The patient has requested clarification on the following: '{query.strip()}'. Address this within the context of the observed trends."
     else:
-        prompt += "\n\nProvide a comprehensive, professional health trend analysis."
+        prompt += "\n\nOBJECTIVE: Provide a comprehensive diagnostic trend overview."
 
     prompt += """
     
-    Your analysis MUST include:
-    1. A brief overall health summary
-    2. Key biomarker trends (improving, worsening, or stable) with exact values referenced
-    3. Any values outside normal clinical ranges — flag them clearly
-    4. Possible health implications of the trends observed
-    5. Actionable lifestyle or dietary recommendations based on the data
+    STRUCTURE OF CLINICAL REPORT:
+    1. ### Clinical Executive Summary: A concise professional overview of the patient's current health status based on the provided history.
+    2. ### Longitudinal Biomarker Analysis: Detail specific biomarker shifts (e.g., "Hemoglobin increased from 13.2 g/dL on Jan 1 to 14.5 g/dL on Mar 15"). Reference exact dates and values.
+    3. ### Clinical Red Flags: Explicitly flag any values deviating from standard clinical reference ranges.
+    4. ### Clinical Correlations & Implications: Discuss the potential physiological implications of these trends.
+    5. ### Evidence-Based Recommendations: Provide actionable, data-driven lifestyle or dietary interventions.
     
-    FORMAT YOUR RESPONSE USING MARKDOWN:
-    - Use **bold** for important values, biomarker names, and key findings
-    - Use *italic* for medical terms or supplementary notes
-    - Use ### for section headers
-    - Use bullet points for lists
+    FORMATTING:
+    - Use **bold** for clinical values, specific dates, and biomarkers.
+    - Use *italic* for medical terms or secondary terminology.
+    - Use bullet points for scannability.
+    - Maintain a word count between 300 and 450 words.
     
-    Keep the response under 400 words. Do not wrap in code blocks or json tags.
+    Return ONLY the markdown analysis.
     """
 
     try:
         response = llm_client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": "You are a professional medical AI assistant."},
+                {"role": "system", "content": "You are a professional clinical consultant providing high-fidelity medical trend analysis. You strictly use provided raw data and never average results."},
                 {"role": "user", "content": prompt}
             ]
         )
         analysis_text = response.choices[0].message.content.strip()
         return {"analysis": analysis_text}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM Analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Clinical analysis engine error: {e}")
 
 @app.post("/api/upload")
 async def upload_report(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
