@@ -620,82 +620,86 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
     Compares the newly parsed data with existing reports for the user.
     Uses a multi-attribute scoring system.
     """
-    if not new_data:
-        return False
-    
-    # Extract identifiers
-    new_date = backend_normalize_date(new_data.get("collected", ""))
-    new_medid = str(new_data.get("medid", "")).strip().upper()
-    new_labref = str(new_data.get("labreference", "")).strip().upper()
-    
-    print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, LabRef={new_labref}")
-    
-    # Fetch all reports for this user
-    if STORAGE_ENGINE == "supabase" and supabase:
-        response = supabase.table("reports").select("*").eq("user_id", user_id).execute()
-        existing_reports = response.data or []
-    else:
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM reports WHERE user_id = ?", (user_id,))
-        existing_reports = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-
-    for report in existing_reports:
-        # Skip current
-        if exclude_id and report.get("id") == exclude_id:
-            continue
-
-        s_data = report.get("structured_data")
-        if isinstance(s_data, str):
-            try: s_data = json.loads(s_data)
-            except: continue
+    try:
+        if not new_data:
+            return False
         
-        if not s_data: continue
+        # Extract identifiers
+        new_date = backend_normalize_date(new_data.get("collected", ""))
+        new_medid = str(new_data.get("medid", "")).strip().upper()
+        new_labref = str(new_data.get("labreference", "")).strip().upper()
+        
+        print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, LabRef={new_labref}")
+        
+        # Fetch all reports for this user
+        if STORAGE_ENGINE == "supabase" and supabase:
+            response = supabase.table("reports").select("*").eq("user_id", user_id).execute()
+            existing_reports = response.data or []
+        else:
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM reports WHERE user_id = ?", (user_id,))
+            existing_reports = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+
+        for report in existing_reports:
+            # Skip current
+            if exclude_id and report.get("id") == exclude_id:
+                continue
+
+            s_data = report.get("structured_data")
+            if isinstance(s_data, str):
+                try: s_data = json.loads(s_data)
+                except: continue
             
-        # 1. Extract existing identifiers
-        old_date = backend_normalize_date(s_data.get("collected", ""))
-        old_medid = str(s_data.get("medid", "")).strip().upper()
-        old_labref = str(s_data.get("labreference", "")).strip().upper()
-
-        # --- CRITERIA 1: Exact Lab Reference Match ---
-        # If the unique lab reference matches, it is definitely a duplicate
-        if new_labref and old_labref and new_labref == old_labref:
-            print(f" -> MATCH FOUND: Lab Reference ({new_labref})")
-            return True
-
-        # --- CRITERIA 2: Patient ID + Date + Attribute Overlap ---
-        # If Patient ID and Date match, check for high overlap in test values
-        if new_date and old_date and new_date == old_date:
-            # Match Patient ID if both exist
-            medid_match = (not new_medid or not old_medid or new_medid == old_medid)
-            
-            if medid_match:
-                # Compare clinical results
-                match_count = 0
-                total_keys = 0
-                metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
+            if not s_data: continue
                 
-                for key in STAGING_SCHEMA_KEYS:
-                    if key in metadata_keys: continue
-                    
-                    new_val = backend_normalize_value(new_data.get(key, ""))
-                    old_val = backend_normalize_value(s_data.get(key, ""))
-                    
-                    if new_val or old_val:
-                        total_keys += 1
-                        if new_val == old_val:
-                            match_count += 1
-                
-                if total_keys > 0:
-                    overlap = (match_count / total_keys) * 100
-                    print(f" -> CHECKING: Date={old_date}, Overlap={overlap:.1f}% ({match_count}/{total_keys})")
-                    if overlap >= 85: # High threshold for automatic block
-                        return True
+            # 1. Extract existing identifiers
+            old_date = backend_normalize_date(s_data.get("collected", ""))
+            old_medid = str(s_data.get("medid", "")).strip().upper()
+            old_labref = str(s_data.get("labreference", "")).strip().upper()
 
-    print(" -> NO DUPLICATE FOUND")
-    return False
+            # --- CRITERIA 1: Exact Lab Reference Match ---
+            if new_labref and old_labref and new_labref == old_labref:
+                print(f" -> MATCH FOUND: Lab Reference ({new_labref})")
+                return True
+
+            # --- CRITERIA 2: Patient ID + Date + Attribute Overlap ---
+            if new_date and old_date and new_date == old_date:
+                # Match Patient ID if both exist
+                medid_match = (not new_medid or not old_medid or new_medid == old_medid)
+                
+                if medid_match:
+                    # Compare clinical results
+                    match_count = 0
+                    total_keys = 0
+                    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
+                    
+                    for key in STAGING_SCHEMA_KEYS:
+                        if key in metadata_keys: continue
+                        
+                        new_val = backend_normalize_value(new_data.get(key, ""))
+                        old_val = backend_normalize_value(s_data.get(key, ""))
+                        
+                        if new_val or old_val:
+                            total_keys += 1
+                            if new_val == old_val:
+                                match_count += 1
+                    
+                    if total_keys > 0:
+                        overlap = (match_count / total_keys) * 100
+                        print(f" -> CHECKING: Date={old_date}, Overlap={overlap:.1f}% ({match_count}/{total_keys})")
+                        if overlap >= 85: # High threshold for automatic block
+                            return True
+
+        print(" -> NO DUPLICATE FOUND")
+        return False
+    except Exception as e:
+        import traceback
+        print(f"[DUPLICATE ERROR] {e}")
+        traceback.print_exc()
+        return False # Fallback to not duplicate if check fails
 
 # ─── API Endpoints ──────────────────────────────────────────────────────────
 
@@ -1302,6 +1306,8 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
             "raw_text": raw_text
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         if STORAGE_ENGINE == "supabase" and supabase:
             supabase.table("reports").update({"status": "failed"}).eq("id", report_id).execute()
         else:
@@ -1309,7 +1315,7 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
             conn.execute("UPDATE reports SET status='failed' WHERE id=?", (report_id,))
             conn.commit()
             conn.close()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.get("/api/reports/{report_id}")
 async def get_report(report_id: str):
