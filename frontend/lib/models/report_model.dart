@@ -6,22 +6,23 @@ class MedicalReport {
   final String status;
   final String? rawText;
   final StructuredData? structuredData;
-  final bool userVerified;
+  bool userVerified;
+  final bool isDuplicate;
 
   MedicalReport({
     required this.id,
-    required this.filename,
-    required this.uploadTime,
-    required this.status,
+    this.filename = '',
+    this.uploadTime = '',
+    this.status = '',
     this.rawText,
     this.structuredData,
     this.userVerified = false,
+    this.isDuplicate = false,
   });
 
   factory MedicalReport.fromJson(Map<String, dynamic> json) {
     return MedicalReport(
       id: json['id'] as String,
-      filename: json['filename'] as String,
       uploadTime: json['upload_time'] as String,
       status: json['status'] as String,
       rawText: json['raw_text'] as String?,
@@ -29,6 +30,7 @@ class MedicalReport {
           ? StructuredData.fromJson(json['structured_data'] as Map<String, dynamic>)
           : null,
       userVerified: json['user_verified'] as bool? ?? false,
+      isDuplicate: json['is_duplicate'] as bool? ?? false,
     );
   }
 
@@ -41,6 +43,7 @@ class MedicalReport {
       'raw_text': rawText,
       'structured_data': structuredData?.toJson(),
       'user_verified': userVerified,
+      'is_duplicate': isDuplicate,
     };
   }
 }

@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
+import '../models/report_model.dart';
 import 'verify_screen.dart';
 
 /// Screen 1: Capture or pick medical report images (supports multi-page).
@@ -137,12 +138,16 @@ class _CaptureScreenState extends State<CaptureScreen>
       });
 
       if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => VerifyScreen(report: report),
-          ),
-        );
+        if (report.isDuplicate) {
+          _showDuplicateDialog(report);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VerifyScreen(report: report),
+            ),
+          );
+        }
       }
     } catch (e) {
       setState(() {
@@ -935,6 +940,67 @@ class _CaptureScreenState extends State<CaptureScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showDuplicateDialog(MedicalReport report) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error, size: 28),
+            const SizedBox(width: 12),
+            const Text('Duplicate Detected'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'A report with the exact same date and clinical data already exists in your history.',
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.error.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Theme.of(context).colorScheme.error.withOpacity(0.2)),
+              ),
+              child: const Text(
+                'This record has not been uploaded to the database to prevent duplication.',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Dismiss'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Option to view the duplicate if needed? 
+              // User said "do not upload and pop out dialog".
+              // We'll just stay on CaptureScreen.
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
