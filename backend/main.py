@@ -1170,11 +1170,19 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
         raw_text = f"Extracted via OpenAI Vision API (1 page)"
 
         # --- DUPLICATE CHECK ---
-        is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
-        
+        is_duplicate = False
+        try:
+            is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
+        except Exception as e:
+            print(f"[DUPLICATE CHECK ERROR] {e}")
+
         if is_duplicate:
             # Delete from DB immediately as requested
-            await delete_report(report_id)
+            try:
+                await delete_report(report_id)
+            except Exception as e:
+                print(f"[DELETE ERROR] {e}")
+
             return {
                 "id": report_id,
                 "filename": file.filename,
@@ -1265,11 +1273,19 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
         raw_text = f"Extracted via OpenAI Vision API ({len(saved_paths)} page(s))"
 
         # --- DUPLICATE CHECK ---
-        is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
-        
+        is_duplicate = False
+        try:
+            is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
+        except Exception as e:
+            print(f"[DUPLICATE CHECK ERROR] {e}")
+
         if is_duplicate:
             # Delete from DB immediately as requested
-            await delete_report(report_id)
+            try:
+                await delete_report(report_id)
+            except Exception as e:
+                print(f"[DELETE ERROR] {e}")
+
             return {
                 "id": report_id,
                 "filename": ", ".join(filenames),
