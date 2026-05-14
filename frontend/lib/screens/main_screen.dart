@@ -1047,8 +1047,17 @@ class _MainScreenState extends State<MainScreen> {
                       getTooltipItems: (touchedSpots) {
                         return touchedSpots.map((spot) {
                           final testKey = _selectedMultiAttributes.elementAt(spot.barIndex);
+                          final report = validReports[spot.x.toInt()];
+                          final date = _parseDate(report.structuredData?.date, report.uploadTime);
+                          final dateStr = DateFormat('MMM d, yyyy').format(date);
+
+                          // Add date to the first line of the tooltip
+                          String text = (spot.barIndex == 0)
+                              ? '$dateStr\n${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(1)}'
+                              : '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(1)}';
+
                           return LineTooltipItem(
-                            '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(1)}',
+                            text,
                             TextStyle(color: _lineColors[spot.barIndex % _lineColors.length], fontWeight: FontWeight.w800, fontSize: 12),
                           );
                         }).toList();
@@ -1179,8 +1188,17 @@ class _MainScreenState extends State<MainScreen> {
                                 getTooltipItems: (touchedSpots) {
                                   return touchedSpots.map((spot) {
                                     final testKey = _selectedMultiAttributes.elementAt(spot.barIndex);
+                                    final report = validReports[spot.x.toInt()];
+                                    final date = _parseDate(report.structuredData?.date, report.uploadTime);
+                                    final dateStr = DateFormat('MMM d, yyyy').format(date);
+
+                                    // Add date to the first line of the tooltip
+                                    String text = (spot.barIndex == 0)
+                                        ? '$dateStr\n${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(2)}'
+                                        : '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(2)}';
+
                                     return LineTooltipItem(
-                                      '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(2)}',
+                                      text,
                                       TextStyle(color: _lineColors[spot.barIndex % _lineColors.length], fontWeight: FontWeight.w700, fontSize: 13),
                                     );
                                   }).toList();
