@@ -7,6 +7,7 @@ import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../models/report_model.dart';
+import '../utils/formatters.dart';
 
 /// Screen 2: Verify and correct extracted data, then send.
 /// Receives the MedicalReport directly from CaptureScreen (no API fetch needed).
@@ -245,7 +246,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                           value: _data.date ?? '',
                           icon: Icons.calendar_today_outlined,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [_DateInputFormatter()],
+                          inputFormatters: [DateInputFormatter()],
                           onChanged: (v) {
                             _data.date = v;
                             _hasChanges = true;
@@ -780,30 +781,6 @@ class _VerifyScreenState extends State<VerifyScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DateInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    final text = newValue.text.replaceAll(RegExp(r'[^0-9]'), ''); // Only allow numbers
-    
-    if (text.length > 8) return oldValue; // Limit to DDMMYYYY
-    
-    final buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      buffer.write(text[i]);
-      final index = i + 1;
-      if ((index == 2 || index == 4) && index != text.length) {
-        buffer.write(' / ');
-      }
-    }
-    
-    final string = buffer.toString();
-    return newValue.copyWith(
-      text: string,
-      selection: TextSelection.collapsed(offset: string.length),
     );
   }
 }

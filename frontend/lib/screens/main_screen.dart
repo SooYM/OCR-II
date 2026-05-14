@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -7,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/report_model.dart';
+import '../utils/formatters.dart';
 import 'capture_screen.dart';
 import 'report_history_screen.dart';
 import '../services/theme_service.dart';
@@ -445,16 +447,106 @@ class _MainScreenState extends State<MainScreen> {
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                 child: Divider(),
               ),
-              _buildRangeOption(Icons.date_range_rounded, 'Custom Range...', () {
+              _buildRangeOption(Icons.date_range_rounded, 'Custom Calendar...', () {
                 Navigator.pop(context);
                 _showCalendarPicker();
               }, isCustom: true),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: Divider(),
+              ),
+              _buildManualEntrySection(),
               const SizedBox(height: 24),
             ],
           ),
         );
       },
     );
+  }
+
+  Widget _buildManualEntrySection() {
+    final startCtrl = TextEditingController(text: _selectedDateRange != null ? DateFormat('dd / MM / yyyy').format(_selectedDateRange!.start) : '');
+    final endCtrl = TextEditingController(text: _selectedDateRange != null ? DateFormat('dd / MM / yyyy').format(_selectedDateRange!.end) : '');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Manual Entry', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary, letterSpacing: 0.5)),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _buildManualDateField(startCtrl, 'Start Date')),
+              const SizedBox(width: 16),
+              Expanded(child: _buildManualDateField(endCtrl, 'End Date')),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                final start = _parseManualDate(startCtrl.text);
+                final end = _parseManualDate(endCtrl.text);
+                if (start != null && end != null) {
+                  setState(() => _selectedDateRange = DateTimeRange(start: start, end: end));
+                  Navigator.pop(context);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Invalid date format. Use DD / MM / YYYY')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              child: const Text('Apply Manual Range', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManualDateField(TextEditingController controller, String label) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [DateInputFormatter()],
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'DD / MM / YYYY',
+            hintStyle: TextStyle(color: Theme.of(context).colorScheme.outline, fontWeight: FontWeight.w400),
+            filled: true,
+            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            isDense: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  DateTime? _parseManualDate(String text) {
+    try {
+      final clean = text.replaceAll(' ', '');
+      final parts = clean.split('/');
+      if (parts.length != 3) return null;
+      return DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+    } catch (_) {
+      return null;
+    }
   }
 
   Widget _buildRangeOption(IconData icon, String title, VoidCallback onTap, {bool isCustom = false}) {
