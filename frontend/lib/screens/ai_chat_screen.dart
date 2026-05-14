@@ -52,7 +52,12 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
     setState(() => _isLoadingHistory = true);
     try {
       final sessions = await ApiService.getChatSessions();
-      if (mounted) setState(() => _sessions = sessions);
+      if (mounted) {
+        setState(() => _sessions = sessions);
+        if (sessions.isNotEmpty && _currentSessionId == null && _messages.length <= 1) {
+          _loadSessionMessages(sessions.first);
+        }
+      }
     } catch (e) {
       debugPrint('Failed to load sessions: $e');
     } finally {
@@ -293,23 +298,28 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
               ],
             ),
           ),
-          // Clear chat button
-          if (_messages.length > 1)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _messages.removeRange(1, _messages.length); // Keep welcome message
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.delete_sweep_rounded, size: 20, color: cs.onSurfaceVariant),
+          // New chat button
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _initNewChat();
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.add_rounded, size: 18, color: cs.primary),
+                  const SizedBox(width: 4),
+                  Text('New', style: TextStyle(color: cs.primary, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );
