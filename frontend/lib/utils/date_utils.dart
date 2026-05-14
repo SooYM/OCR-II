@@ -5,7 +5,19 @@ class DateParser {
   /// Handles 2-digit years by assuming the last 100 years from today.
   static DateTime? parse(String text) {
     try {
-      final clean = text.replaceAll(' ', '');
+      // 1. Normalize separators and strip time
+      // First, handle " / " spacing
+      String normalized = text.trim()
+          .replaceAll(' / ', '/')
+          .replaceAll(' - ', '-')
+          .replaceAll(' . ', '.');
+      
+      // If there is still a space, it separates Date from Time (e.g. 26/08/2018 07:01:00)
+      if (normalized.contains(' ')) {
+        normalized = normalized.split(' ')[0];
+      }
+      
+      final clean = normalized;
       
       // Try YYYY-MM-DD format (often from LLM/OCR)
       if (clean.contains('-')) {
