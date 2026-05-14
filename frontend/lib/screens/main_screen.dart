@@ -49,14 +49,58 @@ class _MainScreenState extends State<MainScreen> {
   ];
 
   static const Map<String, List<String>> _medicalCategories = {
-    'Lipid Profile': ['total_cholesterol_mg_dl', 'hdl_mg_dl', 'ldl_mg_dl', 'vldl_mg_dl', 'triglycerides_mg_dl', 'non_hdl_mg_dl', 'total_hdl_ratio', 'ldl_hdl_ratio'],
-    'Liver Function': ['alt_sgpt_u_l', 'ast_sgot_u_l', 'alp_u_l', 'ggt_u_l', 'bilirubin_total_mg_dl', 'bilirubin_direct_mg_dl', 'bilirubin_indirect_mg_dl', 'protein_total_g_dl', 'albumin_g_dl', 'globulin_g_dl', 'a_g_ratio'],
-    'Kidney Function': ['creatinine_mg_dl', 'urea_mg_dl', 'bun_mg_dl', 'uric_acid_mg_dl', 'egfr_ml_min_173m2', 'sodium_mmol_l', 'potassium_mmol_l', 'chloride_mmol_l'],
-    'Blood Sugar (Diabetes)': ['glucose', 'hba1c_pct', 'fasting_glucose_mg_dl', 'postprandial_glucose_mg_dl', 'fbs_mg_dl', 'plbs_mg_dl', 'estimated_avg_glucose_mg_dl'],
-    'Complete Blood Count (CBC)': ['hemoglobin_g_dl', 'wbc_cells_ul', 'rbc_count_mil_ul', 'platelet_count_x10_3_ul', 'hematocrit_pct', 'mcv_fl', 'mch_pg', 'mchc_g_dl', 'rdw_cv_pct', 'neutrophils_pct', 'lymphocytes_pct', 'eosinophils_pct', 'monocytes_pct', 'basophils_pct'],
-    'Thyroid Function': ['tt3_ng_dl', 'tt4_ug_dl', 'tsh_uiu_ml'],
-    'Iron Studies': ['iron_ug_dl', 'uibc_ug_dl', 'tibc_ug_dl', 'transferrin_saturation_pct'],
-    'Urine Analysis': ['ph', 'specific_gravity', 'proteins', 'glucose', 'bilirubin', 'ketones', 'blood', 'urobilinogen', 'nitrites'],
+    'Urine': [
+      'urine_colour', 'appearance', 'specific_gravity', 'ph', 'proteins', 'glucose', 
+      'bilirubin', 'ketones', 'blood', 'urobilinogen', 'nitrites', 'wbc_pus_cells_hpf', 
+      'rbc', 'epithelial_cells_hpf', 'casts', 'crystals', 'others'
+    ],
+    'CBC': [
+      'hemoglobin_g_dl', 'rbc_count_mil_ul', 'hematocrit_pct', 'mcv_fl', 'mch_pg', 
+      'mchc_g_dl', 'rdw_cv_pct', 'rdw_sd_fl', 'wbc_cells_ul', 'neutrophils_pct', 
+      'lymphocytes_pct', 'eosinophils_pct', 'monocytes_pct', 'basophils_pct', 
+      'abs_neutrophils', 'abs_lymphocytes', 'abs_monocytes', 'abs_eosinophils', 'abs_basophils'
+    ],
+    'Platelet Profile': [
+      'platelet_count_x10_3_ul', 'mpv_fl', 'platelet_rdw_pct', 'pct_pct', 'p_lcr_pct', 
+      'img_pct', 'imm_pct', 'iml_pct', 'lic_pct'
+    ],
+    'Lipid Profile': [
+      'total_cholesterol_mg_dl', 'hdl_mg_dl', 'ldl_mg_dl', 'vldl_mg_dl', 'triglycerides_mg_dl', 
+      'non_hdl_mg_dl', 'total_hdl_ratio', 'ldl_hdl_ratio', 'hdl_ldl_ratio'
+    ],
+    'Liver Function': [
+      'bilirubin_total_mg_dl', 'bilirubin_direct_mg_dl', 'bilirubin_indirect_mg_dl', 'alp_u_l', 
+      'alt_sgpt_u_l', 'ast_sgot_u_l', 'ggt_u_l', 'protein_total_g_dl', 'albumin_g_dl', 
+      'globulin_g_dl', 'a_g_ratio'
+    ],
+    'Kidney Function': [
+      'creatinine_mg_dl', 'urea_mg_dl', 'bun_mg_dl', 'bun_creatinine_ratio', 'sodium_mmol_l', 
+      'potassium_mmol_l', 'chloride_mmol_l', 'uric_acid_mg_dl', 'egfr_ml_min_173m2'
+    ],
+    'Iron Profile': [
+      'iron_ug_dl', 'uibc_ug_dl', 'tibc_ug_dl', 'transferrin_saturation_pct'
+    ],
+    'HbA1c': [
+      'hba1c_pct', 'estimated_avg_glucose_mg_dl', 'hbf_pct'
+    ],
+    'Urine ACR': [
+      'urine_albumin_mg_l', 'urine_creatinine_mg_dl', 'albumin_creatinine_ratio'
+    ],
+    'Calcium & Phos': [
+      'calcium_mg_dl', 'phosphorus_mg_dl'
+    ],
+    'Thyroid Profile': [
+      'tt3_ng_dl', 'tt4_ug_dl', 'tsh_uiu_ml'
+    ],
+    'Glucose - Fasting': [
+      'fasting_glucose_mg_dl'
+    ],
+    'Glucose - PP': [
+      'postprandial_glucose_mg_dl'
+    ],
+    'Glucose (Diagnopath)': [
+      'fbs_mg_dl', 'plbs_mg_dl'
+    ],
   };
 
   @override
@@ -932,11 +976,18 @@ class _MainScreenState extends State<MainScreen> {
 
     // Map of test keys to display names
     final Map<String, String> testKeyToName = {};
+    final Set<String> numericTestKeys = {};
+    
     for (var report in validReports) {
       for (var result in report.structuredData!.results) {
         final key = result.key ?? result.testItem;
-        if (key != null && !testKeyToName.containsKey(key)) {
-          testKeyToName[key] = result.testItem;
+        if (key != null) {
+          if (!testKeyToName.containsKey(key)) {
+            testKeyToName[key] = result.testItem;
+          }
+          if (_parseValue(result.value) != null) {
+            numericTestKeys.add(key);
+          }
         }
       }
     }
@@ -999,8 +1050,8 @@ class _MainScreenState extends State<MainScreen> {
     double maxY = double.negativeInfinity;
 
     int colorIndex = 0;
-    for (var testKey in _selectedMultiAttributes) {
-      List<FlSpot> spots = [];
+    for (final testKey in _selectedMultiAttributes) {
+      final List<FlSpot> spots = [];
       for (int i = 0; i < validReports.length; i++) {
         final report = validReports[i];
         final result = report.structuredData!.results.firstWhere(
@@ -1508,7 +1559,94 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildRecentResultsTable(List<MedicalReport> validReports, Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
-    final sortedTestKeys = uniqueTestKeys.toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
+    final List<DataRow> rows = [];
+
+    for (var entry in _medicalCategories.entries) {
+      final category = entry.key;
+      final categoryKeys = entry.value;
+      final availableKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
+
+      if (availableKeys.isNotEmpty) {
+        // Subheading Row
+        rows.add(
+          DataRow(
+            color: WidgetStateProperty.all(Theme.of(context).colorScheme.primary.withValues(alpha: 0.05)),
+            cells: [
+              DataCell(Text(category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary, fontSize: 12, letterSpacing: 1.1))),
+              ...List.generate(validReports.length, (_) => const DataCell(SizedBox())),
+            ],
+          ),
+        );
+
+        // Data Rows
+        for (final testKey in availableKeys) {
+          rows.add(
+            DataRow(
+              cells: [
+                DataCell(Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600)),
+                )),
+                ...validReports.map((report) {
+                  final result = report.structuredData!.results.firstWhere(
+                    (res) => (res.key ?? res.testItem) == testKey,
+                    orElse: () => TestResult(testItem: testKey, value: '-'),
+                  );
+                  final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
+                  return DataCell(
+                    Text(valueText, style: TextStyle(
+                      color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
+                      fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
+                    )),
+                  );
+                }),
+              ],
+            ),
+          );
+        }
+      }
+    }
+
+    // Other metrics not in categories
+    final categorizedKeys = _medicalCategories.values.expand((e) => e).toSet();
+    final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
+    
+    if (otherKeys.isNotEmpty) {
+      rows.add(
+        DataRow(
+          color: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
+          cells: [
+            const DataCell(Text('OTHER METRICS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1))),
+            ...List.generate(validReports.length, (_) => const DataCell(SizedBox())),
+          ],
+        ),
+      );
+      for (final testKey in otherKeys) {
+        rows.add(
+          DataRow(
+            cells: [
+              DataCell(Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600)),
+              )),
+              ...validReports.map((report) {
+                final result = report.structuredData!.results.firstWhere(
+                  (res) => (res.key ?? res.testItem) == testKey,
+                  orElse: () => TestResult(testItem: testKey, value: '-'),
+                );
+                final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
+                return DataCell(
+                  Text(valueText, style: TextStyle(
+                    color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
+                  )),
+                );
+              }),
+            ],
+          ),
+        );
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1543,26 +1681,7 @@ class _MainScreenState extends State<MainScreen> {
                     );
                   }),
                 ],
-                rows: sortedTestKeys.map((testKey) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600))),
-                      ...validReports.map((report) {
-                        final result = report.structuredData!.results.firstWhere(
-                          (res) => (res.key ?? res.testItem) == testKey,
-                          orElse: () => TestResult(testItem: testKey, value: '-'),
-                        );
-                        final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
-                        return DataCell(
-                          Text(valueText, style: TextStyle(
-                            color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
-                            fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
-                          )),
-                        );
-                      }),
-                    ],
-                  );
-                }).toList(),
+                rows: rows,
               ),
             ),
           ),
