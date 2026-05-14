@@ -1700,6 +1700,7 @@ class _MainScreenState extends State<MainScreen> {
             child: Theme(
               data: Theme.of(context).copyWith(dividerColor: Theme.of(context).colorScheme.outline),
               child: DataTable(
+                showCheckboxColumn: false,
                 headingRowColor: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
                 columnSpacing: 24,
                 horizontalMargin: 16,
