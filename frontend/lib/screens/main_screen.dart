@@ -1894,10 +1894,8 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: BoxDecoration(
+    return Container(
+      decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: [
@@ -2012,14 +2010,12 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
                   ],
                 ),
               ),
-              // Dynamic spacer to allow scrolling past the button when keyboard is open
-              if (MediaQuery.of(context).viewInsets.bottom > 0)
-                const SizedBox(height: 250),
+              // Use the keyboard height as a dynamic spacer
+              SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 20),
               const SizedBox(height: 16),
             ],
           ),
         ),
-      ),
     );
   }
 
