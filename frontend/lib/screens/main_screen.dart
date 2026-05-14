@@ -148,7 +148,18 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _generateAnalysis() async {
     setState(() => _isAnalyzing = true);
     try {
-      final analysis = await ApiService.analyzeHealthTrends(query: _queryCtrl.text);
+      String? startDate;
+      String? endDate;
+      if (_selectedDateRange != null) {
+        startDate = _selectedDateRange!.start.toIso8601String();
+        endDate = _selectedDateRange!.end.toIso8601String();
+      }
+      
+      final analysis = await ApiService.analyzeHealthTrends(
+        query: _queryCtrl.text,
+        startDate: startDate,
+        endDate: endDate,
+      );
       if (mounted) {
         setState(() {
           _aiAnalysis = analysis;

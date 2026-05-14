@@ -176,9 +176,14 @@ class ApiService {
   // ─── Health Analysis ──────────────────────────────────────────────────────
 
   /// Fetch AI analysis of health trends using LLM, optionally with a specific user query.
-  static Future<String> analyzeHealthTrends({String? query}) async {
+  static Future<String> analyzeHealthTrends({String? query, String? startDate, String? endDate}) async {
+    final Map<String, String> params = {};
+    if (query != null && query.isNotEmpty) params['query'] = query;
+    if (startDate != null) params['start_date'] = startDate;
+    if (endDate != null) params['end_date'] = endDate;
+
     final uri = Uri.parse('$_baseUrl/api/reports/analyze').replace(
-      queryParameters: query != null && query.isNotEmpty ? {'query': query} : null,
+      queryParameters: params.isNotEmpty ? params : null,
     );
     final response = await http.get(
       uri,
