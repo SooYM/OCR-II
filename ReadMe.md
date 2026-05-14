@@ -4,16 +4,17 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 
 ## ✨ Features
 
-- **🌙 Premium Theme Toggle** — Seamlessly switch between clean light mode and premium dark mode
-- **📸 Multi-Page Capture** — Photograph or pick multiple pages; the AI merges them into one unified record
-- **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o) reads images directly for high-accuracy extraction
-- **📈 Interactive Dashboard** — Track health trends with categorized biomarker graphs (Lipid Profile, Liver/Kidney, CBC, etc.)
-- **🔍 Full-screen Chart Expansion** — Tap any graph to expand into a detailed, full-screen trend analysis view
-- **🧠 AI Health Analysis** — Get personalized insights with rich text formatting and the ability to ask custom follow-up questions
-- **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy
-- **🗑️ Secure Report Management** — View history and securely delete reports with ownership validation
-- **🔐 User Authentication** — Secure JWT-based login and signup system for personalized data isolation
-- **🎨 Premium UI/UX** — Glassmorphism design, smooth animations, and optimized layouts for all screen sizes
+- **🌙 Premium Theme Toggle** — Seamlessly switch between clean light mode and premium dark mode.
+- **📈 Global Date Filtering** — Unified date range filter that dynamically updates all charts and tables across the dashboard.
+- **📊 Comparative Trend Analysis** — Overlay multiple biomarkers (e.g., LDL vs HDL) on a single interactive line chart with synchronized tooltips.
+- **📋 Collapsible Profile Groups** — Analytics table organized into 14+ standardized medical profiles (Lipid, Liver, CBC, etc.) with interactive expand/collapse functionality.
+- **📸 Multi-Page Capture** — Photograph or pick multiple pages; the AI merges them into one unified record.
+- **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o) reads images directly for high-accuracy extraction.
+- **🔍 Full-screen Chart Expansion** — Tap any graph to expand into a detailed, full-screen trend analysis view with persistent legends.
+- **🧠 AI Health Analysis** — Get personalized insights with rich text formatting and the ability to ask custom follow-up questions.
+- **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy.
+- **🔐 Secure User Authentication** — JWT-based login and signup system for personalized data isolation and ownership validation.
+- **🎨 Premium UI/UX** — Glassmorphism design, smooth animations, and optimized layouts for all screen sizes.
 
 ## 🏗️ Architecture
 
@@ -57,7 +58,7 @@ OCR-II/
 | Flutter SDK | ≥ 3.10 |
 | Python | ≥ 3.10 |
 | OpenAI API Key | Required |
-| Supabase/SQLite | Required |
+| Supabase/PostgreSQL | Required |
 
 ### Backend Setup
 
@@ -66,7 +67,7 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.template .env # Configure your API keys here
+cp .env.template .env # Configure your API keys and Database URL
 python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -83,9 +84,9 @@ flutter run
 1. **Auth** — Sign up or log in to your secure personalized account.
 2. **Scan** — Capture blood report pages. The AI automatically merges multi-page documents.
 3. **Verify** — Confirm the extracted values and enter the collection date.
-4. **Dashboard** — View biomarker trends across your history with interactive line charts.
-5. **AI Analysis** — Generate detailed summaries or ask specific questions about your results.
-6. **Theme** — Toggle between Light and Dark mode using the button in the dashboard header.
+4. **Dashboard** — Filter by date range and analyze trends using individual or comparative charts.
+5. **Table** — Expand specific medical profiles in the analytics table to view detailed biomarker history.
+6. **AI Analysis** — Generate detailed summaries or ask specific questions about your results.
 
 ## 🔌 API Endpoints
 
