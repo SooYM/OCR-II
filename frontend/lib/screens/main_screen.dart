@@ -1849,84 +1849,176 @@ class _HierarchicalDatePickerDialogState extends State<_HierarchicalDatePickerDi
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       contentPadding: EdgeInsets.zero,
-      title: _buildHeader(),
+      clipBehavior: Clip.antiAlias,
       content: SizedBox(
-        width: double.maxFinite,
-        height: 380,
-        child: _buildBody(),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Cancel', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-        ),
-        if (_selectedYear != null)
-          ElevatedButton(
-            onPressed: () {
-              if (_selectedMonth != null) {
-                final start = DateTime(_selectedYear!, _selectedMonth!, 1);
-                final end = DateTime(_selectedYear!, _selectedMonth! + 1, 0, 23, 59, 59);
-                _applyFilter(DateTimeRange(start: start, end: end));
-              } else {
-                final start = DateTime(_selectedYear!, 1, 1);
-                final end = DateTime(_selectedYear!, 12, 31, 23, 59, 59);
-                _applyFilter(DateTimeRange(start: start, end: end));
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildHeader(),
+            SizedBox(
+              height: 340,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.05, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey('${_selectedYear}_${_selectedMonth}'),
+                  child: _buildBody(),
+                ),
+              ),
             ),
-            child: Text(_selectedMonth != null ? 'Select Full Month' : 'Select Full Year'),
-          ),
-      ],
+            _buildFooter(),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Filter by Date', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            GestureDetector(
-              onTap: () => setState(() { _selectedYear = null; _selectedMonth = null; }),
-              child: Text('History', style: TextStyle(
-                fontSize: 13, 
-                fontWeight: _selectedYear == null ? FontWeight.w700 : FontWeight.w500,
-                color: _selectedYear == null ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
-              )),
-            ),
-            if (_selectedYear != null) ...[
-              Icon(Icons.chevron_right_rounded, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              GestureDetector(
-                onTap: () => setState(() { _selectedMonth = null; }),
-                child: Text('$_selectedYear', style: TextStyle(
-                  fontSize: 13, 
-                  fontWeight: _selectedMonth == null ? FontWeight.w700 : FontWeight.w500,
-                  color: _selectedMonth == null ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
-                )),
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 24, 16, 16),
+      color: colorScheme.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (_selectedYear != null)
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                  onPressed: () => setState(() {
+                    if (_selectedMonth != null) {
+                      _selectedMonth = null;
+                    } else {
+                      _selectedYear = null;
+                    }
+                  }),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              if (_selectedYear != null) const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _selectedYear == null ? 'Select year' : (_selectedMonth == null ? 'Select month' : 'Select date'),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w400,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
               ),
             ],
-            if (_selectedMonth != null) ...[
-              Icon(Icons.chevron_right_rounded, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              Text(DateFormat('MMMM').format(DateTime(2022, _selectedMonth!)), style: TextStyle(
-                fontSize: 13, 
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.primary,
-              )),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildBreadcrumb(
+                'History', 
+                isActive: _selectedYear == null,
+                onTap: () => setState(() { _selectedYear = null; _selectedMonth = null; }),
+              ),
+              if (_selectedYear != null) ...[
+                _buildBreadcrumbSeparator(),
+                _buildBreadcrumb(
+                  '$_selectedYear', 
+                  isActive: _selectedMonth == null,
+                  onTap: () => setState(() { _selectedMonth = null; }),
+                ),
+              ],
+              if (_selectedMonth != null) ...[
+                _buildBreadcrumbSeparator(),
+                _buildBreadcrumb(
+                  DateFormat('MMM').format(DateTime(2022, _selectedMonth!)), 
+                  isActive: true,
+                  onTap: () {},
+                ),
+              ],
             ],
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreadcrumb(String text, {required bool isActive, required VoidCallback onTap}) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive ? colorScheme.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
         ),
-        const SizedBox(height: 8),
-        Divider(color: Theme.of(context).colorScheme.outline),
-      ],
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+            color: isActive ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBreadcrumbSeparator() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Icon(Icons.chevron_right_rounded, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+    );
+  }
+
+  Widget _buildFooter() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600)),
+          ),
+          if (_selectedYear != null) ...[
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                if (_selectedMonth != null) {
+                  final start = DateTime(_selectedYear!, _selectedMonth!, 1);
+                  final end = DateTime(_selectedYear!, _selectedMonth! + 1, 0, 23, 59, 59);
+                  _applyFilter(DateTimeRange(start: start, end: end));
+                } else {
+                  final start = DateTime(_selectedYear!, 1, 1);
+                  final end = DateTime(_selectedYear!, 12, 31, 23, 59, 59);
+                  _applyFilter(DateTimeRange(start: start, end: end));
+                }
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+              ),
+              child: Text(_selectedMonth != null ? 'Use full month' : 'Use full year'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1941,12 +2033,13 @@ class _HierarchicalDatePickerDialogState extends State<_HierarchicalDatePickerDi
   }
 
   Widget _buildYearGrid() {
+    final colorScheme = Theme.of(context).colorScheme;
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
         childAspectRatio: 1.8,
       ),
       itemCount: _years.length,
@@ -1958,10 +2051,10 @@ class _HierarchicalDatePickerDialogState extends State<_HierarchicalDatePickerDi
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outline),
+              border: Border.all(color: colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text('$year', style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text('$year', style: TextStyle(fontWeight: FontWeight.w500, color: colorScheme.onSurface)),
           ),
         );
       },
@@ -1969,6 +2062,7 @@ class _HierarchicalDatePickerDialogState extends State<_HierarchicalDatePickerDi
   }
 
   Widget _buildMonthGrid() {
+    final colorScheme = Theme.of(context).colorScheme;
     final availableMonths = widget.availableDates
         .where((d) => d.year == _selectedYear)
         .map((d) => d.month)
@@ -1976,11 +2070,11 @@ class _HierarchicalDatePickerDialogState extends State<_HierarchicalDatePickerDi
         .toList()..sort();
 
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
         childAspectRatio: 1.5,
       ),
       itemCount: availableMonths.length,
@@ -1993,10 +2087,10 @@ class _HierarchicalDatePickerDialogState extends State<_HierarchicalDatePickerDi
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outline),
+              border: Border.all(color: colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(monthName, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(monthName, style: TextStyle(fontWeight: FontWeight.w500, color: colorScheme.onSurface)),
           ),
         );
       },
@@ -2004,33 +2098,48 @@ class _HierarchicalDatePickerDialogState extends State<_HierarchicalDatePickerDi
   }
 
   Widget _buildDayPicker() {
+    final colorScheme = Theme.of(context).colorScheme;
     final availableDays = widget.availableDates
         .where((d) => d.year == _selectedYear && d.month == _selectedMonth)
         .map((d) => d.day)
         .toSet()
         .toList()..sort();
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       itemCount: availableDays.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final day = availableDays[index];
         final date = DateTime(_selectedYear!, _selectedMonth!, day);
-        return ListTile(
-          onTap: () {
-            final start = DateTime(_selectedYear!, _selectedMonth!, day);
-            final end = DateTime(_selectedYear!, _selectedMonth!, day, 23, 59, 59);
-            _applyFilter(DateTimeRange(start: start, end: end));
-          },
-          dense: true,
-          shape: RoundedRectangleBorder(
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: InkWell(
+            onTap: () {
+              final start = DateTime(_selectedYear!, _selectedMonth!, day);
+              final end = DateTime(_selectedYear!, _selectedMonth!, day, 23, 59, 59);
+              _applyFilter(DateTimeRange(start: start, end: end));
+            },
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Theme.of(context).colorScheme.outline),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.event_available_rounded, size: 18, color: colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Text(
+                    DateFormat('EEEE, MMM d').format(date),
+                    style: TextStyle(fontWeight: FontWeight.w500, color: colorScheme.onSurface),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.chevron_right_rounded, size: 18, color: colorScheme.onSurfaceVariant),
+                ],
+              ),
+            ),
           ),
-          leading: Icon(Icons.calendar_today_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
-          title: Text(DateFormat('EEEE, MMM d').format(date), style: const TextStyle(fontWeight: FontWeight.w600)),
-          trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
         );
       },
     );
