@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -7,7 +8,7 @@ import '../services/api_service.dart';
 /// A single chat message in the conversation.
 class ChatMessage {
   final String role; // 'user' or 'assistant'
-  final String content;
+  String content; // mutable for streaming
   final DateTime timestamp;
 
   ChatMessage({required this.role, required this.content, DateTime? timestamp})
@@ -29,7 +30,9 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
   final ScrollController _scrollCtrl = ScrollController();
   final FocusNode _inputFocus = FocusNode();
   bool _isTyping = false;
+  bool _isStreaming = false;
   DateTimeRange? _activeDateRange;
+  StreamSubscription<String>? _streamSub;
 
   @override
   void initState() {
@@ -49,6 +52,7 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
 
   @override
   void dispose() {
+    _streamSub?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     _inputFocus.dispose();
@@ -57,46 +61,69 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
 
   Future<void> _sendMessage() async {
     final text = _inputCtrl.text.trim();
-    if (text.isEmpty || _isTyping) return;
+    if (text.isEmpty || _isStreaming) return;
 
     setState(() {
       _messages.add(ChatMessage(role: 'user', content: text));
       _isTyping = true;
+      _isStreaming = true;
     });
     _inputCtrl.clear();
     _scrollToBottom();
 
-    try {
-      String? startDate;
-      String? endDate;
-      if (_activeDateRange != null) {
-        startDate = _activeDateRange!.start.toIso8601String();
-        endDate = _activeDateRange!.end.toIso8601String();
-      }
+    String? startDate;
+    String? endDate;
+    if (_activeDateRange != null) {
+      startDate = _activeDateRange!.start.toIso8601String();
+      endDate = _activeDateRange!.end.toIso8601String();
+    }
 
-      final response = await ApiService.analyzeHealthTrends(
+    // Add empty assistant message that will be filled by streaming
+    final assistantMsg = ChatMessage(role: 'assistant', content: '');
+    setState(() {
+      _messages.add(assistantMsg);
+      _isTyping = false; // Hide typing indicator, show streaming bubble
+    });
+
+    try {
+      final stream = ApiService.analyzeHealthTrendsStream(
         query: text,
         startDate: startDate,
         endDate: endDate,
       );
 
-      if (mounted) {
-        setState(() {
-          _messages.add(ChatMessage(role: 'assistant', content: response));
-          _isTyping = false;
-        });
-        _scrollToBottom();
-      }
+      _streamSub = stream.listen(
+        (token) {
+          if (mounted) {
+            setState(() {
+              assistantMsg.content += token;
+            });
+            _scrollToBottom();
+          }
+        },
+        onDone: () {
+          if (mounted) {
+            setState(() => _isStreaming = false);
+            if (assistantMsg.content.isEmpty) {
+              assistantMsg.content = 'No analysis was returned. Please try again.';
+            }
+          }
+        },
+        onError: (e) {
+          if (mounted) {
+            setState(() {
+              assistantMsg.content = "I'm sorry, I encountered an error while analyzing your data. Please try again.\n\n*Error: $e*";
+              _isStreaming = false;
+            });
+          }
+        },
+      );
     } catch (e) {
       if (mounted) {
         setState(() {
-          _messages.add(ChatMessage(
-            role: 'assistant',
-            content: "I'm sorry, I encountered an error while analyzing your data. Please try again.\n\n*Error: $e*",
-          ));
-          _isTyping = false;
+          assistantMsg.content = "I'm sorry, I encountered an error. Please try again.\n\n*Error: $e*";
+          _isStreaming = false;
         });
-        _scrollToBottom();
       }
     }
   }
@@ -419,22 +446,22 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
           const SizedBox(width: 10),
           // Send button
           GestureDetector(
-            onTap: _isTyping ? null : _sendMessage,
+            onTap: _isStreaming ? null : _sendMessage,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                gradient: _isTyping ? null : AppTheme.primaryGradient(context),
-                color: _isTyping ? cs.surfaceContainerHighest : null,
+                gradient: _isStreaming ? null : AppTheme.primaryGradient(context),
+                color: _isStreaming ? cs.surfaceContainerHighest : null,
                 borderRadius: BorderRadius.circular(23),
-                boxShadow: _isTyping
+                boxShadow: _isStreaming
                     ? null
                     : [BoxShadow(color: cs.primary.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 3))],
               ),
               child: Icon(
-                _isTyping ? Icons.hourglass_top_rounded : Icons.send_rounded,
-                color: _isTyping ? cs.onSurfaceVariant : Colors.white,
+                _isStreaming ? Icons.hourglass_top_rounded : Icons.send_rounded,
+                color: _isStreaming ? cs.onSurfaceVariant : Colors.white,
                 size: 20,
               ),
             ),

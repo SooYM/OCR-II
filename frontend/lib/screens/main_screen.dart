@@ -215,8 +215,8 @@ class _MainScreenState extends State<MainScreen> {
         index: _currentIndex,
         children: [
           _buildDashboardTab(),
-          AiChatScreen(key: _chatKey, dateRange: _selectedDateRange),
           const CaptureScreen(),
+          AiChatScreen(key: _chatKey, dateRange: _selectedDateRange),
           const ReportHistoryScreen(),
         ],
       ),
@@ -445,7 +445,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildAiAnalysis() {
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = 1),
+      onTap: () => setState(() => _currentIndex = 2),
       child: GlassCard(
         padding: const EdgeInsets.all(20),
         child: Row(
@@ -1694,10 +1694,10 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               _buildNavItem(index: 0, icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard_rounded,
                   label: 'Dashboard', gradient: AppTheme.accentGradient(context)),
-              _buildNavItem(index: 1, icon: Icons.auto_awesome_outlined, activeIcon: Icons.auto_awesome_rounded,
-                  label: 'AI Chat', gradient: LinearGradient(colors: [Theme.of(context).colorScheme.secondary, const Color(0xFF7C4DFF)])),
-              _buildNavItem(index: 2, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
+              _buildNavItem(index: 1, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
                   label: 'Scan', gradient: AppTheme.primaryGradient(context)),
+              _buildNavItem(index: 2, icon: Icons.auto_awesome_outlined, activeIcon: Icons.auto_awesome_rounded,
+                  label: 'AI Chat', gradient: LinearGradient(colors: [Theme.of(context).colorScheme.secondary, const Color(0xFF7C4DFF)])),
               _buildNavItem(index: 3, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
                   label: 'My Reports', gradient: const LinearGradient(colors: [AppTheme.warning, Color(0xFFFF8A65)])),
             ],

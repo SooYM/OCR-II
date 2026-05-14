@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -196,6 +197,54 @@ class ApiService {
     } else {
       final detail = _parseError(response);
       throw ApiException(detail, response.statusCode);
+    }
+  }
+
+  /// Stream AI analysis token-by-token via SSE.
+  static Stream<String> analyzeHealthTrendsStream({String? query, String? startDate, String? endDate}) async* {
+    final Map<String, String> params = {};
+    if (query != null && query.isNotEmpty) params['query'] = query;
+    if (startDate != null) params['start_date'] = startDate;
+    if (endDate != null) params['end_date'] = endDate;
+
+    final uri = Uri.parse('$_baseUrl/api/reports/analyze/stream').replace(
+      queryParameters: params.isNotEmpty ? params : null,
+    );
+
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', uri);
+      request.headers.addAll(_headers);
+      final streamedResponse = await client.send(request).timeout(const Duration(seconds: 120));
+
+      if (streamedResponse.statusCode != 200) {
+        throw ApiException('Stream request failed', streamedResponse.statusCode);
+      }
+
+      final lineStream = streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+
+      await for (final line in lineStream) {
+        if (line.startsWith('data: ')) {
+          final payload = line.substring(6).trim();
+          if (payload == '[DONE]') break;
+          try {
+            final data = jsonDecode(payload);
+            if (data is Map && data.containsKey('token')) {
+              yield data['token'] as String;
+            } else if (data is Map && data.containsKey('error')) {
+              throw ApiException(data['error'] as String, 500);
+            }
+          } catch (e) {
+            if (e is ApiException) rethrow;
+            // Plain text fallback (for simple error messages)
+            yield payload;
+          }
+        }
+      }
+    } finally {
+      client.close();
     }
   }
 
