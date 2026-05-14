@@ -33,6 +33,19 @@ class _MainScreenState extends State<MainScreen> {
   String? _aiAnalysis;
   bool _isAnalyzing = false;
   final TextEditingController _queryCtrl = TextEditingController();
+  
+  // Multi-Attribute Chart state
+  final Set<String> _selectedMultiAttributes = {};
+  final List<Color> _lineColors = [
+    const Color(0xFF6C63FF), // Primary
+    const Color(0xFF00D9A6), // Accent
+    const Color(0xFFFF6B6B), // Error/Red
+    const Color(0xFFFFB347), // Warning/Orange
+    const Color(0xFF4ECDC4), // Cyan
+    const Color(0xFF74B9FF), // Info/Blue
+    const Color(0xFFF06292), // Pink
+    const Color(0xFFA1887F), // Brown
+  ];
 
   static const Map<String, List<String>> _medicalCategories = {
     'Lipid Profile': ['total_cholesterol_mg_dl', 'hdl_mg_dl', 'ldl_mg_dl', 'vldl_mg_dl', 'triglycerides_mg_dl', 'non_hdl_mg_dl', 'total_hdl_ratio', 'ldl_hdl_ratio'],
@@ -833,7 +846,7 @@ class _MainScreenState extends State<MainScreen> {
         (r.status == 'completed' || r.status == 'sent') && 
         r.structuredData != null && 
         r.structuredData!.results.isNotEmpty
-    ).toList();
+    ).toList()..sort((a, b) => _parseDate(a.structuredData?.date, a.uploadTime).compareTo(_parseDate(b.structuredData?.date, b.uploadTime)));
 
     if (validReports.isEmpty) {
       return Center(
@@ -850,96 +863,324 @@ class _MainScreenState extends State<MainScreen> {
       );
     }
 
-    // Sort reports chronologically by collected date (fallback to uploadTime)
-    validReports.sort((a, b) => _parseDate(a.structuredData?.date, a.uploadTime).compareTo(_parseDate(b.structuredData?.date, b.uploadTime)));
-
-    // Aggregate unique test keys and map them to readable names
-    Set<String> uniqueTestKeys = {};
-    Map<String, String> testKeyToName = {};
-
+    // Map of test keys to display names
+    final Map<String, String> testKeyToName = {};
     for (var report in validReports) {
       for (var result in report.structuredData!.results) {
         final key = result.key ?? result.testItem;
-        uniqueTestKeys.add(key);
-        testKeyToName[key] = result.testItem;
+        if (key != null && !testKeyToName.containsKey(key)) {
+          testKeyToName[key] = result.testItem;
+        }
       }
     }
 
-    final sortedTestKeys = uniqueTestKeys.toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
+    final Set<String> uniqueTestKeys = testKeyToName.keys.toSet();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildAiAnalysis(),
+          const SizedBox(height: 32),
+          
+          // Multi-Attribute Comparison Section
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text('Comparative Analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+          ),
+          _buildAttributeSelector(uniqueTestKeys, testKeyToName),
+          const SizedBox(height: 12),
+          _buildMultiAttributeChart(validReports, testKeyToName),
+          const SizedBox(height: 40),
+          
+          _buildCategorizedGraphs(validReports, uniqueTestKeys, testKeyToName),
+          const SizedBox(height: 32),
+          _buildRecentResultsTable(validReports, uniqueTestKeys, testKeyToName),
+          const SizedBox(height: 100), // padding for bottom nav
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMultiAttributeChart(List<MedicalReport> validReports, Map<String, String> testKeyToName) {
+    if (_selectedMultiAttributes.isEmpty) {
+      return FadeIn(
+        child: GlassCard(
+          padding: const EdgeInsets.all(48),
+          child: Center(
+            child: Column(
+              children: [
+                Icon(Icons.add_chart_rounded, size: 48, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
+                const SizedBox(height: 16),
+                Text('Select multiple metrics above to compare their trends in one view.', 
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    List<LineChartBarData> lines = [];
+    double minX = 0;
+    double maxX = (validReports.length - 1).toDouble();
+    double minY = double.infinity;
+    double maxY = double.negativeInfinity;
+
+    int colorIndex = 0;
+    for (var testKey in _selectedMultiAttributes) {
+      List<FlSpot> spots = [];
+      for (int i = 0; i < validReports.length; i++) {
+        final report = validReports[i];
+        final result = report.structuredData!.results.firstWhere(
+          (res) => (res.key ?? res.testItem) == testKey,
+          orElse: () => TestResult(testItem: testKey, value: '-'),
+        );
+        if (result.value != '-') {
+          final val = _parseValue(result.value);
+          if (val != null) {
+            spots.add(FlSpot(i.toDouble(), val));
+            if (val < minY) minY = val;
+            if (val > maxY) maxY = val;
+          }
+        }
+      }
+
+      if (spots.isNotEmpty) {
+        final color = _lineColors[colorIndex % _lineColors.length];
+        lines.add(LineChartBarData(
+          spots: spots,
+          isCurved: true,
+          color: color,
+          barWidth: 3.5,
+          isStrokeCapRound: true,
+          dotData: FlDotData(
+            show: true,
+            getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+              radius: 4, color: color, strokeWidth: 2, strokeColor: Theme.of(context).colorScheme.surface,
+            ),
+          ),
+          belowBarData: BarAreaData(show: false),
+        ));
+        colorIndex++;
+      }
+    }
+
+    if (lines.isEmpty) return const SizedBox();
+
+    double padding = (maxY - minY) * 0.2;
+    if (padding <= 0) padding = 1.0;
 
     return FadeInUp(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      child: GlassCard(
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // AI Analysis
-            _buildAiAnalysis(),
-            const SizedBox(height: 20),
-
-            // Trend Graphs Categorized
-            _buildCategorizedGraphs(validReports, uniqueTestKeys, testKeyToName),
-            const SizedBox(height: 20),
-
-            // Data Table
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              child: Text('Biomarker Analytics Table', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+            Row(
+              children: [
+                Icon(Icons.stacked_line_chart_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('Comparative Trends', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                const Spacer(),
+                Text('${_selectedMultiAttributes.length} metrics', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+              ],
             ),
-            const SizedBox(height: 8),
-            GlassCard(
-              padding: EdgeInsets.zero,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Theme(
-                  data: Theme.of(context).copyWith(dividerColor: Theme.of(context).colorScheme.outline),
-                  child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
-                    columnSpacing: 24,
-                    horizontalMargin: 16,
-                    dividerThickness: 1,
-                    dataRowMinHeight: 48,
-                    dataRowMaxHeight: 48,
-                    columns: [
-                      DataColumn(
-                        label: Text('Biomarker', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+            const SizedBox(height: 28),
+            SizedBox(
+              height: 280,
+              child: LineChart(
+                LineChartData(
+                  minX: minX, maxX: maxX,
+                  minY: minY - padding, maxY: maxY + padding,
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 1),
+                  ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true, reservedSize: 32,
+                        interval: (validReports.length > 5) ? (validReports.length / 4).ceilToDouble() : 1,
+                        getTitlesWidget: (value, meta) {
+                          int index = value.toInt();
+                          if (index >= 0 && index < validReports.length) {
+                            final report = validReports[index];
+                            final date = _parseDate(report.structuredData?.date, report.uploadTime);
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(DateFormat('MMM d').format(date), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
+                            );
+                          }
+                          return const SizedBox();
+                        },
                       ),
-                      ...validReports.map((r) {
-                        final date = _parseDate(r.structuredData?.date, r.uploadTime);
-                        final dateStr = DateFormat('MMM d, yyyy').format(date);
-                        return DataColumn(
-                          label: Text(dateStr, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary)),
-                        );
-                      }),
-                    ],
-                    rows: sortedTestKeys.map((testKey) {
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600))),
-                          ...validReports.map((report) {
-                            final result = report.structuredData!.results.firstWhere(
-                              (res) => (res.key ?? res.testItem) == testKey,
-                              orElse: () => TestResult(testItem: '', value: '-'),
-                            );
-                            final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
-                            return DataCell(
-                              Text(valueText, style: TextStyle(
-                                color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
-                                fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
-                              )),
-                            );
-                          }),
-                        ],
-                      );
-                    }).toList(),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true, reservedSize: 44,
+                        getTitlesWidget: (value, meta) {
+                          return Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w500));
+                        },
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  lineBarsData: lines,
+                  lineTouchData: LineTouchData(
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (touchedSpot) => Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+                      getTooltipItems: (touchedSpots) {
+                        return touchedSpots.map((spot) {
+                          final testKey = _selectedMultiAttributes.elementAt(spot.barIndex);
+                          return LineTooltipItem(
+                            '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(1)}',
+                            TextStyle(color: _lineColors[spot.barIndex % _lineColors.length], fontWeight: FontWeight.w800, fontSize: 12),
+                          );
+                        }).toList();
+                      },
+                    ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 100), // padding for bottom nav
+            const SizedBox(height: 24),
+            // Legend
+            Wrap(
+              spacing: 16,
+              runSpacing: 10,
+              children: List.generate(_selectedMultiAttributes.length, (index) {
+                final testKey = _selectedMultiAttributes.elementAt(index);
+                final color = _lineColors[index % _lineColors.length];
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                    const SizedBox(width: 8),
+                    Text(testKeyToName[testKey] ?? testKey, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8))),
+                  ],
+                );
+              }),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAttributeSelector(Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: uniqueTestKeys.map((testKey) {
+              final isSelected = _selectedMultiAttributes.contains(testKey);
+              final displayName = testKeyToName[testKey] ?? testKey;
+              return Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: FilterChip(
+                  label: Text(displayName),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedMultiAttributes.add(testKey);
+                      } else {
+                        _selectedMultiAttributes.remove(testKey);
+                      }
+                    });
+                  },
+                  selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                  checkmarkColor: Theme.of(context).colorScheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  labelStyle: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+                  ),
+                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3) : Colors.transparent)),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentResultsTable(List<MedicalReport> validReports, Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
+    final sortedTestKeys = uniqueTestKeys.toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text('Biomarker Analytics Table', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+        ),
+        const SizedBox(height: 8),
+        GlassCard(
+          padding: EdgeInsets.zero,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Theme.of(context).colorScheme.outline),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
+                columnSpacing: 24,
+                horizontalMargin: 16,
+                dividerThickness: 1,
+                dataRowMinHeight: 48,
+                dataRowMaxHeight: 48,
+                columns: [
+                  DataColumn(
+                    label: Text('Biomarker', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                  ),
+                  ...validReports.map((r) {
+                    final date = _parseDate(r.structuredData?.date, r.uploadTime);
+                    final dateStr = DateFormat('MMM d, yyyy').format(date);
+                    return DataColumn(
+                      label: Text(dateStr, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary)),
+                    );
+                  }),
+                ],
+                rows: sortedTestKeys.map((testKey) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600))),
+                      ...validReports.map((report) {
+                        final result = report.structuredData!.results.firstWhere(
+                          (res) => (res.key ?? res.testItem) == testKey,
+                          orElse: () => TestResult(testItem: testKey, value: '-'),
+                        );
+                        final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
+                        return DataCell(
+                          Text(valueText, style: TextStyle(
+                            color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
+                            fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
+                          )),
+                        );
+                      }),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
