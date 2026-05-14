@@ -38,7 +38,6 @@ class _MainScreenState extends State<MainScreen> {
   final Set<String> _selectedMultiAttributes = {};
   final Set<String> _expandedProfiles = {};
   DateTimeRange? _selectedDateRange;
-  bool _showQuickFilter = false;
   final List<Color> _lineColors = [
     const Color(0xFF6C63FF), // Primary
     const Color(0xFF00D9A6), // Accent
@@ -342,20 +341,20 @@ class _MainScreenState extends State<MainScreen> {
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: () => setState(() => _showQuickFilter = !_showQuickFilter),
+              onTap: _showSimplifiedDatePicker,
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (_selectedDateRange != null || _showQuickFilter)
+                  color: _selectedDateRange != null 
                       ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                       : Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
-                  border: (_selectedDateRange != null || _showQuickFilter) ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5) : null,
+                  border: _selectedDateRange != null ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5) : null,
                 ),
                 child: Icon(
                   _selectedDateRange != null ? Icons.date_range_rounded : Icons.calendar_today_rounded, 
                   size: 20,
-                  color: (_selectedDateRange != null || _showQuickFilter) ? Theme.of(context).colorScheme.primary : null,
+                  color: _selectedDateRange != null ? Theme.of(context).colorScheme.primary : null,
                 ),
               ),
             ),
@@ -377,7 +376,105 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Future<void> _showDateRangePicker() async {
+  void _showSimplifiedDatePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -5)),
+            ],
+          ),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Text('Filter Reports', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+                    const Spacer(),
+                    if (_selectedDateRange != null)
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() => _selectedDateRange = null);
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Clear'),
+                        style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildRangeOption(Icons.today_rounded, 'Last 7 Days', () {
+                final end = DateTime.now();
+                final start = end.subtract(const Duration(days: 7));
+                setState(() => _selectedDateRange = DateTimeRange(start: start, end: end));
+                Navigator.pop(context);
+              }),
+              _buildRangeOption(Icons.calendar_view_month_rounded, 'Last 30 Days', () {
+                final end = DateTime.now();
+                final start = end.subtract(const Duration(days: 30));
+                setState(() => _selectedDateRange = DateTimeRange(start: start, end: end));
+                Navigator.pop(context);
+              }),
+              _buildRangeOption(Icons.history_rounded, 'Last 6 Months', () {
+                final end = DateTime.now();
+                final start = DateTime(end.year, end.month - 6, end.day);
+                setState(() => _selectedDateRange = DateTimeRange(start: start, end: end));
+                Navigator.pop(context);
+              }),
+              _buildRangeOption(Icons.event_note_rounded, 'This Year', () {
+                final now = DateTime.now();
+                final start = DateTime(now.year, 1, 1);
+                setState(() => _selectedDateRange = DateTimeRange(start: start, end: now));
+                Navigator.pop(context);
+              }),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: Divider(),
+              ),
+              _buildRangeOption(Icons.date_range_rounded, 'Custom Range...', () {
+                Navigator.pop(context);
+                _showCalendarPicker();
+              }, isCustom: true),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRangeOption(IconData icon, String title, VoidCallback onTap, {bool isCustom = false}) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isCustom ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1) : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 20, color: isCustom ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+      title: Text(title, style: TextStyle(fontWeight: isCustom ? FontWeight.w700 : FontWeight.w600, fontSize: 15, color: isCustom ? Theme.of(context).colorScheme.primary : null)),
+      trailing: Icon(Icons.chevron_right_rounded, size: 20, color: Theme.of(context).colorScheme.outline),
+      onTap: onTap,
+    );
+  }
+
+  Future<void> _showCalendarPicker() async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
       initialDateRange: _selectedDateRange,
@@ -1002,7 +1099,6 @@ class _MainScreenState extends State<MainScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_showQuickFilter) _buildQuickFilterRow(),
           if (_selectedDateRange != null) _buildFilterActiveIndicator(),
           _buildAiAnalysis(),
           const SizedBox(height: 32),
@@ -1526,59 +1622,6 @@ class _MainScreenState extends State<MainScreen> {
           ),
       ],
       );
-  }
-
-  Widget _buildQuickFilterRow() {
-    return FadeInDown(
-      duration: const Duration(milliseconds: 300),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildFilterChip('All Time', null),
-              _buildFilterChip('Last 3M', DateTimeRange(start: DateTime.now().subtract(const Duration(days: 90)), end: DateTime.now())),
-              _buildFilterChip('Last 6M', DateTimeRange(start: DateTime.now().subtract(const Duration(days: 180)), end: DateTime.now())),
-              _buildFilterChip('Last Year', DateTimeRange(start: DateTime.now().subtract(const Duration(days: 365)), end: DateTime.now())),
-              _buildFilterChip('Custom', _selectedDateRange, isCustom: true),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, DateTimeRange? range, {bool isCustom = false}) {
-    final bool isSelected = !isCustom && _selectedDateRange?.start == range?.start && _selectedDateRange?.end == range?.end;
-    if (range == null && _selectedDateRange == null && !isCustom) {
-      // All Time is selected if range is null
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label, style: TextStyle(
-          fontSize: 12, 
-          fontWeight: FontWeight.w600,
-          color: isSelected ? Colors.white : Theme.of(context).colorScheme.primary,
-        )),
-        selected: isSelected,
-        onSelected: (selected) {
-          if (isCustom) {
-            _showDateRangePicker();
-          } else {
-            setState(() {
-              _selectedDateRange = range;
-            });
-          }
-        },
-        selectedColor: Theme.of(context).colorScheme.primary,
-        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
-        showCheckmark: false,
-      ),
-    );
   }
 
   Widget _buildFilterActiveIndicator() {
