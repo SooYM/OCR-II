@@ -161,9 +161,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () {
@@ -174,7 +174,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
             }
           },
         ),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -188,7 +188,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
               'Review and correct extracted fields',
               style: TextStyle(
                 fontSize: 12,
-                color: AppTheme.textTertiary,
+                color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.6) ?? AppTheme.textTertiary,
                 fontWeight: FontWeight.w400,
               ),
             ),
@@ -415,8 +415,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         _data.notes = v;
                         _hasChanges = true;
                       },
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
                         fontSize: 14,
                         height: 1.5,
                       ),
@@ -442,9 +442,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
           Container(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
-              border: const Border(
-                top: BorderSide(color: AppTheme.surfaceBorder),
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                top: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder),
               ),
               boxShadow: [
                 BoxShadow(
@@ -568,9 +568,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
             child: TextFormField(
               initialValue: value,
               onChanged: onChanged,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: AppTheme.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 15,
               ),
               decoration: InputDecoration(
@@ -749,7 +749,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         ),

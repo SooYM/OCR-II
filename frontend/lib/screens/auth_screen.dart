@@ -94,7 +94,7 @@ class _AuthScreenState extends State<AuthScreen>
     final controller = TextEditingController(text: ApiService.baseUrl);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -108,8 +108,8 @@ class _AuthScreenState extends State<AuthScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Server URL',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+            Text('Server URL',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 4),
             const Text('Paste your localtunnel URL here',
                 style: TextStyle(color: AppTheme.textTertiary, fontSize: 13)),
@@ -117,7 +117,7 @@ class _AuthScreenState extends State<AuthScreen>
             TextField(
               controller: controller,
               autofocus: true,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
               decoration: const InputDecoration(
                 hintText: 'https://your-tunnel.loca.lt',
                 prefixIcon: Icon(Icons.link, color: AppTheme.textTertiary),
@@ -149,7 +149,7 @@ class _AuthScreenState extends State<AuthScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+        decoration: BoxDecoration(gradient: AppTheme.backgroundGradient(context)),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -168,7 +168,7 @@ class _AuthScreenState extends State<AuthScreen>
                           child: Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
-                              gradient: AppTheme.primaryGradient,
+                              gradient: AppTheme.primaryGradient(context),
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: [
                                 BoxShadow(
@@ -190,12 +190,12 @@ class _AuthScreenState extends State<AuthScreen>
 
                   FadeInDown(
                     delay: const Duration(milliseconds: 200),
-                    child: const Text(
+                    child: Text(
                       'MedScan',
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
+                        color: Theme.of(context).colorScheme.onSurface,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -205,7 +205,7 @@ class _AuthScreenState extends State<AuthScreen>
                     delay: const Duration(milliseconds: 300),
                     child: Text(
                       _isLogin ? 'Welcome back' : 'Create your account',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textSecondary, fontSize: 15),
                     ),
                   ),
 
@@ -367,9 +367,9 @@ class _AuthScreenState extends State<AuthScreen>
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
-        gradient: AppTheme.primaryGradient,
+        gradient: AppTheme.primaryGradient(context),
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        boxShadow: AppTheme.primaryShadow,
+        boxShadow: Theme.of(context).brightness == Brightness.dark ? AppTheme.primaryShadow : AppTheme.primaryShadowLight,
       ),
       child: Material(
         color: Colors.transparent,

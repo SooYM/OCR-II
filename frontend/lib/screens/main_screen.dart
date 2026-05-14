@@ -9,8 +9,9 @@ import '../services/api_service.dart';
 import '../models/report_model.dart';
 import 'capture_screen.dart';
 import 'report_history_screen.dart';
-import 'auth_screen.dart';
+import '../services/theme_service.dart';
 import '../widgets/glass_card.dart';
+import 'auth_screen.dart';
 
 /// Main screen with bottom navigation: Dashboard, Scan, My Reports.
 class MainScreen extends StatefulWidget {
@@ -160,7 +161,7 @@ class _MainScreenState extends State<MainScreen> {
               await AuthService.logout();
               if (mounted) {
                 Navigator.pushReplacement(
-                  context, MaterialPageRoute(builder: (_) => const AuthScreen()),
+                  context, MaterialPageRoute(builder: (_) => AuthScreen()),
                 );
               }
             },
@@ -188,7 +189,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildDashboardTab() {
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.backgroundGradient(context)),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -215,32 +216,48 @@ class _MainScreenState extends State<MainScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: AppTheme.surface.withValues(alpha: 0.85),
-          border: const Border(bottom: BorderSide(color: AppTheme.surfaceBorder, width: 1)),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+          border: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, width: 1)),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                gradient: AppTheme.accentGradient,
+                gradient: AppTheme.accentGradient(context),
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
               child: const Icon(Icons.dashboard_rounded, color: Colors.white, size: 22),
             ),
             const SizedBox(width: 14),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Dashboard',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary, letterSpacing: -0.3)),
+                          color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
                   Text('Healthcare Biomarker Analytics',
-                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500)),
+                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
+            GestureDetector(
+              onTap: () => ThemeService.instance.toggleTheme(),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  ThemeService.instance.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  size: 20,
+                  color: ThemeService.instance.isDarkMode ? Colors.orangeAccent : AppTheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             GestureDetector(
               onTap: _handleLogout,
               child: Container(
@@ -308,9 +325,9 @@ class _MainScreenState extends State<MainScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
                   decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
+                    gradient: AppTheme.primaryGradient(context),
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    boxShadow: AppTheme.primaryShadow,
+                    boxShadow: Theme.of(context).brightness == Brightness.dark ? AppTheme.primaryShadow : AppTheme.primaryShadowLight,
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -369,14 +386,15 @@ class _MainScreenState extends State<MainScreen> {
               child: Center(child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2)),
             )
           else
-            const Text('Generate a detailed AI analysis based on the exact values from your reports.', style: TextStyle(color: AppTheme.textTertiary, fontSize: 13, height: 1.5)),
+            Text('Generate a detailed AI analysis based on the exact values from your reports.', 
+                style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 13, height: 1.5)),
           
           // Query input — always visible when not loading
           if (!_isAnalyzing) ...[
             const SizedBox(height: 16),
             TextField(
               controller: _queryCtrl,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13),
               maxLines: null,
               decoration: InputDecoration(
                 hintText: _aiAnalysis != null ? 'Ask a follow-up question...' : 'Any specific question? (Optional)',
@@ -574,7 +592,7 @@ class _MainScreenState extends State<MainScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              gradient: AppTheme.accentGradient,
+                              gradient: AppTheme.accentGradient(context),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(Icons.show_chart_rounded, size: 20, color: Colors.white),
@@ -938,9 +956,9 @@ class _MainScreenState extends State<MainScreen> {
           child: Row(
             children: [
               _buildNavItem(index: 0, icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard_rounded,
-                  label: 'Dashboard', gradient: AppTheme.accentGradient),
+                  label: 'Dashboard', gradient: AppTheme.accentGradient(context)),
               _buildNavItem(index: 1, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
-                  label: 'Scan', gradient: AppTheme.primaryGradient),
+                  label: 'Scan', gradient: AppTheme.primaryGradient(context)),
               _buildNavItem(index: 2, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
                   label: 'My Reports', gradient: const LinearGradient(colors: [AppTheme.warning, Color(0xFFFF8A65)])),
             ],

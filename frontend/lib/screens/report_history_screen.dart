@@ -62,7 +62,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
         title: const Text('Delete Report?'),
         content: const Text('Are you sure you want to delete this report? This action cannot be undone.', style: TextStyle(color: AppTheme.textSecondary)),
@@ -103,7 +103,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      decoration: BoxDecoration(gradient: AppTheme.backgroundGradient(context)),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -114,15 +114,15 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
-                  color: AppTheme.surface.withOpacity(0.85),
-                  border: const Border(bottom: BorderSide(color: AppTheme.surfaceBorder, width: 1)),
+                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+                  border: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, width: 1)),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        gradient: AppTheme.primaryGradient,
+                        gradient: AppTheme.primaryGradient(context),
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       ),
                       child: const Icon(Icons.history_rounded, color: Colors.white, size: 22),
@@ -132,12 +132,12 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('My Reports',
+                          Text('My Reports',
                               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                                  color: AppTheme.textPrimary, letterSpacing: -0.3)),
+                                  color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
                           Text(
                             _reports != null ? '${_reports!.length} report(s)' : 'Loading...',
-                            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500),
+                            style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12, fontWeight: FontWeight.w500),
                           ),
                         ],
                       ),
@@ -217,8 +217,8 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                 child: const Icon(Icons.inbox_outlined, size: 48, color: AppTheme.textTertiary),
               ),
               const SizedBox(height: 20),
-              const Text('No reports yet',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Text('No reports yet',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(height: 8),
               const Text('Scan a medical report to get started',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 14)),
@@ -278,7 +278,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                 Expanded(
                   child: Text(
                     patientName?.isNotEmpty == true ? patientName! : 'Unknown Patient',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

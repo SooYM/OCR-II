@@ -33,7 +33,7 @@ class _GradientButtonState extends State<GradientButton> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          gradient: AppTheme.primaryGradient,
+          gradient: AppTheme.primaryGradient(context),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           boxShadow: _isHovered ? AppTheme.primaryShadow : [],
         ),

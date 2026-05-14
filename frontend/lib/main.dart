@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
+import 'services/theme_service.dart';
 import 'screens/auth_screen.dart';
 import 'screens/main_screen.dart';
 
@@ -15,6 +16,7 @@ void main() async {
   // Load saved auth token from disk
   await AuthService.init();
   await ApiService.init();
+  await ThemeService.instance.init();
   runApp(const MedScanApp());
 }
 
@@ -23,12 +25,19 @@ class MedScanApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'MedScan',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      scrollBehavior: NoScrollGlowBehavior(), // Completely removes all scroll overscroll effects globally
-      home: AuthService.isLoggedIn ? const MainScreen() : const AuthScreen(),
+    return ListenableBuilder(
+      listenable: ThemeService.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'MedScan',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeService.instance.themeMode,
+          scrollBehavior: NoScrollGlowBehavior(), // Completely removes all scroll overscroll effects globally
+          home: AuthService.isLoggedIn ? const MainScreen() : const AuthScreen(),
+        );
+      },
     );
   }
 }

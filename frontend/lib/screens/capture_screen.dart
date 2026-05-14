@@ -166,7 +166,7 @@ class _CaptureScreenState extends State<CaptureScreen>
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -181,12 +181,12 @@ class _CaptureScreenState extends State<CaptureScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Server URL',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 4),
@@ -198,7 +198,7 @@ class _CaptureScreenState extends State<CaptureScreen>
               TextField(
                 controller: controller,
                 autofocus: true,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                 decoration: InputDecoration(
                   hintText: 'https://your-tunnel.loca.lt',
                   prefixIcon: const Icon(Icons.link, color: AppTheme.textTertiary),
@@ -271,7 +271,7 @@ class _CaptureScreenState extends State<CaptureScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+        decoration: BoxDecoration(gradient: AppTheme.backgroundGradient(context)),
         child: SafeArea(
           child: Stack(
             children: [
@@ -288,7 +288,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              gradient: AppTheme.primaryGradient,
+                              gradient: AppTheme.primaryGradient(context),
                               borderRadius:
                                   BorderRadius.circular(AppTheme.radiusMd),
                             ),
@@ -300,12 +300,12 @@ class _CaptureScreenState extends State<CaptureScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'MedScan',
                                   style: TextStyle(
                                     fontSize: 28,
                                     fontWeight: FontWeight.w800,
-                                    color: AppTheme.textPrimary,
+                                    color: Theme.of(context).colorScheme.onSurface,
                                     letterSpacing: -0.5,
                                   ),
                                 ),
@@ -313,8 +313,8 @@ class _CaptureScreenState extends State<CaptureScreen>
                                   _selectedImages.isEmpty
                                       ? 'Snap a medical report to begin'
                                       : '${_selectedImages.length} page(s) captured',
-                                  style: const TextStyle(
-                                    color: AppTheme.textSecondary,
+                                  style: TextStyle(
+                                    color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textSecondary,
                                     fontSize: 14,
                                   ),
                                 ),
@@ -378,7 +378,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                                 icon: Icons.camera_alt_rounded,
                                 label: 'Camera',
                                 subtitle: 'Take a photo',
-                                gradient: AppTheme.primaryGradient,
+                                gradient: AppTheme.primaryGradient(context),
                                 onTap: () =>
                                     _pickImage(ImageSource.camera),
                               ),
@@ -389,7 +389,7 @@ class _CaptureScreenState extends State<CaptureScreen>
                                 icon: Icons.photo_library_rounded,
                                 label: 'Gallery',
                                 subtitle: 'Choose existing',
-                                gradient: AppTheme.accentGradient,
+                                gradient: AppTheme.accentGradient(context),
                                 onTap: () =>
                                     _pickImage(ImageSource.gallery),
                               ),
@@ -485,12 +485,12 @@ class _CaptureScreenState extends State<CaptureScreen>
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Add More Pages',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 4),
@@ -503,14 +503,14 @@ class _CaptureScreenState extends State<CaptureScreen>
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
+                  gradient: AppTheme.primaryGradient(context),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.camera_alt_rounded,
                     color: Colors.white, size: 22),
               ),
-              title: const Text('Camera',
-                  style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              title: Text('Camera',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
               subtitle: const Text('Take another photo',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
               onTap: () {
@@ -523,14 +523,14 @@ class _CaptureScreenState extends State<CaptureScreen>
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  gradient: AppTheme.accentGradient,
+                  gradient: AppTheme.accentGradient(context),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.photo_library_rounded,
                     color: Colors.white, size: 22),
               ),
-              title: const Text('Gallery',
-                  style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              title: Text('Gallery',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
               subtitle: const Text('Pick from library',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
               onTap: () {
@@ -551,7 +551,7 @@ class _CaptureScreenState extends State<CaptureScreen>
         onTap: () => _pickImage(ImageSource.camera),
         child: Container(
           decoration: BoxDecoration(
-            color: AppTheme.surface.withOpacity(0.5),
+            color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
             border: Border.all(
               color: AppTheme.primary.withOpacity(0.2),
@@ -595,12 +595,12 @@ class _CaptureScreenState extends State<CaptureScreen>
                 },
               ),
               const SizedBox(height: 28),
-              const Text(
+              Text(
                 'Tap to scan a report',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -783,7 +783,7 @@ class _CaptureScreenState extends State<CaptureScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient,
+                gradient: AppTheme.primaryGradient(context),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(

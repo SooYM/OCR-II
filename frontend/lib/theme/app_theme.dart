@@ -30,23 +30,28 @@ class AppTheme {
   static const Color textTertiary = Color(0xFF707090);
 
   // ─── Gradients ─────────────────────────────────────────────────────────────
-  static const LinearGradient primaryGradient = LinearGradient(
+  static LinearGradient primaryGradient(BuildContext context) => const LinearGradient(
     colors: [primary, Color(0xFF8B5CF6)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  static const LinearGradient accentGradient = LinearGradient(
+  static LinearGradient accentGradient(BuildContext context) => const LinearGradient(
     colors: [accent, Color(0xFF00B4D8)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  static const LinearGradient backgroundGradient = LinearGradient(
-    colors: [background, Color(0xFF16162D)],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
+  static LinearGradient backgroundGradient(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return LinearGradient(
+      colors: isDark 
+          ? [background, const Color(0xFF16162D)] 
+          : [backgroundLight, const Color(0xFFE8EBF9)],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
+  }
 
   // ─── Shadows ───────────────────────────────────────────────────────────────
   static List<BoxShadow> cardShadow = [
@@ -65,6 +70,14 @@ class AppTheme {
     ),
   ];
 
+  static List<BoxShadow> primaryShadowLight = [
+    BoxShadow(
+      color: primary.withOpacity(0.15),
+      blurRadius: 16,
+      offset: const Offset(0, 4),
+    ),
+  ];
+
   // ─── Border Radius ─────────────────────────────────────────────────────────
   static const double radiusSm = 8;
   static const double radiusMd = 12;
@@ -72,44 +85,96 @@ class AppTheme {
   static const double radiusXl = 24;
 
   // ─── Theme Data ────────────────────────────────────────────────────────────
+  // ─── Surface Colors (Light) ──────────────────────────────────────────────────
+  static const Color backgroundLight = Color(0xFFF8F9FE);
+  static const Color surfaceLight = Color(0xFFFFFFFF);
+  static const Color surfaceVariantLight = Color(0xFFF1F4FF);
+  static const Color surfaceElevatedLight = Color(0xFFE8EBF9);
+  static const Color surfaceBorderLight = Color(0xFFE0E4F2);
+
+  // ─── Text Colors (Light) ─────────────────────────────────────────────────────
+  static const Color textPrimaryLight = Color(0xFF0F0F1A);
+  static const Color textSecondaryLight = Color(0xFF40405A);
+  static const Color textTertiaryLight = Color(0xFF5A5A7A);
+
+  // ─── Shadows (Light) ─────────────────────────────────────────────────────────
+  static List<BoxShadow> cardShadowLight = [
+    BoxShadow(
+      color: Colors.black.withOpacity(0.05),
+      blurRadius: 20,
+      offset: const Offset(0, 8),
+    ),
+  ];
+
+  // ─── Theme Data ────────────────────────────────────────────────────────────
   static ThemeData get darkTheme {
+    return _buildTheme(Brightness.dark);
+  }
+
+  static ThemeData get lightTheme {
+    return _buildTheme(Brightness.light);
+  }
+
+  static ThemeData _buildTheme(Brightness brightness) {
+    final bool isDark = brightness == Brightness.dark;
+
+    final Color bgColor = isDark ? background : backgroundLight;
+    final Color surfColor = isDark ? surface : surfaceLight;
+    final Color surfVariant = isDark ? surfaceVariant : surfaceVariantLight;
+    final Color surfElevated = isDark ? surfaceElevated : surfaceElevatedLight;
+    final Color borderColor = isDark ? surfaceBorder : surfaceBorderLight;
+    final Color tPrimary = isDark ? textPrimary : textPrimaryLight;
+    final Color tSecondary = isDark ? textSecondary : textSecondaryLight;
+    final Color tTertiary = isDark ? textTertiary : textTertiaryLight;
+
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: background,
-      colorScheme: const ColorScheme.dark(
-        primary: primary,
-        onPrimary: Colors.white,
-        secondary: accent,
-        onSecondary: Colors.black,
-        surface: surface,
-        onSurface: textPrimary,
-        error: error,
-        onError: Colors.white,
+      brightness: brightness,
+      scaffoldBackgroundColor: bgColor,
+      colorScheme: isDark
+          ? const ColorScheme.dark(
+              primary: primary,
+              onPrimary: Colors.white,
+              secondary: accent,
+              onSecondary: Colors.black,
+              surface: surface,
+              onSurface: textPrimary,
+              error: error,
+              onError: Colors.white,
+            )
+          : const ColorScheme.light(
+              primary: primary,
+              onPrimary: Colors.white,
+              secondary: accent,
+              onSecondary: Colors.white,
+              surface: surfaceLight,
+              onSurface: textPrimaryLight,
+              error: error,
+              onError: Colors.white,
+            ),
+      textTheme: (isDark ? ThemeData.dark() : ThemeData.light()).textTheme.apply(
+        bodyColor: tPrimary,
+        displayColor: tPrimary,
+        fontFamily: 'Helvetica Neue',
       ),
-      textTheme: ThemeData.dark().textTheme.apply(
-        bodyColor: textPrimary,
-        displayColor: textPrimary,
-        fontFamily: 'Helvetica Neue', // Safe fallback system font
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: surface,
+      appBarTheme: AppBarTheme(
+        backgroundColor: surfColor,
         elevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
           fontFamily: 'Helvetica Neue',
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: textPrimary,
+          color: tPrimary,
         ),
-        iconTheme: IconThemeData(color: textPrimary),
+        iconTheme: IconThemeData(color: tPrimary),
       ),
       cardTheme: CardThemeData(
-        color: surface,
+        color: surfColor,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLg),
-          side: const BorderSide(color: surfaceBorder, width: 1),
+          side: BorderSide(color: borderColor, width: 1),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -130,8 +195,8 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: textPrimary,
-          side: const BorderSide(color: surfaceBorder),
+          foregroundColor: tPrimary,
+          side: BorderSide(color: borderColor),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMd),
@@ -145,42 +210,43 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceVariant,
+        fillColor: surfVariant,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMd),
-          borderSide: const BorderSide(color: surfaceBorder),
+          borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMd),
-          borderSide: const BorderSide(color: surfaceBorder),
+          borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMd),
           borderSide: const BorderSide(color: primary, width: 2),
         ),
-        labelStyle: const TextStyle(color: textSecondary),
-        hintStyle: const TextStyle(color: textTertiary),
+        labelStyle: TextStyle(color: tSecondary),
+        hintStyle: TextStyle(color: tTertiary),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: surface,
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: surfColor,
         selectedItemColor: primary,
-        unselectedItemColor: textTertiary,
+        unselectedItemColor: tTertiary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
-      dividerTheme: const DividerThemeData(
-        color: surfaceBorder,
+      dividerTheme: DividerThemeData(
+        color: borderColor,
         thickness: 1,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: surfaceElevated,
-        contentTextStyle: const TextStyle(
+        backgroundColor: isDark ? surfElevated : surfColor,
+        contentTextStyle: TextStyle(
           fontFamily: 'Helvetica Neue',
-          color: textPrimary,
+          color: tPrimary,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
+          side: isDark ? BorderSide.none : BorderSide(color: borderColor),
         ),
         behavior: SnackBarBehavior.floating,
       ),

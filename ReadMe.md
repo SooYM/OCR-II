@@ -4,6 +4,7 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 
 ## ✨ Features
 
+- **🌙 Premium Theme Toggle** — Seamlessly switch between clean light mode and premium dark mode
 - **📸 Multi-Page Capture** — Photograph or pick multiple pages; the AI merges them into one unified record
 - **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o) reads images directly for high-accuracy extraction
 - **📈 Interactive Dashboard** — Track health trends with categorized biomarker graphs (Lipid Profile, Liver/Kidney, CBC, etc.)
@@ -12,7 +13,7 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 - **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy
 - **🗑️ Secure Report Management** — View history and securely delete reports with ownership validation
 - **🔐 User Authentication** — Secure JWT-based login and signup system for personalized data isolation
-- **🌙 Premium UI/UX** — Glassmorphism design, smooth animations, and optimized layouts for all screen sizes
+- **🎨 Premium UI/UX** — Glassmorphism design, smooth animations, and optimized layouts for all screen sizes
 
 ## 🏗️ Architecture
 
@@ -40,8 +41,8 @@ OCR-II/
 │   │   ├── main.dart        # App initialization
 │   │   ├── models/          # Data models (MedicalReport, User, etc.)
 │   │   ├── screens/         # Dashboard, Capture, Auth, History, Verify
-│   │   ├── services/        # ApiService, AuthService
-│   │   ├── theme/           # AppTheme (Premium Dark Theme)
+│   │   ├── services/        # ApiService, AuthService, ThemeService
+│   │   ├── theme/           # AppTheme (Premium Light & Dark Themes)
 │   │   └── widgets/         # GlassCard, Custom Charts, AI Analysis UI
 │   └── pubspec.yaml
 └── ...
@@ -84,6 +85,7 @@ flutter run
 3. **Verify** — Confirm the extracted values and enter the collection date.
 4. **Dashboard** — View biomarker trends across your history with interactive line charts.
 5. **AI Analysis** — Generate detailed summaries or ask specific questions about your results.
+6. **Theme** — Toggle between Light and Dark mode using the button in the dashboard header.
 
 ## 🔌 API Endpoints
 
@@ -103,6 +105,7 @@ flutter run
 - **fl_chart** — High-performance interactive visualizations
 - **flutter_markdown** — Rich text AI response rendering
 - **animate_do** — Premium UI micro-interactions
+- **shared_preferences** — Theme preference persistence
 
 **Backend**
 - **FastAPI** — High-performance Python backend
