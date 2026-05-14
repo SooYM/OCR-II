@@ -36,6 +36,7 @@ class _MainScreenState extends State<MainScreen> {
   
   // Multi-Attribute Chart state
   final Set<String> _selectedMultiAttributes = {};
+  DateTimeRange? _selectedDateRange;
   final List<Color> _lineColors = [
     const Color(0xFF6C63FF), // Primary
     const Color(0xFF00D9A6), // Accent
@@ -295,6 +296,25 @@ class _MainScreenState extends State<MainScreen> {
             ),
             const SizedBox(width: 8),
             GestureDetector(
+              onTap: _showDateRangePicker,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _selectedDateRange != null 
+                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: _selectedDateRange != null ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5) : null,
+                ),
+                child: Icon(
+                  _selectedDateRange != null ? Icons.date_range_rounded : Icons.calendar_today_rounded, 
+                  size: 20,
+                  color: _selectedDateRange != null ? Theme.of(context).colorScheme.primary : null,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
               onTap: _fetchDashboardData,
               child: Container(
                 padding: const EdgeInsets.all(10),
@@ -309,6 +329,29 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showDateRangePicker() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedDateRange,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: Theme.of(context).colorScheme.primary,
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedDateRange = picked);
+    }
   }
 
   Widget _buildDashboardError() {
@@ -841,25 +884,49 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildDashboardContent() {
+    // Filter reports based on the selected date range
+    final filteredReports = _reports.where((r) {
+      if (_selectedDateRange == null) return true;
+      final date = _parseDate(r.structuredData?.date, r.uploadTime);
+      // Include boundary dates
+      return (date.isAfter(_selectedDateRange!.start) || date.isAtSameMomentAs(_selectedDateRange!.start)) && 
+             (date.isBefore(_selectedDateRange!.end) || date.isAtSameMomentAs(_selectedDateRange!.end));
+    }).toList();
+
     // Only use reports that are 'completed' or 'sent' and have structured data results
-    final validReports = _reports.where((r) => 
+    final validReports = filteredReports.where((r) => 
         (r.status == 'completed' || r.status == 'sent') && 
         r.structuredData != null && 
         r.structuredData!.results.isNotEmpty
     ).toList()..sort((a, b) => _parseDate(a.structuredData?.date, a.uploadTime).compareTo(_parseDate(b.structuredData?.date, b.uploadTime)));
 
     if (validReports.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.analytics_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
-            const SizedBox(height: 16),
-            const Text('No Data Available', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            const Text('Scan a medical report to see your analytics.', style: TextStyle(fontSize: 14)),
-          ],
-        ),
+      return Column(
+        children: [
+          if (_selectedDateRange != null) _buildFilterActiveIndicator(),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.analytics_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+                  const SizedBox(height: 16),
+                  Text(_selectedDateRange != null ? 'No Data in this Range' : 'No Data Available', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Text(_selectedDateRange != null ? 'Try selecting a wider date range.' : 'Scan a medical report to see your analytics.', style: const TextStyle(fontSize: 14)),
+                  if (_selectedDateRange != null) ...[
+                    const SizedBox(height: 24),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _selectedDateRange = null),
+                      icon: const Icon(Icons.filter_list_off_rounded),
+                      label: const Text('Clear Date Filter'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -882,6 +949,7 @@ class _MainScreenState extends State<MainScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_selectedDateRange != null) _buildFilterActiveIndicator(),
           _buildAiAnalysis(),
           const SizedBox(height: 32),
           
@@ -1404,6 +1472,39 @@ class _MainScreenState extends State<MainScreen> {
           ),
       ],
       );
+  }
+
+  Widget _buildFilterActiveIndicator() {
+    return FadeInDown(
+      duration: const Duration(milliseconds: 300),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: GlassCard(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+          child: Row(
+            children: [
+              Icon(Icons.filter_list_alt, size: 18, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Filtering: ${DateFormat('MMM d, yyyy').format(_selectedDateRange!.start)} - ${DateFormat('MMM d, yyyy').format(_selectedDateRange!.end)}',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _selectedDateRange = null),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2), shape: BoxShape.circle),
+                  child: Icon(Icons.close_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildRecentResultsTable(List<MedicalReport> validReports, Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
