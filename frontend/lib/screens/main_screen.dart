@@ -986,7 +986,14 @@ class _MainScreenState extends State<MainScreen> {
                 const SizedBox(width: 8),
                 Text('Comparative Trends', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
                 const Spacer(),
-                Text('${_selectedMultiAttributes.length} metrics', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                GestureDetector(
+                  onTap: () => _showMultiFullScreenChart(validReports, testKeyToName, lines, minX, maxX, minY, maxY, padding),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
+                    child: Icon(Icons.fullscreen_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 28),
@@ -1075,49 +1082,310 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _showMultiFullScreenChart(List<MedicalReport> validReports, Map<String, String> testKeyToName, List<LineChartBarData> lines, double minX, double maxX, double minY, double maxY, double padding) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return FadeTransition(
+            opacity: animation,
+            child: Scaffold(
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.98),
+              body: SafeArea(
+                child: Column(
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+                              child: Icon(Icons.close_rounded, size: 20, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Comparative Trends', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+                                Text('${_selectedMultiAttributes.length} Attributes Overlay', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(gradient: AppTheme.accentGradient(context), borderRadius: BorderRadius.circular(12)),
+                            child: const Icon(Icons.stacked_line_chart_rounded, size: 20, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Large Chart
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
+                        child: LineChart(
+                          LineChartData(
+                            minX: minX, maxX: maxX,
+                            minY: minY - padding, maxY: maxY + padding,
+                            gridData: FlGridData(
+                              show: true,
+                              drawVerticalLine: true,
+                              getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 0.8),
+                              getDrawingVerticalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 0.5),
+                            ),
+                            titlesData: FlTitlesData(
+                              show: true,
+                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true, reservedSize: 40,
+                                  interval: (validReports.length > 8) ? (validReports.length / 5).ceilToDouble() : 1,
+                                  getTitlesWidget: (value, meta) {
+                                    int index = value.toInt();
+                                    if (index >= 0 && index < validReports.length) {
+                                      final report = validReports[index];
+                                      final date = _parseDate(report.structuredData?.date, report.uploadTime);
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 10.0),
+                                        child: Text(DateFormat('MMM d, yyyy').format(date), style: const TextStyle(fontSize: 11)),
+                                      );
+                                    }
+                                    return const SizedBox();
+                                  },
+                                ),
+                              ),
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true, reservedSize: 48,
+                                  getTitlesWidget: (value, meta) {
+                                    return Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11));
+                                  },
+                                ),
+                              ),
+                            ),
+                            borderData: FlBorderData(show: false),
+                            lineBarsData: lines,
+                            lineTouchData: LineTouchData(
+                              touchTooltipData: LineTouchTooltipData(
+                                getTooltipColor: (touchedSpot) => Theme.of(context).colorScheme.surface,
+                                getTooltipItems: (touchedSpots) {
+                                  return touchedSpots.map((spot) {
+                                    final testKey = _selectedMultiAttributes.elementAt(spot.barIndex);
+                                    return LineTooltipItem(
+                                      '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(2)}',
+                                      TextStyle(color: _lineColors[spot.barIndex % _lineColors.length], fontWeight: FontWeight.w700, fontSize: 13),
+                                    );
+                                  }).toList();
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Legend
+                    Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: GlassCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Wrap(
+                          spacing: 20,
+                          runSpacing: 12,
+                          children: List.generate(_selectedMultiAttributes.length, (index) {
+                            final testKey = _selectedMultiAttributes.elementAt(index);
+                            final color = _lineColors[index % _lineColors.length];
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                                const SizedBox(width: 8),
+                                Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                              ],
+                            );
+                          }),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildAttributeSelector(Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: uniqueTestKeys.map((testKey) {
-              final isSelected = _selectedMultiAttributes.contains(testKey);
-              final displayName = testKeyToName[testKey] ?? testKey;
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: FilterChip(
-                  label: Text(displayName),
-                  selected: isSelected,
-                  onSelected: (selected) {
+    List<Widget> profileWidgets = [];
+
+    for (var entry in _medicalCategories.entries) {
+      final category = entry.key;
+      final categoryKeys = entry.value;
+      final availableKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList();
+
+      if (availableKeys.isNotEmpty) {
+        int selectedInCategory = availableKeys.where((k) => _selectedMultiAttributes.contains(k)).length;
+        
+        profileWidgets.add(
+          Padding(
+            padding: const EdgeInsets.only(right: 8, bottom: 8),
+            child: MenuAnchor(
+              builder: (context, controller, child) {
+                return OutlinedButton(
+                  onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    side: BorderSide(
+                      color: selectedInCategory > 0 
+                          ? Theme.of(context).colorScheme.primary 
+                          : Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                      width: selectedInCategory > 0 ? 1.5 : 1,
+                    ),
+                    backgroundColor: selectedInCategory > 0 
+                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.05) 
+                        : Colors.transparent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(category, style: TextStyle(
+                        fontSize: 13, 
+                        fontWeight: selectedInCategory > 0 ? FontWeight.w700 : FontWeight.w500,
+                        color: selectedInCategory > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+                      )),
+                      const SizedBox(width: 6),
+                      if (selectedInCategory > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
+                          child: Text(selectedInCategory.toString(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Icon(Icons.arrow_drop_down, size: 18, color: selectedInCategory > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant),
+                    ],
+                  ),
+                );
+              },
+              menuChildren: availableKeys.map((testKey) {
+                final isSelected = _selectedMultiAttributes.contains(testKey);
+                final displayName = testKeyToName[testKey] ?? testKey;
+                return MenuItemButton(
+                  onPressed: () {
                     setState(() {
-                      if (selected) {
-                        _selectedMultiAttributes.add(testKey);
-                      } else {
+                      if (isSelected) {
                         _selectedMultiAttributes.remove(testKey);
+                      } else {
+                        _selectedMultiAttributes.add(testKey);
                       }
                     });
                   },
-                  selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-                  checkmarkColor: Theme.of(context).colorScheme.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  labelStyle: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+                  leadingIcon: Icon(
+                    isSelected ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
+                    color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 20,
                   ),
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3) : Colors.transparent)),
+                  child: Text(displayName, style: TextStyle(
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                    color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+                  )),
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      }
+    }
+
+    // "Other" category for keys not in predefined categories
+    final categorizedKeys = _medicalCategories.values.expand((e) => e).toSet();
+    final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList();
+    if (otherKeys.isNotEmpty) {
+      int selectedInOther = otherKeys.where((k) => _selectedMultiAttributes.contains(k)).length;
+      profileWidgets.add(
+        Padding(
+          padding: const EdgeInsets.only(right: 8, bottom: 8),
+          child: MenuAnchor(
+            builder: (context, controller, child) {
+              return OutlinedButton(
+                onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  side: BorderSide(
+                    color: selectedInOther > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                    width: selectedInOther > 0 ? 1.5 : 1,
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Other Metrics', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 6),
+                    if (selectedInOther > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
+                        child: Text(selectedInOther.toString(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    const Icon(Icons.arrow_drop_down, size: 18),
+                  ],
+                ),
+              );
+            },
+            menuChildren: otherKeys.map((testKey) {
+              final isSelected = _selectedMultiAttributes.contains(testKey);
+              final displayName = testKeyToName[testKey] ?? testKey;
+              return MenuItemButton(
+                onPressed: () {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedMultiAttributes.remove(testKey);
+                    } else {
+                      _selectedMultiAttributes.add(testKey);
+                    }
+                  });
+                },
+                leadingIcon: Icon(isSelected ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded, color: isSelected ? Theme.of(context).colorScheme.primary : null, size: 20),
+                child: Text(displayName, style: TextStyle(fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400)),
               );
             }).toList(),
           ),
         ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Wrap(
+          children: profileWidgets,
+        ),
+        if (_selectedMultiAttributes.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: TextButton.icon(
+              onPressed: () => setState(() => _selectedMultiAttributes.clear()),
+              icon: const Icon(Icons.clear_all_rounded, size: 16),
+              label: const Text('Clear All', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error, padding: EdgeInsets.zero, minimumSize: const Size(0, 0)),
+            ),
+          ),
       ],
-    );
+      );
   }
 
   Widget _buildRecentResultsTable(List<MedicalReport> validReports, Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
