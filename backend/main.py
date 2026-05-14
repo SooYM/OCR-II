@@ -618,16 +618,19 @@ def backend_normalize_value(val):
 async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str = None):
     """
     Compares the newly parsed data with existing reports for the user.
-    A report is considered a duplicate if:
-    1. The normalized collected date matches.
-    2. >80% of the normalized biomarker values match.
+    Uses a multi-attribute scoring system.
     """
     if not new_data:
         return False
     
+    # Extract identifiers
     new_date = backend_normalize_date(new_data.get("collected", ""))
+    new_medid = str(new_data.get("medid", "")).strip().upper()
+    new_labref = str(new_data.get("labreference", "")).strip().upper()
     
-    # Fetch all sent/completed reports for this user
+    print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, LabRef={new_labref}")
+    
+    # Fetch all reports for this user
     if STORAGE_ENGINE == "supabase" and supabase:
         response = supabase.table("reports").select("*").eq("user_id", user_id).execute()
         existing_reports = response.data or []
@@ -640,50 +643,58 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
         conn.close()
 
     for report in existing_reports:
-        # Skip the current report if we're checking mid-upload
+        # Skip current
         if exclude_id and report.get("id") == exclude_id:
             continue
 
-        # Load structured data if it's a string (SQLite)
         s_data = report.get("structured_data")
         if isinstance(s_data, str):
-            try:
-                s_data = json.loads(s_data)
-            except:
-                continue
+            try: s_data = json.loads(s_data)
+            except: continue
         
-        if not s_data:
-            continue
+        if not s_data: continue
             
-        # 1. Compare dates
-        existing_date = backend_normalize_date(s_data.get("collected", ""))
-        
-        # We only consider it a duplicate if the dates match
-        if new_date and existing_date and new_date == existing_date:
-            # 2. Check for numeric result overlap
-            match_count = 0
-            total_keys = 0
+        # 1. Extract existing identifiers
+        old_date = backend_normalize_date(s_data.get("collected", ""))
+        old_medid = str(s_data.get("medid", "")).strip().upper()
+        old_labref = str(s_data.get("labreference", "")).strip().upper()
+
+        # --- CRITERIA 1: Exact Lab Reference Match ---
+        # If the unique lab reference matches, it is definitely a duplicate
+        if new_labref and old_labref and new_labref == old_labref:
+            print(f" -> MATCH FOUND: Lab Reference ({new_labref})")
+            return True
+
+        # --- CRITERIA 2: Patient ID + Date + Attribute Overlap ---
+        # If Patient ID and Date match, check for high overlap in test values
+        if new_date and old_date and new_date == old_date:
+            # Match Patient ID if both exist
+            medid_match = (not new_medid or not old_medid or new_medid == old_medid)
             
-            # Use STAGING_SCHEMA_KEYS to find biomarkers (exclude metadata)
-            metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
-            
-            for key in STAGING_SCHEMA_KEYS:
-                if key in metadata_keys:
-                    continue
+            if medid_match:
+                # Compare clinical results
+                match_count = 0
+                total_keys = 0
+                metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
                 
-                new_val = backend_normalize_value(new_data.get(key, ""))
-                old_val = backend_normalize_value(s_data.get(key, ""))
-                
-                if new_val or old_val:
-                    total_keys += 1
-                    if new_val == old_val:
-                        match_count += 1
-            
-            if total_keys > 0:
-                overlap = (match_count / total_keys) * 100
-                if overlap >= 80:
-                    return True
+                for key in STAGING_SCHEMA_KEYS:
+                    if key in metadata_keys: continue
                     
+                    new_val = backend_normalize_value(new_data.get(key, ""))
+                    old_val = backend_normalize_value(s_data.get(key, ""))
+                    
+                    if new_val or old_val:
+                        total_keys += 1
+                        if new_val == old_val:
+                            match_count += 1
+                
+                if total_keys > 0:
+                    overlap = (match_count / total_keys) * 100
+                    print(f" -> CHECKING: Date={old_date}, Overlap={overlap:.1f}% ({match_count}/{total_keys})")
+                    if overlap >= 85: # High threshold for automatic block
+                        return True
+
+    print(" -> NO DUPLICATE FOUND")
     return False
 
 # ─── API Endpoints ──────────────────────────────────────────────────────────
