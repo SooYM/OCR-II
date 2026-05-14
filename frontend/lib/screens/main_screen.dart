@@ -313,8 +313,8 @@ class _MainScreenState extends State<MainScreen> {
                 child: const Icon(Icons.cloud_off_rounded, size: 48, color: AppTheme.error),
               ),
               const SizedBox(height: 24),
-              const Text('Unable to Load Dashboard',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Text('Unable to Load Dashboard',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
               const SizedBox(height: 8),
               Text(_dashboardError ?? 'An unknown error occurred.',
                   textAlign: TextAlign.center,
@@ -360,7 +360,7 @@ class _MainScreenState extends State<MainScreen> {
                 child: const Icon(Icons.auto_awesome, color: AppTheme.accent, size: 18),
               ),
               const SizedBox(width: 12),
-              const Text('AI Health Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Text('AI Health Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
             ],
           ),
           const SizedBox(height: 16),
@@ -370,13 +370,13 @@ class _MainScreenState extends State<MainScreen> {
             MarkdownBody(
               data: _aiAnalysis!,
               styleSheet: MarkdownStyleSheet(
-                p: const TextStyle(color: AppTheme.textSecondary, fontSize: 14, height: 1.6),
-                strong: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
-                em: const TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
-                h1: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w800, height: 1.5),
-                h2: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
+                p: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? AppTheme.textSecondary, fontSize: 14, height: 1.6),
+                strong: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
+                em: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? AppTheme.textSecondary, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
+                h1: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.w800, height: 1.5),
+                h2: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
                 h3: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
-                listBullet: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                listBullet: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? AppTheme.textSecondary, fontSize: 14),
                 blockSpacing: 10,
               ),
             )
@@ -762,7 +762,7 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                  child: Text('🩸 $category', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                  child: Text('🩸 $category', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
                 ),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -796,9 +796,9 @@ class _MainScreenState extends State<MainScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                child: Text('🔬 Other Biomarkers', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                child: Text('🔬 Other Biomarkers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
               ),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -819,9 +819,9 @@ class _MainScreenState extends State<MainScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Text('Biomarker Trends', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text('Biomarker Trends', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
         ),
         ...categoryWidgets,
       ],
@@ -883,9 +883,9 @@ class _MainScreenState extends State<MainScreen> {
             const SizedBox(height: 20),
 
             // Data Table
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              child: Text('Biomarker Analytics Table', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Text('Biomarker Analytics Table', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
             ),
             const SizedBox(height: 8),
             GlassCard(
@@ -902,8 +902,8 @@ class _MainScreenState extends State<MainScreen> {
                     dataRowMinHeight: 48,
                     dataRowMaxHeight: 48,
                     columns: [
-                      const DataColumn(
-                        label: Text('Biomarker', style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                      DataColumn(
+                        label: Text('Biomarker', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
                       ),
                       ...validReports.map((r) {
                         final date = _parseDate(r.structuredData?.date, r.uploadTime);
@@ -925,7 +925,7 @@ class _MainScreenState extends State<MainScreen> {
                             final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
                             return DataCell(
                               Text(valueText, style: TextStyle(
-                                color: result.value == '-' ? AppTheme.textTertiary : AppTheme.textPrimary,
+                                color: result.value == '-' ? (Theme.of(context).textTheme.bodySmall?.color ?? AppTheme.textTertiary) : Theme.of(context).colorScheme.onSurface,
                                 fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
                               )),
                             );
@@ -947,9 +947,9 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildBottomNavBar() {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surface,
-        border: const Border(top: BorderSide(color: AppTheme.surfaceBorder, width: 1)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, -4))],
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: Theme.of(context).dividerTheme.color ?? AppTheme.surfaceBorder, width: 1)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
         top: false,
@@ -985,7 +985,7 @@ class _MainScreenState extends State<MainScreen> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: isActive ? AppTheme.surfaceVariant.withValues(alpha: 0.6) : Colors.transparent,
+            color: isActive ? Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6) : Colors.transparent,
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           ),
           child: Column(
@@ -1000,14 +1000,14 @@ class _MainScreenState extends State<MainScreen> {
               ShaderMask(
                 shaderCallback: (bounds) {
                   if (isActive) return gradient.createShader(bounds);
-                  return const LinearGradient(colors: [AppTheme.textTertiary, AppTheme.textTertiary]).createShader(bounds);
+                  return LinearGradient(colors: [Theme.of(context).textTheme.bodySmall?.color ?? AppTheme.textTertiary, Theme.of(context).textTheme.bodySmall?.color ?? AppTheme.textTertiary]).createShader(bounds);
                 },
                 child: Icon(isActive ? activeIcon : icon, size: 24, color: Colors.white),
               ),
               const SizedBox(height: 4),
               Text(label,
                   style: TextStyle(fontSize: 10, fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                      color: isActive ? AppTheme.textPrimary : AppTheme.textTertiary, letterSpacing: 0.2)),
+                      color: isActive ? Theme.of(context).colorScheme.onSurface : Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.6) ?? AppTheme.textTertiary, letterSpacing: 0.2)),
             ],
           ),
         ),

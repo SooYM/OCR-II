@@ -47,7 +47,7 @@ class AppTheme {
     return LinearGradient(
       colors: isDark 
           ? [background, const Color(0xFF16162D)] 
-          : [backgroundLight, const Color(0xFFE8EBF9)],
+          : [backgroundLight, const Color(0xFFF2F2F7)],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     );
@@ -86,16 +86,16 @@ class AppTheme {
 
   // ─── Theme Data ────────────────────────────────────────────────────────────
   // ─── Surface Colors (Light) ──────────────────────────────────────────────────
-  static const Color backgroundLight = Color(0xFFF8F9FE);
+  static const Color backgroundLight = Color(0xFFFFFFFF);
   static const Color surfaceLight = Color(0xFFFFFFFF);
-  static const Color surfaceVariantLight = Color(0xFFF1F4FF);
-  static const Color surfaceElevatedLight = Color(0xFFE8EBF9);
-  static const Color surfaceBorderLight = Color(0xFFE0E4F2);
+  static const Color surfaceVariantLight = Color(0xFFF5F5F7);
+  static const Color surfaceElevatedLight = Color(0xFFF2F2F7);
+  static const Color surfaceBorderLight = Color(0xFFE5E5EA);
 
   // ─── Text Colors (Light) ─────────────────────────────────────────────────────
-  static const Color textPrimaryLight = Color(0xFF0F0F1A);
-  static const Color textSecondaryLight = Color(0xFF40405A);
-  static const Color textTertiaryLight = Color(0xFF5A5A7A);
+  static const Color textPrimaryLight = Color(0xFF000000);
+  static const Color textSecondaryLight = Color(0xFF3A3A3C);
+  static const Color textTertiaryLight = Color(0xFF8E8E93);
 
   // ─── Shadows (Light) ─────────────────────────────────────────────────────────
   static List<BoxShadow> cardShadowLight = [

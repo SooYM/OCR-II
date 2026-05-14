@@ -297,8 +297,8 @@ class _AuthScreenState extends State<AuthScreen>
                                 onTap: _isLoading ? null : _toggleMode,
                                 child: Text(
                                   _isLogin ? 'Register' : 'Login',
-                                  style: const TextStyle(
-                                    color: AppTheme.primaryLight,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.primary,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -322,10 +322,10 @@ class _AuthScreenState extends State<AuthScreen>
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.settings, size: 14, color: AppTheme.textTertiary),
+                          Icon(Icons.settings, size: 14, color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary),
                           const SizedBox(width: 6),
-                          const Text('Server Settings',
-                              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+                          Text('Server Settings',
+                              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -353,10 +353,10 @@ class _AuthScreenState extends State<AuthScreen>
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
-      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+      style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: AppTheme.textTertiary, size: 20),
+        prefixIcon: Icon(icon, color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary, size: 20),
         suffixIcon: suffixIcon,
       ),
       onSubmitted: (_) => _submit(),

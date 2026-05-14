@@ -859,17 +859,17 @@ class _CaptureScreenState extends State<CaptureScreen>
             const SizedBox(height: 14),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
-                color: AppTheme.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: const TextStyle(
-                color: AppTheme.textTertiary,
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary,
                 fontSize: 12,
               ),
             ),
@@ -881,7 +881,7 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   Widget _buildProcessingOverlay() {
     return Container(
-      color: AppTheme.background.withOpacity(0.92),
+      color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.92),
       width: double.infinity,
       height: double.infinity,
       child: Center(
@@ -907,10 +907,10 @@ class _CaptureScreenState extends State<CaptureScreen>
                 Text(
                   _statusMessage,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -927,8 +927,8 @@ class _CaptureScreenState extends State<CaptureScreen>
                 const SizedBox(height: 12),
                 Text(
                   '${(_progress * 100).toInt()}%',
-                  style: const TextStyle(
-                    color: AppTheme.textTertiary,
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7) ?? AppTheme.textTertiary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
