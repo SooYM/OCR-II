@@ -2012,6 +2012,9 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
                   ],
                 ),
               ),
+              // Dynamic spacer to allow scrolling past the button when keyboard is open
+              if (MediaQuery.of(context).viewInsets.bottom > 0)
+                const SizedBox(height: 250),
               const SizedBox(height: 16),
             ],
           ),
