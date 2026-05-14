@@ -684,7 +684,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   children: [
                     TextFormField(
                       initialValue: result.testItem,
-                      onChanged: (v) {
+                      readOnly: isMatched,
+                      onChanged: isMatched ? null : (v) {
                         result.testItem = v;
                         _hasChanges = true;
                         // Re-run matching for this item
@@ -704,9 +705,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                           }
                         });
                       },
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
+                        color: isMatched ? Theme.of(context).colorScheme.onSurfaceVariant : null,
                       ),
                       decoration: const InputDecoration(
                         hintText: 'Test item name',
@@ -783,6 +785,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 child: _buildMiniField(
                   label: 'Unit',
                   value: result.unit ?? '',
+                  readOnly: isMatched,
                   onChanged: (v) {
                     result.unit = v;
                     _hasChanges = true;
@@ -810,6 +813,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     required String label,
     required String value,
     required Function(String) onChanged,
+    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -826,11 +830,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
         const SizedBox(height: 4),
         TextFormField(
           initialValue: value,
-          onChanged: onChanged,
+          readOnly: readOnly,
+          onChanged: readOnly ? null : onChanged,
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.secondary,
+            color: readOnly ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.secondary,
           ),
           decoration: InputDecoration(
             isDense: true,
