@@ -10,6 +10,7 @@ import '../models/report_model.dart';
 import '../utils/formatters.dart';
 import '../utils/date_utils.dart';
 import '../utils/biomarker_dictionary.dart';
+import '../utils/unit_converter.dart';
 import 'package:intl/intl.dart';
 
 /// Screen 2: Verify and correct extracted data, then send.
@@ -28,6 +29,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
   bool _isSending = false;
   bool _hasChanges = false;
   final Set<int> _matchedIndices = {};
+  final Set<int> _convertedIndices = {};
   final Map<int, BiomarkerEntry> _matchedEntries = {};
 
   @override
@@ -66,8 +68,18 @@ class _VerifyScreenState extends State<VerifyScreen> {
         _matchedEntries[i] = match;
         // Set key if missing
         result.key ??= match.key;
-        // Set unit if empty or non-standard
-        if ((result.unit == null || result.unit!.isEmpty) && match.unit.isNotEmpty) {
+        
+        // Auto convert unit and value if needed
+        if (match.unit.isNotEmpty && result.unit != null && result.unit!.isNotEmpty) {
+          final conversion = UnitConverter.convert(match.key, result.value, result.unit, match.unit);
+          if (conversion.wasConverted) {
+            result.value = conversion.convertedValue;
+            _convertedIndices.add(i);
+          }
+        }
+
+        // Set unit if empty or non-standard or we just converted it
+        if ((result.unit == null || result.unit!.isEmpty || match.unit.isNotEmpty) && match.unit.isNotEmpty) {
           result.unit = match.unit;
         }
         // Set reference range if empty
@@ -703,6 +715,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
                               _matchedIndices.add(index);
                               _matchedEntries[index] = newMatch;
                               result.key = newMatch.key;
+
+                              // Auto convert unit and value if needed
+                              if (newMatch.unit.isNotEmpty && result.unit != null && result.unit!.isNotEmpty) {
+                                final conversion = UnitConverter.convert(newMatch.key, result.value, result.unit, newMatch.unit);
+                                if (conversion.wasConverted) {
+                                  result.value = conversion.convertedValue;
+                                  _convertedIndices.add(index);
+                                }
+                              }
+
                               if (newMatch.unit.isNotEmpty) result.unit = newMatch.unit;
                               if (newMatch.referenceRange != null && (result.referenceRange == null || result.referenceRange!.isEmpty)) {
                                 result.referenceRange = newMatch.referenceRange;
@@ -728,16 +750,41 @@ class _VerifyScreenState extends State<VerifyScreen> {
                     if (isMatched && matchEntry != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF4CAF50).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '→ ${matchEntry.standardName}  •  ${matchEntry.unit}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF4CAF50)),
-                          ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4CAF50).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '→ ${matchEntry.standardName}  •  ${matchEntry.unit}',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF4CAF50)),
+                              ),
+                            ),
+                            if (_convertedIndices.contains(index))
+                              Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.auto_fix_high_rounded, size: 10, color: Theme.of(context).colorScheme.primary),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Auto-Converted',
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     if (!isMatched && result.testItem.isNotEmpty)
