@@ -152,7 +152,13 @@ class _MainScreenState extends State<MainScreen> {
   DateTime _parseDate(String? dateStr, String uploadTime) {
     if (dateStr == null || dateStr.trim().isEmpty) return DateTime.parse(uploadTime);
     
-    final dt = DateTime.tryParse(dateStr);
+    // Normalize spaces around separators (e.g. "15 / 05 / 2026" → "15/05/2026")
+    final normalized = dateStr.trim()
+        .replaceAll(' / ', '/')
+        .replaceAll(' - ', '-')
+        .replaceAll(' . ', '.');
+    
+    final dt = DateTime.tryParse(normalized);
     if (dt != null) return dt;
 
     final formats = [
@@ -171,7 +177,7 @@ class _MainScreenState extends State<MainScreen> {
 
     for (var format in formats) {
       try {
-        return format.parse(dateStr.trim());
+        return format.parse(normalized);
       } catch (_) {}
     }
 
