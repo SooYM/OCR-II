@@ -545,6 +545,7 @@ async def mark_report_sent(report_id: str):
         if report.get("structured_data"):
             # Ensure only valid columns are inserted into staging_medical_records
             final_data = get_clean_flat_data(report["structured_data"])
+            final_data["report_id"] = report_id  # Link back to reports table for cascade delete
             try:
                 supabase.table("staging_medical_records").insert(final_data).execute()
             except Exception as e:
@@ -1348,6 +1349,12 @@ async def delete_report(report_id: str, current_user: dict = Depends(get_current
         raise HTTPException(status_code=403, detail="Forbidden")
         
     if STORAGE_ENGINE == "supabase" and supabase:
+        # Delete from staging_medical_records first (child table)
+        try:
+            supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
+        except Exception as e:
+            print(f"[DELETE STAGING] Warning: {e}")
+        # Then delete from reports
         supabase.table("reports").delete().eq("id", report_id).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
