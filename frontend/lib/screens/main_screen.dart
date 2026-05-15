@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:animate_do/animate_do.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -16,6 +15,7 @@ import 'ai_chat_screen.dart';
 import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
 import 'settings_screen.dart';
+import '../utils/biomarker_dictionary.dart';
 
 /// Main screen with bottom navigation: Dashboard, Scan, My Reports.
 class MainScreen extends StatefulWidget {
@@ -49,60 +49,9 @@ class _MainScreenState extends State<MainScreen> {
     const Color(0xFFA1887F), // Brown
   ];
 
-  static const Map<String, List<String>> _medicalCategories = {
-    'Urine': [
-      'urine_colour', 'appearance', 'specific_gravity', 'ph', 'proteins', 'glucose', 
-      'bilirubin', 'ketones', 'blood', 'urobilinogen', 'nitrites', 'wbc_pus_cells_hpf', 
-      'rbc', 'epithelial_cells_hpf', 'casts', 'crystals', 'others'
-    ],
-    'CBC': [
-      'hemoglobin_g_dl', 'rbc_count_mil_ul', 'hematocrit_pct', 'mcv_fl', 'mch_pg', 
-      'mchc_g_dl', 'rdw_cv_pct', 'rdw_sd_fl', 'wbc_cells_ul', 'neutrophils_pct', 
-      'lymphocytes_pct', 'eosinophils_pct', 'monocytes_pct', 'basophils_pct', 
-      'abs_neutrophils', 'abs_lymphocytes', 'abs_monocytes', 'abs_eosinophils', 'abs_basophils'
-    ],
-    'Platelet Profile': [
-      'platelet_count_x10_3_ul', 'mpv_fl', 'platelet_rdw_pct', 'pct_pct', 'p_lcr_pct', 
-      'img_pct', 'imm_pct', 'iml_pct', 'lic_pct'
-    ],
-    'Lipid Profile': [
-      'total_cholesterol_mg_dl', 'hdl_mg_dl', 'ldl_mg_dl', 'vldl_mg_dl', 'triglycerides_mg_dl', 
-      'non_hdl_mg_dl', 'total_hdl_ratio', 'ldl_hdl_ratio', 'hdl_ldl_ratio'
-    ],
-    'Liver Function': [
-      'bilirubin_total_mg_dl', 'bilirubin_direct_mg_dl', 'bilirubin_indirect_mg_dl', 'alp_u_l', 
-      'alt_sgpt_u_l', 'ast_sgot_u_l', 'ggt_u_l', 'protein_total_g_dl', 'albumin_g_dl', 
-      'globulin_g_dl', 'a_g_ratio'
-    ],
-    'Kidney Function': [
-      'creatinine_mg_dl', 'urea_mg_dl', 'bun_mg_dl', 'bun_creatinine_ratio', 'sodium_mmol_l', 
-      'potassium_mmol_l', 'chloride_mmol_l', 'uric_acid_mg_dl', 'egfr_ml_min_173m2'
-    ],
-    'Iron Profile': [
-      'iron_ug_dl', 'uibc_ug_dl', 'tibc_ug_dl', 'transferrin_saturation_pct'
-    ],
-    'HbA1c': [
-      'hba1c_pct', 'estimated_avg_glucose_mg_dl', 'hbf_pct'
-    ],
-    'Urine ACR': [
-      'urine_albumin_mg_l', 'urine_creatinine_mg_dl', 'albumin_creatinine_ratio'
-    ],
-    'Calcium & Phos': [
-      'calcium_mg_dl', 'phosphorus_mg_dl'
-    ],
-    'Thyroid Profile': [
-      'tt3_ng_dl', 'tt4_ug_dl', 'tsh_uiu_ml'
-    ],
-    'Glucose - Fasting': [
-      'fasting_glucose_mg_dl'
-    ],
-    'Glucose - PP': [
-      'postprandial_glucose_mg_dl'
-    ],
-    'Glucose (Diagnopath)': [
-      'fbs_mg_dl', 'plbs_mg_dl'
-    ],
-  };
+  bool _isMultiAttributeExpanded = false;
+
+  // Categories moved to BiomarkerDictionary.medicalCategories
 
   @override
   void initState() {
@@ -227,70 +176,67 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildDashboardHeader() {
-    return FadeInDown(
-      duration: const Duration(milliseconds: 500),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
-          border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
-        ),
-        child: Row(
-          children: [
-            Container(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+        border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: AppTheme.accentGradient(context),
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            ),
+            child: const Icon(Icons.dashboard_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Dashboard',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
+                Text('Healthcare Biomarker Analytics',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: _showSimplifiedDatePicker,
+            child: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                gradient: AppTheme.accentGradient(context),
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                color: _selectedDateRange != null 
+                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+                border: _selectedDateRange != null ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5) : null,
               ),
-              child: const Icon(Icons.dashboard_rounded, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Dashboard',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                          color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
-                  Text('Healthcare Biomarker Analytics',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                ],
+              child: Icon(
+                _selectedDateRange != null ? Icons.date_range_rounded : Icons.calendar_today_rounded, 
+                size: 20,
+                color: _selectedDateRange != null ? Theme.of(context).colorScheme.primary : null,
               ),
             ),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: _showSimplifiedDatePicker,
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _selectedDateRange != null 
-                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: _selectedDateRange != null ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5) : null,
-                ),
-                child: Icon(
-                  _selectedDateRange != null ? Icons.date_range_rounded : Icons.calendar_today_rounded, 
-                  size: 20,
-                  color: _selectedDateRange != null ? Theme.of(context).colorScheme.primary : null,
-                ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _fetchDashboardData,
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: const Icon(Icons.refresh_rounded, size: 20),
             ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _fetchDashboardData,
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.refresh_rounded, size: 20),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -303,7 +249,10 @@ class _MainScreenState extends State<MainScreen> {
       builder: (context) {
         return _FilterBottomSheetContent(
           initialRange: _selectedDateRange,
-          onApply: (range) => setState(() => _selectedDateRange = range),
+          onApply: (range) {
+            setState(() => _selectedDateRange = range);
+            _chatKey.currentState?.updateDateRange(range);
+          },
           onOpenCalendar: () {
             Navigator.pop(context);
             _showCalendarPicker();
@@ -333,51 +282,50 @@ class _MainScreenState extends State<MainScreen> {
     );
     if (picked != null) {
       setState(() => _selectedDateRange = picked);
+      _chatKey.currentState?.updateDateRange(picked);
     }
   }
 
   Widget _buildDashboardError() {
     return Center(
-      child: FadeInUp(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: Icon(Icons.cloud_off_rounded, size: 48, color: Theme.of(context).colorScheme.error),
-              ),
-              const SizedBox(height: 24),
-              Text('Unable to Load Dashboard',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
-              const SizedBox(height: 8),
-              Text(_dashboardError ?? 'An unknown error occurred.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, height: 1.5)),
-              const SizedBox(height: 28),
-              GestureDetector(
-                onTap: _fetchDashboardData,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient(context),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: AppTheme.primaryShadow(context),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
-                      SizedBox(width: 10),
-                      Text('Retry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
-                    ],
-                  ),
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1), shape: BoxShape.circle),
+              child: Icon(Icons.cloud_off_rounded, size: 48, color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 24),
+            Text('Unable to Load Dashboard',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+            const SizedBox(height: 8),
+            Text(_dashboardError ?? 'An unknown error occurred.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, height: 1.5)),
+            const SizedBox(height: 28),
+            GestureDetector(
+              onTap: _fetchDashboardData,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient(context),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: AppTheme.primaryShadow(context),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 10),
+                    Text('Retry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -386,7 +334,6 @@ class _MainScreenState extends State<MainScreen> {
   String _getGreeting() {
     final hour = DateTime.now().hour;
     final name = AuthService.currentUser?['name'] ?? 'User';
-    final firstName = name.split(' ').first;
     
     String greeting;
     if (hour >= 5 && hour < 12) {
@@ -399,41 +346,36 @@ class _MainScreenState extends State<MainScreen> {
       greeting = 'Good Night';
     }
     
-    return '$greeting, $firstName';
+    return '$greeting, $name';
   }
 
   Widget _buildAiAnalysis() {
-    return GestureDetector(
-      onTap: () => setState(() => _currentIndex = 2),
-      child: GlassCard(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                gradient: AppTheme.accentGradient(context),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
+    return GlassCard(
+      padding: const EdgeInsets.all(20),
+      showBorder: false,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: AppTheme.accentGradient(context),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_getGreeting(), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
-                  const SizedBox(height: 4),
-                  Text('Chat with AI about your health data', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                ],
-              ),
+            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_getGreeting(), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.5)),
+              ],
             ),
-            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -751,8 +693,8 @@ class _MainScreenState extends State<MainScreen> {
     List<Widget> categoryWidgets = [];
     Set<String> processedKeys = {};
 
-    for (var category in _medicalCategories.keys) {
-      final categoryKeys = _medicalCategories[category]!;
+    for (var category in BiomarkerDictionary.medicalCategories.keys) {
+      final categoryKeys = BiomarkerDictionary.medicalCategories[category]!;
       final presentKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList();
       
       if (presentKeys.isNotEmpty) {
@@ -838,6 +780,49 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildMultiAttributeHeader() {
+    return GestureDetector(
+      onTap: () => setState(() => _isMultiAttributeExpanded = !_isMultiAttributeExpanded),
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        backgroundColor: _isMultiAttributeExpanded 
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.05)
+            : Theme.of(context).colorScheme.surface,
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.stacked_line_chart_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Comparative Trends', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+                  Text(
+                    _isMultiAttributeExpanded 
+                        ? 'Select profiles below to drill across attributes' 
+                        : 'Tap to expand and compare multiple attributes', 
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              _isMultiAttributeExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDashboardContent() {
     // Filter reports based on the selected date range
     final filteredReports = _reports.where((r) {
@@ -916,13 +901,12 @@ class _MainScreenState extends State<MainScreen> {
           const SizedBox(height: 32),
           
           // Multi-Attribute Comparison Section
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text('Comparative Analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
-          ),
-          _buildAttributeSelector(uniqueTestKeys, testKeyToName),
-          const SizedBox(height: 12),
-          _buildMultiAttributeChart(validReports, testKeyToName),
+          _buildMultiAttributeHeader(),
+          if (_isMultiAttributeExpanded) ...[
+            _buildAttributeSelector(uniqueTestKeys, testKeyToName),
+            const SizedBox(height: 12),
+            _buildMultiAttributeChart(validReports, testKeyToName),
+          ],
           const SizedBox(height: 40),
           
           _buildCategorizedGraphs(validReports, uniqueTestKeys, testKeyToName),
@@ -936,19 +920,17 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildMultiAttributeChart(List<MedicalReport> validReports, Map<String, String> testKeyToName) {
     if (_selectedMultiAttributes.isEmpty) {
-      return FadeIn(
-        child: GlassCard(
-          padding: const EdgeInsets.all(48),
-          child: Center(
-            child: Column(
-              children: [
-                Icon(Icons.add_chart_rounded, size: 48, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
-                const SizedBox(height: 16),
-                Text('Select multiple metrics above to compare their trends in one view.', 
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
-              ],
-            ),
+      return GlassCard(
+        padding: const EdgeInsets.all(48),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.add_chart_rounded, size: 48, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)),
+              const SizedBox(height: 16),
+              Text('Select multiple metrics above to compare their trends in one view.', 
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+            ],
           ),
         ),
       );
@@ -1004,8 +986,7 @@ class _MainScreenState extends State<MainScreen> {
     double padding = (maxY - minY) * 0.2;
     if (padding <= 0) padding = 1.0;
 
-    return FadeInUp(
-      child: GlassCard(
+    return GlassCard(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1117,8 +1098,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   void _showMultiFullScreenChart(List<MedicalReport> validReports, Map<String, String> testKeyToName, List<LineChartBarData> lines, double minX, double maxX, double minY, double maxY, double padding) {
@@ -1275,7 +1255,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildAttributeSelector(Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
     List<Widget> profileWidgets = [];
 
-    for (var entry in _medicalCategories.entries) {
+    for (var entry in BiomarkerDictionary.medicalCategories.entries) {
       final category = entry.key;
       final categoryKeys = entry.value;
       final availableKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList();
@@ -1361,7 +1341,7 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     // "Other" category for keys not in predefined categories
-    final categorizedKeys = _medicalCategories.values.expand((e) => e).toSet();
+    final categorizedKeys = BiomarkerDictionary.medicalCategories.values.expand((e) => e).toSet();
     final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList();
     if (otherKeys.isNotEmpty) {
       int selectedInOther = otherKeys.where((k) => _selectedMultiAttributes.contains(k)).length;
@@ -1442,33 +1422,30 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildFilterActiveIndicator() {
-    return FadeInDown(
-      duration: const Duration(milliseconds: 300),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 20),
-        child: GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-          child: Row(
-            children: [
-              Icon(Icons.filter_list_alt, size: 18, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Filtering: ${DateFormat('MMM d, yyyy').format(_selectedDateRange!.start)} - ${DateFormat('MMM d, yyyy').format(_selectedDateRange!.end)}',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
-                ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+        child: Row(
+          children: [
+            Icon(Icons.filter_list_alt, size: 18, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Filtering: ${DateFormat('MMM d, yyyy').format(_selectedDateRange!.start)} - ${DateFormat('MMM d, yyyy').format(_selectedDateRange!.end)}',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
               ),
-              GestureDetector(
-                onTap: () => setState(() => _selectedDateRange = null),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2), shape: BoxShape.circle),
-                  child: Icon(Icons.close_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
-                ),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _selectedDateRange = null),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2), shape: BoxShape.circle),
+                child: Icon(Icons.close_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1477,7 +1454,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildRecentResultsTable(List<MedicalReport> validReports, Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
     final List<DataRow> rows = [];
 
-    for (var entry in _medicalCategories.entries) {
+    for (var entry in BiomarkerDictionary.medicalCategories.entries) {
       final category = entry.key;
       final categoryKeys = entry.value;
       final availableKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
@@ -1542,7 +1519,7 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     // Other metrics not in categories
-    final categorizedKeys = _medicalCategories.values.expand((e) => e).toSet();
+    final categorizedKeys = BiomarkerDictionary.medicalCategories.values.expand((e) => e).toSet();
     final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
     
     if (otherKeys.isNotEmpty) {

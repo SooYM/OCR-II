@@ -16,7 +16,10 @@ class GlassCard extends StatelessWidget {
     this.width,
     this.height,
     this.backgroundColor,
+    this.showBorder = true,
   });
+
+  final bool showBorder;
 
   @override
   Widget build(BuildContext context) {
@@ -29,9 +32,9 @@ class GlassCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor ?? Theme.of(context).colorScheme.surface.withOpacity(isDark ? 0.8 : 0.95),
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(
+        border: showBorder ? Border.all(
           color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
-        ),
+        ) : null,
         boxShadow: AppTheme.cardShadow(context),
       ),
       child: child,

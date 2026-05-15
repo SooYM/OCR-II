@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:animate_do/animate_do.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -109,52 +108,49 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
         child: Column(
           children: [
             // Header
-            FadeInDown(
-              duration: const Duration(milliseconds: 500),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
-                  border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+                border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.primaryGradient(context),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    ),
+                    child: const Icon(Icons.history_rounded, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('My Reports',
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                                color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
+                        Text(
+                          _reports != null ? '${_reports!.length} report(s)' : 'Loading...',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _loadReports,
+                    child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        gradient: AppTheme.primaryGradient(context),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.history_rounded, color: Colors.white, size: 22),
+                      child: const Icon(Icons.refresh_rounded, size: 20),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('My Reports',
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                                  color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
-                          Text(
-                            _reports != null ? '${_reports!.length} report(s)' : 'Loading...',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _loadReports,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.refresh_rounded, size: 20),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
@@ -175,28 +171,26 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
 
     if (_error != null) {
       return Center(
-        child: FadeInUp(
-          child: Padding(
-            padding: const EdgeInsets.all(40),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.error.withOpacity(0.1), shape: BoxShape.circle),
-                  child: Icon(Icons.cloud_off_rounded, size: 40, color: Theme.of(context).colorScheme.error),
-                ),
-                const SizedBox(height: 20),
-                Text(_error!, textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14)),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: _loadReports,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Retry'),
-                ),
-              ],
-            ),
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.error.withOpacity(0.1), shape: BoxShape.circle),
+                child: Icon(Icons.cloud_off_rounded, size: 40, color: Theme.of(context).colorScheme.error),
+              ),
+              const SizedBox(height: 20),
+              Text(_error!, textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14)),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: _loadReports,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Retry'),
+              ),
+            ],
           ),
         ),
       );
@@ -204,26 +198,24 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
 
     if (_reports == null || _reports!.isEmpty) {
       return Center(
-        child: FadeInUp(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.inbox_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 20),
-              Text('No reports yet',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
-              const SizedBox(height: 8),
-              const Text('Scan a medical report to get started',
-                  style: TextStyle(fontSize: 14)),
-            ],
-          ),
+              child: Icon(Icons.inbox_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 20),
+            Text('No reports yet',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+            const SizedBox(height: 8),
+            const Text('Scan a medical report to get started',
+                style: TextStyle(fontSize: 14)),
+          ],
         ),
       );
     }

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:animate_do/animate_do.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
@@ -358,97 +357,93 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
         final msg = _messages[index];
         final isUser = msg.role == 'user';
 
-        return FadeInUp(
-          duration: const Duration(milliseconds: 350),
-          from: 20,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Row(
-              mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Assistant avatar
-                if (!isUser) ...[
-                  Container(
-                    width: 32,
-                    height: 32,
-                    margin: const EdgeInsets.only(top: 4),
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.accentGradient(context),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Row(
+            mainAxisAlignment: msg.role == 'user' ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Assistant avatar
+              if (msg.role != 'user') ...[
+                Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.only(top: 4),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.accentGradient(context),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(width: 10),
-                ],
-                // Message bubble
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: isUser
-                              ? cs.primary
-                              : cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(20),
-                            topRight: const Radius.circular(20),
-                            bottomLeft: Radius.circular(isUser ? 20 : 6),
-                            bottomRight: Radius.circular(isUser ? 6 : 20),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isUser ? cs.primary : Colors.black).withValues(alpha: 0.08),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: isUser
-                            ? Text(msg.content, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w500))
-                            : MarkdownBody(
-                                data: msg.content,
-                                styleSheet: MarkdownStyleSheet(
-                                  p: TextStyle(color: cs.onSurface, fontSize: 14, height: 1.6),
-                                  strong: TextStyle(color: cs.onSurface, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
-                                  em: TextStyle(color: cs.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
-                                  h1: TextStyle(color: cs.onSurface, fontSize: 17, fontWeight: FontWeight.w800, height: 1.5),
-                                  h2: TextStyle(color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
-                                  h3: TextStyle(color: cs.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
-                                  listBullet: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
-                                  blockSpacing: 10,
-                                ),
-                              ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('HH:mm').format(msg.timestamp),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
                 ),
-                // User avatar
-                if (isUser) ...[
-                  const SizedBox(width: 10),
-                  Container(
-                    width: 32,
-                    height: 32,
-                    margin: const EdgeInsets.only(top: 4),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.person_rounded, color: cs.primary, size: 18),
-                  ),
-                ],
+                const SizedBox(width: 10),
               ],
-            ),
+              // Message bubble
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: msg.role == 'user' ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: msg.role == 'user'
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(20),
+                          topRight: const Radius.circular(20),
+                          bottomLeft: Radius.circular(msg.role == 'user' ? 20 : 6),
+                          bottomRight: Radius.circular(msg.role == 'user' ? 6 : 20),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (msg.role == 'user' ? Theme.of(context).colorScheme.primary : Colors.black).withValues(alpha: 0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: msg.role == 'user'
+                          ? Text(msg.content, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w500))
+                          : MarkdownBody(
+                              data: msg.content,
+                              styleSheet: MarkdownStyleSheet(
+                                p: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, height: 1.6),
+                                strong: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w700, height: 1.6),
+                                em: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic, height: 1.6),
+                                h1: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 17, fontWeight: FontWeight.w800, height: 1.5),
+                                h2: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 16, fontWeight: FontWeight.w700, height: 1.5),
+                                h3: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 15, fontWeight: FontWeight.w700, height: 1.5),
+                                listBullet: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
+                                blockSpacing: 10,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      DateFormat('HH:mm').format(msg.timestamp),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // User avatar
+              if (msg.role == 'user') ...[
+                const SizedBox(width: 10),
+                Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.only(top: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.person_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
+                ),
+              ],
+            ],
           ),
         );
       },
@@ -456,60 +451,56 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
   }
 
   Widget _buildTypingIndicator(ColorScheme cs) {
-    return FadeInUp(
-      duration: const Duration(milliseconds: 300),
-      from: 15,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              margin: const EdgeInsets.only(top: 4),
-              decoration: BoxDecoration(
-                gradient: AppTheme.accentGradient(context),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              gradient: AppTheme.accentGradient(context),
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  bottomLeft: Radius.circular(6),
-                  bottomRight: Radius.circular(20),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: List.generate(3, (i) {
-                  return TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: 1),
-                    duration: Duration(milliseconds: 600 + (i * 200)),
-                    builder: (context, value, child) {
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.3 + (0.4 * value)),
-                          shape: BoxShape.circle,
-                        ),
-                      );
-                    },
-                  );
-                }),
+            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+                bottomLeft: Radius.circular(6),
+                bottomRight: Radius.circular(20),
               ),
             ),
-          ],
-        ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(3, (i) {
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: Duration(milliseconds: 600 + (i * 200)),
+                  builder: (context, value, child) {
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.3 + (0.4 * value)),
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  },
+                );
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }

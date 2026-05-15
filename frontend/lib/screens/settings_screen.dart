@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:animate_do/animate_do.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/gradient_button.dart';
 import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import 'auth_screen.dart';
+import 'dictionary_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -227,30 +227,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           children: [
             // Header
-            FadeInDown(
-              duration: const Duration(milliseconds: 500),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withOpacity(0.85),
-                  border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.accentGradient(context),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      ),
-                      child: const Icon(Icons.settings_rounded, color: Colors.white, size: 22),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.85),
+                border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.accentGradient(context),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     ),
-                    const SizedBox(width: 14),
-                    Text('Settings',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                            color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
-                  ],
-                ),
+                    child: const Icon(Icons.settings_rounded, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Text('Settings',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                          color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
+                ],
               ),
             ),
 
@@ -260,99 +257,111 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   children: [
                     // Profile Section
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 100),
-                      child: _buildSection(
-                        title: 'Profile Settings',
-                        children: [
-                          _buildTextField(
-                            label: 'Full Name',
-                            controller: _nameController,
-                            icon: Icons.person_outline_rounded,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            label: 'Email Address',
-                            controller: _emailController,
-                            icon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          const SizedBox(height: 24),
-                          GradientButton(
-                            label: 'Save Profile Changes',
-                            onPressed: _updateProfile,
-                            isLoading: _isLoading,
-                          ),
-                        ],
-                      ),
+                    _buildSection(
+                      title: 'Profile Settings',
+                      children: [
+                        _buildTextField(
+                          label: 'Full Name',
+                          controller: _nameController,
+                          icon: Icons.person_outline_rounded,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          label: 'Email Address',
+                          controller: _emailController,
+                          icon: Icons.email_outlined,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 24),
+                        GradientButton(
+                          label: 'Save Profile Changes',
+                          onPressed: _updateProfile,
+                          isLoading: _isLoading,
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 20),
 
                     // App Preferences
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 200),
-                      child: _buildSection(
-                        title: 'App Preferences',
-                        children: [
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Theme Mode', style: TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text(ThemeService.instance.isDarkMode ? 'Dark Mode' : 'Light Mode'),
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: ThemeService.instance.isDarkMode ? Colors.orangeAccent.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                ThemeService.instance.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                color: ThemeService.instance.isDarkMode ? Colors.orangeAccent : Colors.blue,
-                              ),
+                    _buildSection(
+                      title: 'App Preferences',
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Theme Mode', style: TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Text(ThemeService.instance.isDarkMode ? 'Dark Mode' : 'Light Mode'),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: ThemeService.instance.isDarkMode ? Colors.orangeAccent.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            trailing: Switch.adaptive(
-                              value: ThemeService.instance.isDarkMode,
-                              onChanged: (_) => setState(() => ThemeService.instance.toggleTheme()),
-                              activeColor: Theme.of(context).colorScheme.primary,
+                            child: Icon(
+                              ThemeService.instance.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                              color: ThemeService.instance.isDarkMode ? Colors.orangeAccent : Colors.blue,
                             ),
                           ),
-                        ],
-                      ),
+                          trailing: Switch.adaptive(
+                            value: ThemeService.instance.isDarkMode,
+                            onChanged: (_) => setState(() => ThemeService.instance.toggleTheme()),
+                            activeColor: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Medical Reference
+                    _buildSection(
+                      title: 'Medical Reference',
+                      children: [
+                        _buildActionTile(
+                          label: 'Data Dictionary & Units',
+                          subtitle: 'View standard biomarkers and units',
+                          icon: Icons.menu_book_rounded,
+                          color: Colors.teal,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const DictionaryScreen()),
+                            );
+                          },
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 20),
 
                     // Account Actions
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 300),
-                      child: _buildSection(
-                        title: 'Account Actions',
-                        children: [
-                          _buildActionTile(
-                            label: 'Change Password',
-                            subtitle: 'Update your login credentials',
-                            icon: Icons.lock_reset_rounded,
-                            color: Theme.of(context).colorScheme.secondary,
-                            onTap: _showChangePasswordDialog,
-                          ),
-                          const Divider(height: 24),
-                          _buildActionTile(
-                            label: 'Logout',
-                            subtitle: 'Log out of your account',
-                            icon: Icons.logout_rounded,
-                            color: Theme.of(context).colorScheme.primary,
-                            onTap: _handleLogout,
-                          ),
-                          const Divider(height: 24),
-                          _buildActionTile(
-                            label: 'Deactivate Account',
-                            subtitle: 'Mark account as inactive',
-                            icon: Icons.no_accounts_rounded,
-                            color: Theme.of(context).colorScheme.error,
-                            onTap: _deactivateAccount,
-                          ),
-                        ],
-                      ),
+                    _buildSection(
+                      title: 'Account Actions',
+                      children: [
+                        _buildActionTile(
+                          label: 'Change Password',
+                          subtitle: 'Update your login credentials',
+                          icon: Icons.lock_reset_rounded,
+                          color: Theme.of(context).colorScheme.secondary,
+                          onTap: _showChangePasswordDialog,
+                        ),
+                        const Divider(height: 24),
+                        _buildActionTile(
+                          label: 'Logout',
+                          subtitle: 'Log out of your account',
+                          icon: Icons.logout_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                          onTap: _handleLogout,
+                        ),
+                        const Divider(height: 24),
+                        _buildActionTile(
+                          label: 'Deactivate Account',
+                          subtitle: 'Mark account as inactive',
+                          icon: Icons.no_accounts_rounded,
+                          color: Theme.of(context).colorScheme.error,
+                          onTap: _deactivateAccount,
+                        ),
+                      ],
                     ),
                   ],
                 ),

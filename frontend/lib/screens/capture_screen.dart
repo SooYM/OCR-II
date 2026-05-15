@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:animate_do/animate_do.dart';
 import 'package:dotted_border/dotted_border.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gradient_button.dart';
@@ -168,113 +167,108 @@ class _CaptureScreenState extends State<CaptureScreen>
   }
 
   Widget _buildHeader() {
-    return FadeInDown(
-      duration: const Duration(milliseconds: 500),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.85),
-          border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient(context),
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
-              child: const Icon(Icons.document_scanner_rounded, color: Colors.white, size: 22),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.85),
+        border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient(context),
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Capture Report',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                          color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
-                  Text(
-                    _selectedImages.isEmpty ? 'Ready to scan' : '${_selectedImages.length} page(s) ready',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
+            child: const Icon(Icons.document_scanner_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Capture Report',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
+                Text(
+                  _selectedImages.isEmpty ? 'Ready to scan' : '${_selectedImages.length} page(s) ready',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ],
             ),
-            if (_selectedImages.isNotEmpty)
-              IconButton(
-                onPressed: _clearAllImages,
-                icon: Icon(Icons.delete_sweep_rounded, color: Theme.of(context).colorScheme.error),
-                tooltip: 'Clear all',
-              ),
-          ],
-        ),
+          ),
+          if (_selectedImages.isNotEmpty)
+            IconButton(
+              onPressed: _clearAllImages,
+              icon: Icon(Icons.delete_sweep_rounded, color: Theme.of(context).colorScheme.error),
+              tooltip: 'Clear all',
+            ),
+        ],
       ),
     );
   }
 
   Widget _buildLandingUI() {
     return Center(
-      child: FadeInUp(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: () => _pickImage(ImageSource.camera),
-              child: AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Container(
-                    padding: const EdgeInsets.all(40),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: AppTheme.primaryGradient(context),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.3 * _pulseController.value),
-                          blurRadius: 40,
-                          spreadRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.qr_code_scanner_rounded, size: 80, color: Colors.white),
-                  );
-                },
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: () => _pickImage(ImageSource.camera),
+            child: AnimatedBuilder(
+              animation: _pulseController,
+              builder: (context, child) {
+                return Container(
+                  padding: const EdgeInsets.all(40),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppTheme.primaryGradient(context),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.3 * _pulseController.value),
+                        blurRadius: 40,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.qr_code_scanner_rounded, size: 80, color: Colors.white),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text('Scan Medical Report',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'Snap photos of your report pages. Our AI will extract and analyze the biomarkers for you.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, height: 1.5),
+            ),
+          ),
+          const SizedBox(height: 40),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildModeCard(
+                icon: Icons.camera_alt_rounded,
+                label: 'Camera',
+                color: Theme.of(context).colorScheme.primary,
+                onTap: () => _pickImage(ImageSource.camera),
               ),
-            ),
-            const SizedBox(height: 32),
-            Text('Scan Medical Report',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
-            const SizedBox(height: 12),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                'Snap photos of your report pages. Our AI will extract and analyze the biomarkers for you.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, height: 1.5),
+              const SizedBox(width: 20),
+              _buildModeCard(
+                icon: Icons.photo_library_rounded,
+                label: 'Gallery',
+                color: Theme.of(context).colorScheme.secondary,
+                onTap: () => _pickImage(ImageSource.gallery),
               ),
-            ),
-            const SizedBox(height: 40),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildModeCard(
-                  icon: Icons.camera_alt_rounded,
-                  label: 'Camera',
-                  color: Theme.of(context).colorScheme.primary,
-                  onTap: () => _pickImage(ImageSource.camera),
-                ),
-                const SizedBox(width: 20),
-                _buildModeCard(
-                  icon: Icons.photo_library_rounded,
-                  label: 'Gallery',
-                  color: Theme.of(context).colorScheme.secondary,
-                  onTap: () => _pickImage(ImageSource.gallery),
-                ),
-              ],
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -316,55 +310,53 @@ class _CaptureScreenState extends State<CaptureScreen>
   }
 
   Widget _buildImageItem(int index) {
-    return FadeInRight(
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          child: Stack(
-            children: [
-              Image.file(
-                File(_selectedImages[index].path),
-                width: double.infinity,
-                height: 200,
-                fit: BoxFit.cover,
-              ),
-              Positioned(
-                top: 0, left: 0, right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.black.withOpacity(0.6), Colors.transparent],
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => _removeImage(index),
-                        icon: const Icon(Icons.close_rounded, color: Colors.white),
-                        style: IconButton.styleFrom(backgroundColor: Colors.black26),
-                      ),
-                    ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        child: Stack(
+          children: [
+            Image.file(
+              File(_selectedImages[index].path),
+              width: double.infinity,
+              height: 200,
+              fit: BoxFit.cover,
+            ),
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.6), Colors.transparent],
                   ),
                 ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => _removeImage(index),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                      style: IconButton.styleFrom(backgroundColor: Colors.black26),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

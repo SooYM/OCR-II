@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:animate_do/animate_do.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glass_card.dart';
@@ -271,185 +270,121 @@ class _VerifyScreenState extends State<VerifyScreen> {
               padding: const EdgeInsets.all(20),
               children: [
                 // Patient Info Section
-                FadeInUp(
-                  duration: const Duration(milliseconds: 400),
-                  child: _buildSectionHeader(
-                    'Patient Information',
-                    Icons.person_outline,
-                    Theme.of(context).colorScheme.primary,
-                  ),
+                _buildSectionHeader(
+                  'Patient Information',
+                  Icons.person_outline,
+                  Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 12),
-                FadeInUp(
-                  delay: const Duration(milliseconds: 100),
-                  child: GlassCard(
-                    child: Column(
-                      children: [
-                        _buildField(
-                          label: 'Patient Name',
-                          value: _data.patientName ?? '',
-                          icon: Icons.badge_outlined,
-                          onChanged: (v) {
-                            _data.patientName = v;
-                            _hasChanges = true;
-                          },
-                        ),
-                        const Divider(),
-                        _buildField(
-                          label: 'Patient ID',
-                          value: _data.patientId ?? '',
-                          icon: Icons.numbers,
-                          onChanged: (v) {
-                            _data.patientId = v;
-                            _hasChanges = true;
-                          },
-                        ),
-                        const Divider(),
-                        _buildField(
-                          label: 'Date',
-                          value: _data.date ?? '',
-                          icon: Icons.calendar_today_outlined,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [DateInputFormatter()],
-                          onChanged: (v) {
-                            _data.date = v;
-                            _hasChanges = true;
-                          },
-                        ),
-                      ],
-                    ),
+                GlassCard(
+                  child: Column(
+                    children: [
+                      _buildField(
+                        label: 'Patient Name',
+                        value: _data.patientName ?? '',
+                        icon: Icons.badge_outlined,
+                        onChanged: (v) {
+                          _data.patientName = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Patient ID',
+                        value: _data.patientId ?? '',
+                        icon: Icons.numbers,
+                        onChanged: (v) {
+                          _data.patientId = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Date',
+                        value: _data.date ?? '',
+                        icon: Icons.calendar_today_outlined,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [DateInputFormatter()],
+                        onChanged: (v) {
+                          _data.date = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                    ],
                   ),
                 ),
 
                 const SizedBox(height: 24),
 
                 // Report Context Section
-                FadeInUp(
-                  delay: const Duration(milliseconds: 200),
-                  child: _buildSectionHeader(
-                    'Report Details',
-                    Icons.medical_services_outlined,
-                    Theme.of(context).colorScheme.secondary,
-                  ),
+                _buildSectionHeader(
+                  'Report Details',
+                  Icons.medical_services_outlined,
+                  Theme.of(context).colorScheme.secondary,
                 ),
                 const SizedBox(height: 12),
-                FadeInUp(
-                  delay: const Duration(milliseconds: 300),
-                  child: GlassCard(
-                    child: Column(
-                      children: [
-                        _buildField(
-                          label: 'Test Name',
-                          value: _data.testName ?? '',
-                          icon: Icons.science_outlined,
-                          onChanged: (v) {
-                            _data.testName = v;
-                            _hasChanges = true;
-                          },
-                        ),
-                        const Divider(),
-                        _buildField(
-                          label: 'Doctor',
-                          value: _data.doctorName ?? '',
-                          icon: Icons.medical_information_outlined,
-                          onChanged: (v) {
-                            _data.doctorName = v;
-                            _hasChanges = true;
-                          },
-                        ),
-                        const Divider(),
-                        _buildField(
-                          label: 'Hospital',
-                          value: _data.hospitalName ?? '',
-                          icon: Icons.local_hospital_outlined,
-                          onChanged: (v) {
-                            _data.hospitalName = v;
-                            _hasChanges = true;
-                          },
-                        ),
-                      ],
-                    ),
+                GlassCard(
+                  child: Column(
+                    children: [
+                      _buildField(
+                        label: 'Test Name',
+                        value: _data.testName ?? '',
+                        icon: Icons.science_outlined,
+                        onChanged: (v) {
+                          _data.testName = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Doctor',
+                        value: _data.doctorName ?? '',
+                        icon: Icons.medical_information_outlined,
+                        onChanged: (v) {
+                          _data.doctorName = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Hospital',
+                        value: _data.hospitalName ?? '',
+                        icon: Icons.local_hospital_outlined,
+                        onChanged: (v) {
+                          _data.hospitalName = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                    ],
                   ),
                 ),
 
                 const SizedBox(height: 24),
 
-                // Test Results Section
-                FadeInUp(
-                  delay: const Duration(milliseconds: 400),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildSectionHeader(
-                        'Test Results',
-                        Icons.analytics_outlined,
-                        Theme.of(context).colorScheme.tertiary,
-                      ),
-                      GestureDetector(
-                        onTap: _addTestResult,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add, size: 16, color: Theme.of(context).colorScheme.primary),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Add Row',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                _buildSectionHeader(
+                  'Test Results',
+                  Icons.analytics_outlined,
+                  Theme.of(context).colorScheme.tertiary,
                 ),
                 const SizedBox(height: 12),
 
                 if (_data.results.isEmpty)
-                  FadeInUp(
-                    delay: const Duration(milliseconds: 500),
-                    child: GlassCard(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          Icon(Icons.inbox_outlined,
-                              size: 36,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5)),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No test results extracted',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              fontSize: 14,
-                            ),
+                  GlassCard(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        Icon(Icons.inbox_outlined,
+                            size: 36,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5)),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No test results extracted',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontSize: 14,
                           ),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: _addTestResult,
-                            child: Text(
-                              'Tap + Add Row to add manually',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   )
                 else
@@ -463,38 +398,32 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 const SizedBox(height: 24),
 
                 // Notes Section
-                FadeInUp(
-                  delay: const Duration(milliseconds: 600),
-                  child: _buildSectionHeader(
-                    'Notes',
-                    Icons.note_outlined,
-                    Theme.of(context).colorScheme.secondary,
-                  ),
+                _buildSectionHeader(
+                  'Notes',
+                  Icons.note_outlined,
+                  Theme.of(context).colorScheme.secondary,
                 ),
                 const SizedBox(height: 12),
-                FadeInUp(
-                  delay: const Duration(milliseconds: 700),
-                  child: GlassCard(
-                    child: TextFormField(
-                      initialValue: _data.notes ?? '',
-                      maxLines: 4,
-                      onChanged: (v) {
-                        _data.notes = v;
-                        _hasChanges = true;
-                      },
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'Any additional notes...',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
+                GlassCard(
+                  child: TextFormField(
+                    initialValue: _data.notes ?? '',
+                    maxLines: 4,
+                    onChanged: (v) {
+                      _data.notes = v;
+                      _hasChanges = true;
+                    },
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Any additional notes...',
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
                 ),
@@ -751,74 +680,21 @@ class _VerifyScreenState extends State<VerifyScreen> {
                           border: InputBorder.none,
                         ),
                       ),
-                    // Show matched standard name chip
-                    if (isMatched && matchEntry != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF4CAF50).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '→ ${matchEntry.standardName}  •  ${matchEntry.unit}',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF4CAF50)),
-                              ),
-                            ),
-                            if (_convertedIndices.contains(index))
-                              Padding(
-                                padding: const EdgeInsets.only(left: 6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.auto_fix_high_rounded, size: 10, color: Theme.of(context).colorScheme.primary),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        'Auto-Converted',
-                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
                     if (!isMatched && result.testItem.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Row(
                           children: [
-                            Icon(Icons.warning_amber_rounded, size: 13, color: Theme.of(context).colorScheme.error.withOpacity(0.7)),
+                            Icon(Icons.warning_amber_rounded, size: 13, color: Theme.of(context).colorScheme.error.withValues(alpha: 0.7)),
                             const SizedBox(width: 4),
                             Text(
                               'Not in standard dictionary',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.error.withOpacity(0.7)),
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.error.withValues(alpha: 0.7)),
                             ),
                           ],
                         ),
                       ),
                   ],
-                ),
-              ),
-              GestureDetector(
-                onTap: () => _removeTestResult(index),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.close,
-                      size: 14, color: Theme.of(context).colorScheme.error),
                 ),
               ),
             ],
