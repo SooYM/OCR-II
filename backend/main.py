@@ -26,6 +26,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from supabase import create_client, Client
 
+from unit_converter import convert_unit
+
 # Google Cloud Dependencies
 try:
     from google.cloud import vision
@@ -160,6 +162,7 @@ def init_local_db():
             email TEXT UNIQUE NOT NULL,
             name TEXT NOT NULL,
             password_hash TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
             created_at TEXT NOT NULL
         )
     """)
@@ -252,12 +255,40 @@ def create_user(email: str, name: str, password: str) -> dict:
     else:
         conn = sqlite3.connect(str(DB_PATH))
         conn.execute(
-            "INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-            (user_id, email.lower().strip(), name.strip(), pw_hash, now)
+            "INSERT INTO users (id, email, name, password_hash, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', now)
         )
         conn.commit()
         conn.close()
     return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "created_at": now}
+
+def update_user_profile(user_id: str, name: str, email: str):
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("users").update({"name": name, "email": email}).eq("id", user_id).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("UPDATE users SET name = ?, email = ? WHERE id = ?", (name, email, user_id))
+        conn.commit()
+        conn.close()
+
+def update_user_password(user_id: str, new_password: str):
+    pw_hash = hash_password(new_password)
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("users").update({"password_hash": pw_hash}).eq("id", user_id).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (pw_hash, user_id))
+        conn.commit()
+        conn.close()
+
+def set_user_inactive(user_id: str):
+    if STORAGE_ENGINE == "supabase" and supabase:
+        supabase.table("users").update({"status": "inactive"}).eq("id", user_id).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("UPDATE users SET status = 'inactive' WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
 
 # ─── OCR & Extraction Logic ────────────────────────────────────────────────
 
@@ -493,9 +524,55 @@ def normalize_structured_data(data: dict) -> dict:
     }
 
 def get_clean_flat_data(data: dict) -> dict:
-    """Return only the keys that exist in the staging_medical_records table."""
+    """Return only the keys that exist in the staging_medical_records table, converting units if needed."""
+    # We apply unit conversion before saving to staging table.
+    flat_data = {}
+    
+    # Base normalization
     normalized = normalize_structured_data(data)
-    return {k: v for k, v in normalized.items() if k in STAGING_SCHEMA_KEYS}
+    
+    # Process original 'results' array if provided to convert user units to target units
+    results_map = {r.get("key"): r for r in data.get("results", []) if r.get("key")}
+    
+    for k, v in normalized.items():
+        if k in STAGING_SCHEMA_KEYS:
+            # Determine standard unit from key
+            std_unit = ""
+            if k.endswith('_g_dl'): std_unit = "g/dL"
+            elif k.endswith('_mg_dl'): std_unit = "mg/dL"
+            elif k.endswith('_mil_ul'): std_unit = "mil/uL"
+            elif k.endswith('_pct'): std_unit = "%"
+            elif k.endswith('_fl'): std_unit = "fL"
+            elif k.endswith('_pg'): std_unit = "pg"
+            elif k.endswith('_ul'): std_unit = "uL"
+            elif k.endswith('_uiu_ml'): std_unit = "uIU/mL"
+            elif k.endswith('_mmol_l'): std_unit = "mmol/L"
+            elif k.endswith('_mg_l'): std_unit = "mg/L"
+            elif k.endswith('_ug_dl'): std_unit = "ug/dL"
+
+            res = results_map.get(k)
+            if res and std_unit and res.get("unit"):
+                extracted_unit = res.get("unit")
+                converted_val = convert_unit(k, v, extracted_unit, std_unit)
+                if converted_val is not None:
+                    flat_data[k] = converted_val
+                else:
+                    flat_data[k] = v
+            else:
+                # Use raw text or numeric extraction fallback
+                # Only extract float for numeric columns (from hemoglobin onwards)
+                idx = STAGING_SCHEMA_KEYS.index("hemoglobin_g_dl")
+                if STAGING_SCHEMA_KEYS.index(k) >= idx:
+                    # Strip to just numeric
+                    num_match = re.search(r'([0-9]*\.?[0-9]+)', str(v))
+                    if num_match:
+                        flat_data[k] = float(num_match.group(1))
+                    else:
+                        flat_data[k] = None
+                else:
+                    flat_data[k] = v
+
+    return flat_data
 
 # ─── Storage Helpers ───────────────────────────────────────────────────────
 
@@ -547,9 +624,19 @@ async def mark_report_sent(report_id: str):
             final_data = get_clean_flat_data(report["structured_data"])
             final_data["report_id"] = report_id  # Link back to reports table for cascade delete
             try:
-                supabase.table("staging_medical_records").insert(final_data).execute()
+                print(f"DEBUG: Attempting upsert to staging_medical_records for report_id: {report_id}")
+                # Use upsert to either insert a new record or update the existing one for this report_id
+                supabase.table("staging_medical_records").upsert(final_data, on_conflict="report_id").execute()
+                print(f"DEBUG: Upsert successful for report: {report_id}")
             except Exception as e:
-                print(f"Failed to insert into staging_medical_records: {e}")
+                print(f"DEBUG: Upsert failed: {e}. Trying Delete + Insert fallback...")
+                try:
+                    # Fallback for cases where the UNIQUE constraint hasn't been added to the DB yet
+                    supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
+                    supabase.table("staging_medical_records").insert(final_data).execute()
+                    print(f"DEBUG: Delete + Insert fallback successful for report: {report_id}")
+                except Exception as e2:
+                    print(f"DEBUG: Critical failure in staging update: {e2}")
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
@@ -738,12 +825,44 @@ async def login(req: LoginRequest):
     user = get_user_by_email(req.email)
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if user.get("status") == "inactive":
+        raise HTTPException(status_code=403, detail="Account is inactive. Please contact support.")
     token = create_jwt(user["id"], user["email"])
     return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"]}}
 
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     return {"id": current_user["id"], "email": current_user["email"], "name": current_user["name"]}
+
+@app.put("/api/auth/profile")
+async def update_profile(updated_data: dict, current_user: dict = Depends(get_current_user)):
+    name = updated_data.get("name")
+    email = updated_data.get("email")
+    if not name or not email:
+        raise HTTPException(status_code=400, detail="Name and email are required")
+    
+    update_user_profile(current_user["id"], name, email)
+    return {"status": "success", "user": {"id": current_user["id"], "email": email, "name": name}}
+
+@app.post("/api/auth/deactivate")
+async def deactivate_account(current_user: dict = Depends(get_current_user)):
+    set_user_inactive(current_user["id"])
+    return {"status": "success", "message": "Account deactivated"}
+
+@app.post("/api/auth/password")
+async def change_password(data: dict, current_user: dict = Depends(get_current_user)):
+    current_password = data.get("current_password")
+    new_password = data.get("new_password")
+    if not current_password or not new_password:
+        raise HTTPException(status_code=400, detail="Current and new password are required")
+    
+    # Get user to verify current password
+    user = get_user_by_id(current_user["id"])
+    if not user or not verify_password(current_password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect current password")
+    
+    update_user_password(current_user["id"], new_password)
+    return {"status": "success", "message": "Password updated successfully"}
 
 # ─── My Reports ─────────────────────────────────────────────────────────────
 
@@ -780,19 +899,50 @@ async def analyze_health_trends(
 ):
     user_id = current_user["id"]
     if STORAGE_ENGINE == "supabase" and supabase:
-        response = supabase.table("reports").select("*").eq("user_id", user_id).order("upload_time", desc=True).execute()
-        reports = response.data or []
+        # Fully utilize staging_medical_records: only fetch reports that have been verified and staged
+        response = supabase.table("staging_medical_records").select("*, reports!inner(*)").eq("reports.user_id", user_id).execute()
+        staged_records = response.data or []
+        
+        reports = []
+        for row in staged_records:
+            # Reconstruct the expected report object for the frontend
+            r = row["reports"]
+            r["structured_data"] = {
+                "patient_id": row.get("medid"),
+                "date": row.get("collected"),
+                "results": [{"key": k, "value": v} for k, v in row.items() if k not in ["staging_record_id", "report_id", "reports"] and v is not None]
+            }
+            reports.append(r)
+            
+        # Sort manually since we joined
+        reports.sort(key=lambda x: x.get("upload_time", ""), reverse=False)
+
     else:
+        # SQLite fallback joining staging_medical_records
         conn = sqlite3.connect(str(DB_PATH))
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM reports WHERE user_id = ? ORDER BY upload_time ASC", (user_id,))
+        cursor.execute('''
+            SELECT s.*, r.upload_time, r.status, r.filename 
+            FROM staging_medical_records s
+            JOIN reports r ON s.report_id = r.id
+            WHERE r.user_id = ? ORDER BY r.upload_time ASC
+        ''', (user_id,))
         rows = cursor.fetchall()
         conn.close()
         reports = []
         for row in rows:
-            r = dict(row)
-            r["structured_data"] = json.loads(r["structured_data"]) if r["structured_data"] else None
+            d = dict(row)
+            r = {
+                "upload_time": d.pop("upload_time"),
+                "status": d.pop("status"),
+                "filename": d.pop("filename"),
+                "structured_data": {
+                    "patient_id": d.get("medid"),
+                    "date": d.get("collected"),
+                    "results": [{"key": k, "value": v} for k, v in d.items() if k not in ["staging_record_id", "report_id"] and v is not None]
+                }
+            }
             reports.append(r)
 
     # Filter completed/sent reports with structured data

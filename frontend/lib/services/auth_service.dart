@@ -106,6 +106,58 @@ class AuthService {
     await prefs.remove(_userKey);
   }
 
+  /// Update user name and email.
+  static Future<Map<String, dynamic>> updateProfile(String name, String email) async {
+    final response = await http.put(
+      Uri.parse('${ApiService.baseUrl}/api/auth/profile'),
+      headers: authHeaders,
+      body: jsonEncode({'name': name, 'email': email}),
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      _currentUser = data['user'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_userKey, jsonEncode(_currentUser));
+      return _currentUser!;
+    } else {
+      final detail = _parseError(response);
+      throw AuthException(detail, response.statusCode);
+    }
+  }
+
+  /// Deactivate account (mark as inactive).
+  static Future<void> deactivateAccount() async {
+    final response = await http.post(
+      Uri.parse('${ApiService.baseUrl}/api/auth/deactivate'),
+      headers: authHeaders,
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      await logout();
+    } else {
+      final detail = _parseError(response);
+      throw AuthException(detail, response.statusCode);
+    }
+  }
+
+  /// Change user password.
+  static Future<void> changePassword(String currentPassword, String newPassword) async {
+    final response = await http.post(
+      Uri.parse('${ApiService.baseUrl}/api/auth/password'),
+      headers: authHeaders,
+      body: jsonEncode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      }),
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      final detail = _parseError(response);
+      throw AuthException(detail, response.statusCode);
+    }
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   static Future<void> _saveAuth(String token, Map<String, dynamic> user) async {

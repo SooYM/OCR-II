@@ -56,6 +56,8 @@ class StructuredData {
   String? testName;
   String? doctorName;
   String? hospitalName;
+  String? collected;
+  String? labreference;
   List<TestResult> results;
   String? notes;
 
@@ -66,6 +68,8 @@ class StructuredData {
     this.testName,
     this.doctorName,
     this.hospitalName,
+    this.collected,
+    this.labreference,
     this.results = const [],
     this.notes,
   });
@@ -78,6 +82,8 @@ class StructuredData {
       testName: json['test_name'] as String?,
       doctorName: json['doctor_name'] as String?,
       hospitalName: json['hospital_name'] as String?,
+      collected: json['collected'] as String?,
+      labreference: json['labreference'] as String?,
       results: (json['results'] as List<dynamic>?)
               ?.map((r) => TestResult.fromJson(r as Map<String, dynamic>))
               .toList() ??
@@ -94,6 +100,8 @@ class StructuredData {
       'test_name': testName,
       'doctor_name': doctorName,
       'hospital_name': hospitalName,
+      'collected': collected,
+      'labreference': labreference,
       'results': results.map((r) => r.toJson()).toList(),
       'notes': notes,
     };

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:dotted_border/dotted_border.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glass_card.dart';
@@ -26,7 +27,6 @@ class _CaptureScreenState extends State<CaptureScreen>
   String _statusMessage = '';
   double _progress = 0.0;
   late AnimationController _pulseController;
-  bool? _serverConnected;
 
   @override
   void initState() {
@@ -35,7 +35,6 @@ class _CaptureScreenState extends State<CaptureScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-    _checkServer();
   }
 
   @override
@@ -44,57 +43,34 @@ class _CaptureScreenState extends State<CaptureScreen>
     super.dispose();
   }
 
-  Future<void> _checkServer() async {
-    final ok = await ApiService.checkConnection();
-    if (mounted) setState(() => _serverConnected = ok);
-  }
-
   Future<void> _pickImage(ImageSource source) async {
     try {
       if (source == ImageSource.gallery) {
-        // Allow picking multiple images from gallery
-        final List<XFile> images = await _picker.pickMultiImage(
-          imageQuality: 90,
-        );
+        final List<XFile> images = await _picker.pickMultiImage(imageQuality: 90);
         if (images.isNotEmpty) {
-          setState(() {
-            _selectedImages.addAll(images);
-          });
+          setState(() => _selectedImages.addAll(images));
         }
       } else {
-        // Camera: pick one at a time, add to list
-        final XFile? image = await _picker.pickImage(
-          source: source,
-          imageQuality: 90,
-        );
+        final XFile? image = await _picker.pickImage(source: source, imageQuality: 90);
         if (image != null) {
-          setState(() {
-            _selectedImages.add(image);
-          });
+          setState(() => _selectedImages.add(image));
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Theme.of(context).colorScheme.error,
-            content: Text('Error picking image: $e'),
-          ),
+          SnackBar(backgroundColor: Theme.of(context).colorScheme.error, content: Text('Error picking image: $e')),
         );
       }
     }
   }
 
   void _removeImage(int index) {
-    setState(() {
-      _selectedImages.removeAt(index);
-    });
+    setState(() => _selectedImages.removeAt(index));
   }
 
   void _clearAllImages() {
-    setState(() {
-      _selectedImages.clear();
-    });
+    setState(() => _selectedImages.clear());
   }
 
   Future<void> _processImages() async {
@@ -107,23 +83,7 @@ class _CaptureScreenState extends State<CaptureScreen>
     });
 
     try {
-      await Future.delayed(const Duration(milliseconds: 400));
-      setState(() {
-        _statusMessage = _selectedImages.length > 1
-            ? 'Analyzing ${_selectedImages.length} pages...'
-            : 'Running OCR extraction...';
-        _progress = 0.4;
-      });
-
-      // Actual API call — uploads all pages, runs LLM parsing
       final report = await ApiService.uploadMultipleReports(_selectedImages);
-
-      setState(() {
-        _statusMessage = 'Parsing data fields...';
-        _progress = 0.8;
-      });
-
-      await Future.delayed(const Duration(milliseconds: 300));
 
       setState(() {
         _statusMessage = 'Done!';
@@ -143,864 +103,343 @@ class _CaptureScreenState extends State<CaptureScreen>
         } else {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => VerifyScreen(report: report),
-            ),
+            MaterialPageRoute(builder: (context) => VerifyScreen(report: report)),
           );
         }
       }
     } catch (e) {
-      setState(() {
-        _isProcessing = false;
-      });
+      setState(() => _isProcessing = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Theme.of(context).colorScheme.error,
-            content: Text('Processing failed: $e'),
-          ),
+          SnackBar(backgroundColor: Theme.of(context).colorScheme.error, content: Text('Processing failed: $e')),
         );
       }
     }
   }
 
-  void _showServerSettings() {
-    final controller = TextEditingController(text: ApiService.baseUrl);
-    bool testing = false;
-    bool? testResult;
-
-    showModalBottomSheet(
+  void _showDuplicateDialog(MedicalReport report) {
+    showDialog(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Server URL',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Paste your localtunnel URL here',
-                style: TextStyle(color: Theme.of(context).colorScheme.outline, fontSize: 13),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                decoration: InputDecoration(
-                  hintText: 'https://your-tunnel.loca.lt',
-                  prefixIcon: const Icon(Icons.link),
-                  suffixIcon: testResult != null
-                      ? Icon(
-                          testResult! ? Icons.check_circle : Icons.error,
-                          color: testResult! ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: testing
-                          ? null
-                          : () async {
-                              setSheetState(() {
-                                testing = true;
-                                testResult = null;
-                              });
-                              ApiService.setBaseUrl(controller.text.trim());
-                              final ok = await ApiService.checkConnection();
-                              setSheetState(() {
-                                testing = false;
-                                testResult = ok;
-                              });
-                            },
-                      icon: testing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.wifi_find, size: 18),
-                      label: Text(testing ? 'Testing...' : 'Test'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        ApiService.setBaseUrl(controller.text.trim());
-                        _checkServer();
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: Theme.of(context).colorScheme.primary,
-                            content: const Text('Server URL updated'),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.save, size: 18),
-                      label: const Text('Save'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          ),
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Duplicate Report'),
+          ],
         ),
+        content: const Text('This report has already been scanned. Duplicate reports are not stored to maintain data integrity.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => VerifyScreen(report: report)));
+            },
+            child: const Text('View Existing'),
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(gradient: AppTheme.backgroundGradient(context)),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 16),
-                    // Header
-                    FadeInDown(
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.primaryGradient(context),
-                              borderRadius:
-                                  BorderRadius.circular(AppTheme.radiusMd),
-                            ),
-                            child: const Icon(Icons.document_scanner_outlined,
-                                color: Colors.white, size: 28),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'MedScan',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w800,
-                                    color: Theme.of(context).colorScheme.onSurface,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                                Text(
-                                  _selectedImages.isEmpty
-                                      ? 'Snap a medical report to begin'
-                                      : '${_selectedImages.length} page(s) captured',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Server status + settings
-                          GestureDetector(
-                            onTap: _showServerSettings,
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: _serverConnected == null
-                                          ? Theme.of(context).colorScheme.outline
-                                          : _serverConnected!
-                                              ? Theme.of(context).colorScheme.primary
-                                              : Theme.of(context).colorScheme.error,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.settings,
-                                      size: 18),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    // Image preview or upload area
-                    Expanded(
-                      child: _selectedImages.isEmpty
-                          ? _buildUploadArea()
-                          : _buildMultiImagePreview(),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Action buttons
-                    if (_selectedImages.isEmpty && !_isProcessing) ...[
-                      FadeInUp(
-                        delay: const Duration(milliseconds: 200),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildActionCard(
-                                icon: Icons.camera_alt_rounded,
-                                label: 'Camera',
-                                subtitle: 'Take a photo',
-                                gradient: AppTheme.primaryGradient(context),
-                                onTap: () =>
-                                    _pickImage(ImageSource.camera),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildActionCard(
-                                icon: Icons.photo_library_rounded,
-                                label: 'Gallery',
-                                subtitle: 'Choose existing',
-                                gradient: AppTheme.accentGradient(context),
-                                onTap: () =>
-                                    _pickImage(ImageSource.gallery),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    if (_selectedImages.isNotEmpty && !_isProcessing) ...[
-                      FadeInUp(
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: GradientButton(
-                                label: _selectedImages.length == 1
-                                    ? 'Process Report'
-                                    : 'Process ${_selectedImages.length} Pages',
-                                icon: Icons.auto_awesome,
-                                onPressed: _processImages,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                // Add more pages
-                                TextButton.icon(
-                                  onPressed: () => _showAddMoreOptions(),
-                                  icon: Icon(Icons.add_photo_alternate,
-                                      color: Theme.of(context).colorScheme.primary, size: 18),
-                                  label: Text(
-                                    'Add pages',
-                                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                // Clear all
-                                TextButton.icon(
-                                  onPressed: _clearAllImages,
-                                  icon: Icon(Icons.refresh,
-                                      size: 18, color: Theme.of(context).colorScheme.error),
-                                  label: Text(
-                                    'Start over',
-                                    style:
-                                        TextStyle(color: Theme.of(context).colorScheme.error),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-
-              // Processing overlay
-              if (_isProcessing) _buildProcessingOverlay(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showAddMoreOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      decoration: BoxDecoration(gradient: AppTheme.backgroundGradient(context)),
+      child: SafeArea(
+        bottom: false,
+        child: Stack(
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Add More Pages',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${_selectedImages.length} page(s) already added',
-              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.outline),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient(context),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.camera_alt_rounded,
-                    color: Colors.white, size: 22),
-              ),
-              title: Text('Camera',
-                  style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-              subtitle: Text('Take another photo',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline)),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: AppTheme.accentGradient(context),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.photo_library_rounded,
-                    color: Colors.white, size: 22),
-              ),
-              title: Text('Gallery',
-                  style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-              subtitle: Text('Pick from library',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline)),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUploadArea() {
-    return FadeIn(
-      child: GestureDetector(
-        onTap: () => _pickImage(ImageSource.camera),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-              width: 2,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: 1.0 + (_pulseController.value * 0.08),
-                    child: Container(
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                            Theme.of(context).colorScheme.primary.withOpacity(0.05),
-                          ],
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Theme.of(context).colorScheme.primary
-                                .withOpacity(0.15 * _pulseController.value),
-                            blurRadius: 40,
-                            spreadRadius: 10,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.document_scanner_outlined,
-                        size: 56,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 28),
-              Text(
-                'Tap to scan a report',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Supports multi-page reports',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.outline,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMultiImagePreview() {
-    return FadeIn(
-      child: Column(
-        children: [
-          // Page count header
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Row(
+            Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.collections, size: 14, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${_selectedImages.length} page(s)',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                const Text(
-                  'Swipe to browse • Tap ✕ to remove',
-                  style: TextStyle(fontSize: 11),
+                _buildHeader(),
+                Expanded(
+                  child: _selectedImages.isEmpty ? _buildLandingUI() : _buildPreviewUI(),
                 ),
               ],
             ),
-          ),
-          // Scrollable page thumbnails
-          Expanded(
-            child: _selectedImages.length == 1
-                ? _buildSingleImagePreview(0)
-                : PageView.builder(
-                    itemCount: _selectedImages.length,
-                    controller: PageController(viewportFraction: 0.85),
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: _buildPageCard(index),
-                      );
-                    },
-                  ),
-          ),
-        ],
+            if (_isProcessing) _buildProcessingOverlay(),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSingleImagePreview(int index) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.file(
-            File(_selectedImages[index].path),
-            fit: BoxFit.cover,
-          ),
-          // Gradient overlay at top
-          Positioned(
-            top: 0, left: 0, right: 0, height: 80,
-            child: Container(
+  Widget _buildHeader() {
+    return FadeInDown(
+      duration: const Duration(milliseconds: 500),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withOpacity(0.85),
+          border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
-                ),
+                gradient: AppTheme.primaryGradient(context),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
+              child: const Icon(Icons.document_scanner_rounded, color: Colors.white, size: 22),
             ),
-          ),
-          // Page badge
-          Positioned(
-            top: 12, left: 12,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.description, color: Colors.white70, size: 14),
-                  SizedBox(width: 6),
-                  Text('Page 1',
-                      style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                  Text('Capture Report',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                          color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
+                  Text(
+                    _selectedImages.isEmpty ? 'Ready to scan' : '${_selectedImages.length} page(s) ready',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
                 ],
               ),
             ),
-          ),
-          // Remove button
-          Positioned(
-            top: 12, right: 12,
-            child: GestureDetector(
-              onTap: () => _removeImage(index),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error.withOpacity(0.85),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.close, color: Colors.white, size: 16),
+            if (_selectedImages.isNotEmpty)
+              IconButton(
+                onPressed: _clearAllImages,
+                icon: Icon(Icons.delete_sweep_rounded, color: Theme.of(context).colorScheme.error),
+                tooltip: 'Clear all',
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPageCard(int index) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.file(
-            File(_selectedImages[index].path),
-            fit: BoxFit.cover,
-          ),
-          // Gradient overlay
-          Positioned(
-            top: 0, left: 0, right: 0, height: 60,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(0.6), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          // Bottom gradient
-          Positioned(
-            bottom: 0, left: 0, right: 0, height: 60,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          // Page number badge
-          Positioned(
-            top: 12, left: 12,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient(context),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                'Page ${index + 1}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          // Remove button
-          Positioned(
-            top: 12, right: 12,
-            child: GestureDetector(
-              onTap: () => _removeImage(index),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error.withOpacity(0.85),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.close, color: Colors.white, size: 16),
-              ),
-            ),
-          ),
-          // Page indicator at bottom
-          Positioned(
-            bottom: 12, left: 0, right: 0,
-            child: Center(
-              child: Text(
-                '${index + 1} of ${_selectedImages.length}',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionCard({
-    required IconData icon,
-    required String label,
-    required String subtitle,
-    required LinearGradient gradient,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLandingUI() {
+    return Center(
+      child: FadeInUp(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: gradient,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            GestureDetector(
+              onTap: () => _pickImage(ImageSource.camera),
+              child: AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  return Container(
+                    padding: const EdgeInsets.all(40),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: AppTheme.primaryGradient(context),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.3 * _pulseController.value),
+                          blurRadius: 40,
+                          spreadRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.qr_code_scanner_rounded, size: 80, color: Colors.white),
+                  );
+                },
               ),
-              child: Icon(icon, color: Colors.white, size: 28),
             ),
-            const SizedBox(height: 14),
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.onSurface,
+            const SizedBox(height: 32),
+            Text('Scan Medical Report',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+            const SizedBox(height: 12),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Snap photos of your report pages. Our AI will extract and analyze the biomarkers for you.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, height: 1.5),
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 12,
-              ),
+            const SizedBox(height: 40),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildModeCard(
+                  icon: Icons.camera_alt_rounded,
+                  label: 'Camera',
+                  color: Theme.of(context).colorScheme.primary,
+                  onTap: () => _pickImage(ImageSource.camera),
+                ),
+                const SizedBox(width: 20),
+                _buildModeCard(
+                  icon: Icons.photo_library_rounded,
+                  label: 'Gallery',
+                  color: Theme.of(context).colorScheme.secondary,
+                  onTap: () => _pickImage(ImageSource.gallery),
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildModeCard({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewUI() {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(20),
+            itemCount: _selectedImages.length + 1,
+            itemBuilder: (context, index) {
+              if (index == _selectedImages.length) {
+                return _buildAddMoreCard();
+              }
+              return _buildImageItem(index);
+            },
+          ),
+        ),
+        _buildBottomActions(),
+      ],
+    );
+  }
+
+  Widget _buildImageItem(int index) {
+    return FadeInRight(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          child: Stack(
+            children: [
+              Image.file(
+                File(_selectedImages[index].path),
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
+              ),
+              Positioned(
+                top: 0, left: 0, right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.black.withOpacity(0.6), Colors.transparent],
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => _removeImage(index),
+                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                        style: IconButton.styleFrom(backgroundColor: Colors.black26),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddMoreCard() {
+    return GestureDetector(
+      onTap: () => _pickImage(ImageSource.camera),
+      child: DottedBorder(
+        options: RoundedRectDottedBorderOptions(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
+          strokeWidth: 2,
+          dashPattern: const [8, 4],
+          radius: const Radius.circular(AppTheme.radiusLg),
+        ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            children: [
+              Icon(Icons.add_a_photo_rounded, size: 40, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: 12),
+              const Text('Add another page', style: TextStyle(fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomActions() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GradientButton(
+            label: 'Analyze ${_selectedImages.length} Page(s)',
+            icon: Icons.auto_awesome_rounded,
+            onPressed: _processImages,
+          ),
+          const SizedBox(height: 12),
+          Text('Ensure text is clear and readable',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline)),
+        ],
       ),
     );
   }
 
   Widget _buildProcessingOverlay() {
     return Container(
-      color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.92),
+      color: Colors.black54,
       width: double.infinity,
       height: double.infinity,
       child: Center(
-        child: FadeInUp(
-          child: GlassCard(
-            width: 300,
-            padding: const EdgeInsets.all(36),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 5,
-                    value: _progress > 0 ? _progress : null,
-                    backgroundColor: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
-                  ),
-                ),
-                const SizedBox(height: 28),
-                Text(
-                  _statusMessage,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: _progress,
-                    minHeight: 6,
-                    backgroundColor: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '${(_progress * 100).toInt()}%',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDuplicateDialog(MedicalReport report) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error, size: 28),
-            const SizedBox(width: 12),
-            const Text('Duplicate Detected'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'A report with the exact same date and clinical data already exists in your history.',
-              style: TextStyle(fontSize: 15),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.error.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Theme.of(context).colorScheme.error.withOpacity(0.2)),
+        child: GlassCard(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 24),
+              Text(_statusMessage, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: 200,
+                child: LinearProgressIndicator(value: _progress, borderRadius: BorderRadius.circular(10)),
               ),
-              child: const Text(
-                'This record has not been uploaded to the database to prevent duplication.',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Dismiss'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Option to view the duplicate if needed? 
-              // User said "do not upload and pop out dialog".
-              // We'll just stay on CaptureScreen.
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('OK'),
-          ),
-        ],
       ),
     );
   }

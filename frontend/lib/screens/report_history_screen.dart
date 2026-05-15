@@ -274,33 +274,29 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Patient name
+                // Scan Date as Title
                 Expanded(
                   child: Text(
-                    patientName?.isNotEmpty == true ? patientName! : 'Unknown Patient',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
+                    'Scan: ${_formatDate(report.uploadTime)}',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Status badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _statusColor(report.status).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _statusColor(report.status).withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    report.status.toUpperCase(),
-                    style: TextStyle(
-                      color: _statusColor(report.status),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
+                if (resultCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '$resultCount',
+                      style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontSize: 11, fontWeight: FontWeight.w800),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                ],
+                const SizedBox(width: 12),
                 GestureDetector(
                   onTap: () => _deleteReport(report),
                   child: Container(
@@ -314,37 +310,36 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            // Details row
-            Row(
+            const SizedBox(height: 16),
+            // Date & Test Info
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.calendar_today_outlined, size: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                const SizedBox(width: 6),
-                Text(_formatDate(report.uploadTime),
-                    style: const TextStyle(fontSize: 12)),
-                const Spacer(),
-                if (testName?.isNotEmpty == true) ...[
-                  Icon(Icons.science_outlined, size: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(testName!,
-                        style: const TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                ],
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today_outlined, size: 13, color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.7)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('Report Date: ${report.structuredData?.collected ?? 'Not specified'}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.science_outlined, size: 13, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(testName?.isNotEmpty == true ? '$testName' : 'Medical Report',
+                          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
               ],
             ),
-            if (resultCount > 0) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.analytics_outlined, size: 13, color: Theme.of(context).colorScheme.secondary),
-                  const SizedBox(width: 6),
-                  Text('$resultCount test result(s)',
-                      style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontSize: 12, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ],
           ],
         ),
       ),

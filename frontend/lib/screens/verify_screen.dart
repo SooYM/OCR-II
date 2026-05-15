@@ -12,6 +12,7 @@ import '../utils/date_utils.dart';
 import '../utils/biomarker_dictionary.dart';
 import '../utils/unit_converter.dart';
 import 'package:intl/intl.dart';
+import 'main_screen.dart';
 
 /// Screen 2: Verify and correct extracted data, then send.
 /// Receives the MedicalReport directly from CaptureScreen (no API fetch needed).
@@ -157,56 +158,53 @@ class _VerifyScreenState extends State<VerifyScreen> {
       barrierDismissible: false,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        child: FadeInUp(
-          child: GlassCard(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.check_circle_rounded,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 56,
-                  ),
+        child: GlassCard(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  'Report Sent!',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 56,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Data has been verified and submitted successfully.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).textTheme.bodyMedium?.color,
-                  ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Report Sent!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  child: GradientButton(
-                    label: 'Scan Next Report',
-                    icon: Icons.camera_alt_rounded,
-                    onPressed: () {
-                      Navigator.pop(context); // Close dialog
-                      Navigator.pop(context); // Back to CaptureScreen
-                    },
-                  ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your medical data has been successfully verified and added to your history.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 32),
+              GradientButton(
+                label: 'Back to Dashboard',
+                onPressed: () {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MainScreen()),
+                    (route) => false,
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -456,12 +454,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   )
                 else
                   ...List.generate(_data.results.length, (index) {
-                    return FadeInUp(
-                      delay: Duration(milliseconds: 500 + (index * 60)),
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildResultCard(index, _data.results[index]),
-                      ),
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildResultCard(index, _data.results[index]),
                     );
                   }),
 
@@ -846,16 +841,17 @@ class _VerifyScreenState extends State<VerifyScreen> {
               const SizedBox(width: 12),
               Expanded(
                 flex: 1,
-                child: isMatched
-                    ? _buildStaticField(label: 'Unit', value: result.unit ?? '')
-                    : _buildMiniField(
-                        label: 'Unit',
-                        value: result.unit ?? '',
-                        onChanged: (v) {
-                          result.unit = v;
-                          _hasChanges = true;
-                        },
-                      ),
+                child: _buildUnitDropdown(
+                  label: 'Unit',
+                  value: result.unit ?? '',
+                  biomarkerValue: result.value,
+                  onChanged: (v) {
+                    if (v != null) {
+                      result.unit = v;
+                      _hasChanges = true;
+                    }
+                  },
+                ),
               ),
             ],
           ),
@@ -952,6 +948,92 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 color: Theme.of(context).colorScheme.primary,
                 width: 1.5,
               ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<String> _getRelatedUnits(String currentUnit) {
+    if (currentUnit.isEmpty) return ['mg/dL', 'mmol/L', 'g/dL', 'uL', 'uIU/mL', 'umol/L', 'fL', 'pg', '%', 'x10^3/uL', 'mil/uL', 'U/L', 'ng/dL', 'µg/dL'];
+    
+    final lowerUnit = currentUnit.toLowerCase();
+    if (lowerUnit.contains('mol') || lowerUnit.contains('g/dl') || lowerUnit.contains('g/l') || lowerUnit.contains('mg') || lowerUnit.contains('ug') || lowerUnit.contains('ng')) {
+       return ['mg/dL', 'mmol/L', 'g/dL', 'ug/dL', 'umol/L', 'mg/L', 'ng/dL', 'µg/dL'];
+    } else if (lowerUnit.contains('ul') || lowerUnit.contains('10^') || lowerUnit.contains('mil')) {
+       return ['x10^3/uL', 'mil/uL', 'uL', '/uL'];
+    } else if (lowerUnit.contains('fl') || lowerUnit.contains('pg')) {
+       return ['fL', 'pg'];
+    } else if (lowerUnit.contains('%') || lowerUnit.contains('pct')) {
+       return ['%'];
+    } else if (lowerUnit.contains('iu') || lowerUnit.contains('u/l')) {
+       return ['uIU/mL', 'mIU/L', 'IU/L', 'U/L'];
+    }
+    return ['mg/dL', 'mmol/L', 'g/dL', 'uL', 'uIU/mL', 'umol/L', 'fL', 'pg', '%', 'x10^3/uL', 'mil/uL', 'U/L', 'ng/dL', 'µg/dL'];
+  }
+
+  Widget _buildUnitDropdown({required String label, required String value, required String? biomarkerValue, required Function(String?) onChanged}) {
+    // Check if the biomarker value is numeric. If not, unit should be N/A
+    bool isNumeric = false;
+    if (biomarkerValue != null && biomarkerValue.isNotEmpty) {
+      // Try parsing as double, but also handle cases like "2+" or "TNTC" which are not standard numbers
+      isNumeric = double.tryParse(biomarkerValue.trim()) != null;
+    }
+
+    final String effectiveValue = isNumeric ? value : 'N/A';
+    final List<String> commonUnits = isNumeric ? _getRelatedUnits(effectiveValue) : ['N/A'];
+    
+    // Ensure the current value is in the list to avoid dropdown assertion errors
+    if (effectiveValue.isNotEmpty && !commonUnits.contains(effectiveValue)) {
+      commonUnits.insert(0, effectiveValue);
+    }
+    
+    final dropdownValue = effectiveValue.isEmpty ? (commonUnits.isNotEmpty ? commonUnits[0] : null) : effectiveValue;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(isNumeric ? 0.3 : 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: dropdownValue,
+              isExpanded: true,
+              icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: isNumeric ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
+              elevation: 4,
+              borderRadius: BorderRadius.circular(12),
+              dropdownColor: Theme.of(context).colorScheme.surface,
+              style: TextStyle(
+                color: isNumeric ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.outline,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              onChanged: isNumeric ? onChanged : null, // Disable if non-numeric
+              items: commonUnits.map<DropdownMenuItem<String>>((String val) {
+                return DropdownMenuItem<String>(
+                  value: val,
+                  child: Text(val),
+                );
+              }).toList(),
             ),
           ),
         ),

@@ -13,9 +13,9 @@ import '../utils/date_utils.dart';
 import 'capture_screen.dart';
 import 'report_history_screen.dart';
 import 'ai_chat_screen.dart';
-import '../services/theme_service.dart';
 import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
+import 'settings_screen.dart';
 
 /// Main screen with bottom navigation: Dashboard, Scan, My Reports.
 class MainScreen extends StatefulWidget {
@@ -184,35 +184,7 @@ class _MainScreenState extends State<MainScreen> {
     return DateTime.parse(uploadTime);
   }
 
-  void _handleLogout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
-        title: const Text('Log Out?'),
-        content: const Text('You will need to sign in again.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await AuthService.logout();
-              if (mounted) {
-                Navigator.pushReplacement(
-                  context, MaterialPageRoute(builder: (_) => AuthScreen()),
-                );
-              }
-            },
-            child: Text('Log Out', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -224,6 +196,7 @@ class _MainScreenState extends State<MainScreen> {
           const CaptureScreen(),
           AiChatScreen(key: _chatKey, dateRange: _selectedDateRange),
           const ReportHistoryScreen(),
+          const SettingsScreen(),
         ],
       ),
       bottomNavigationBar: _buildBottomNavBar(),
@@ -285,46 +258,7 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
             ),
-            GestureDetector(
-              onTap: () => ThemeService.instance.toggleTheme(),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  ThemeService.instance.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                  size: 20,
-                  color: ThemeService.instance.isDarkMode ? Colors.orangeAccent : Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _handleLogout,
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.person_rounded, size: 18),
-                    if (AuthService.currentUser != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        (AuthService.currentUser!['name'] as String? ?? '').split(' ').first,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             GestureDetector(
               onTap: _showSimplifiedDatePicker,
               child: Container(
@@ -449,6 +383,25 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    final name = AuthService.currentUser?['name'] ?? 'User';
+    final firstName = name.split(' ').first;
+    
+    String greeting;
+    if (hour >= 5 && hour < 12) {
+      greeting = 'Good Morning';
+    } else if (hour >= 12 && hour < 17) {
+      greeting = 'Good Afternoon';
+    } else if (hour >= 17 && hour < 21) {
+      greeting = 'Good Evening';
+    } else {
+      greeting = 'Good Night';
+    }
+    
+    return '$greeting, $firstName';
+  }
+
   Widget _buildAiAnalysis() {
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = 2),
@@ -472,7 +425,7 @@ class _MainScreenState extends State<MainScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('AI Clinical Consultant', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                  Text(_getGreeting(), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
                   const SizedBox(height: 4),
                   Text('Chat with AI about your health data', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ],
@@ -1353,11 +1306,16 @@ class _MainScreenState extends State<MainScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(category, style: TextStyle(
-                        fontSize: 13, 
-                        fontWeight: selectedInCategory > 0 ? FontWeight.w700 : FontWeight.w500,
-                        color: selectedInCategory > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
-                      )),
+                      Flexible(
+                        child: Text(category, 
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13, 
+                            fontWeight: selectedInCategory > 0 ? FontWeight.w700 : FontWeight.w500,
+                            color: selectedInCategory > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 6),
                       if (selectedInCategory > 0) ...[
                         Container(
@@ -1425,7 +1383,7 @@ class _MainScreenState extends State<MainScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Other Metrics', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    const Flexible(child: Text('Other Metrics', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
                     const SizedBox(width: 6),
                     if (selectedInOther > 0) ...[
                       Container(
@@ -1706,6 +1664,8 @@ class _MainScreenState extends State<MainScreen> {
                   label: 'AI Chat', gradient: LinearGradient(colors: [Theme.of(context).colorScheme.secondary, const Color(0xFF7C4DFF)])),
               _buildNavItem(index: 3, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
                   label: 'My Reports', gradient: const LinearGradient(colors: [AppTheme.warning, Color(0xFFFF8A65)])),
+              _buildNavItem(index: 4, icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded,
+                  label: 'Settings', gradient: AppTheme.accentGradient(context)),
             ],
           ),
         ),
