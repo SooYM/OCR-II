@@ -108,8 +108,37 @@ flutter run
 - **animate_do** — Premium UI micro-interactions
 - **shared_preferences** — Theme preference persistence
 
-**Backend**
-- **FastAPI** — High-performance Python backend
-- **OpenAI GPT-4o** — Vision & analytical reasoning
-- **Supabase/PostgreSQL** — Secure cloud storage
 - **PyJWT & Bcrypt** — Industrial-grade security
+
+## 📖 Data Dictionary & Standardized Units
+
+MedScan standardizes all extracted medical data into the following profiles and units to ensure consistent trend tracking across different laboratories.
+
+| Category | Parameter | Unit | Description |
+|----------|-----------|------|-------------|
+| **Hematology (CBC)** | Hemoglobin | g/dL | Oxygen-carrying protein in red blood cells |
+| | RBC Count | mil/µL | Total number of red blood cells |
+| | WBC Count | cells/µL | Total white blood cell count (Leukocytes) |
+| | Platelet Count | x10³/µL | Cells responsible for blood clotting |
+| | Hematocrit | % | Proportion of blood volume occupied by RBCs |
+| | MCV / MCH / MCHC | fL / pg / g/dL | Red blood cell indices |
+| **Lipid Profile** | Total Cholesterol | mg/dL | Combined measure of all cholesterol |
+| | HDL Cholesterol | mg/dL | "Good" cholesterol (High-Density Lipoprotein) |
+| | LDL Cholesterol | mg/dL | "Bad" cholesterol (Low-Density Lipoprotein) |
+| | Triglycerides | mg/dL | Type of fat (lipid) found in the blood |
+| **Renal (Kidney)** | Creatinine | mg/dL | Waste product used to measure kidney function |
+| | Urea / BUN | mg/dL | Measures amount of nitrogen in blood from urea |
+| | eGFR | mL/min/1.73m² | Estimated Glomerular Filtration Rate |
+| | Uric Acid | mg/dL | Waste product of purine metabolism |
+| **Liver Function** | ALT (SGPT) | U/L | Enzyme found primarily in the liver |
+| | AST (SGOT) | U/L | Enzyme found in liver and heart |
+| | ALP / GGT | U/L | Enzymes related to bile ducts and bone |
+| | Bilirubin (Total/Dir) | mg/dL | Yellow pigment from RBC breakdown |
+| | Albumin / Globulin | g/dL | Blood proteins produced by liver |
+| **Diabetes** | HbA1c | % | Average blood sugar levels over 3 months |
+| | Fasting Glucose | mg/dL | Blood sugar after fasting period |
+| **Electrolytes** | Sodium / Potassium | mmol/L | Essential minerals for cell function |
+| | Calcium / Phosphorus | mg/dL | Key minerals for bone health |
+| **Urine Analysis** | Specific Gravity | - | Concentration of particles in urine |
+| | pH | - | Acidity/alkalinity of urine |
+| | Protein / Glucose | - | Presence of these in urine (qualitative) |
