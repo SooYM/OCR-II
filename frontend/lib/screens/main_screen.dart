@@ -890,6 +890,13 @@ class _MainScreenState extends State<MainScreen> {
 
     final Set<String> uniqueTestKeys = testKeyToName.keys.toSet();
 
+    final Set<String> nonNumericKeys = {
+      'urine_colour', 'appearance', 'proteins', 'glucose', 'bilirubin',
+      'ketones', 'blood', 'urobilinogen', 'nitrites', 'casts', 'crystals', 'others'
+    };
+
+    final Set<String> graphTestKeys = uniqueTestKeys.where((k) => !nonNumericKeys.contains(k)).toSet();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       physics: const BouncingScrollPhysics(),
@@ -903,13 +910,13 @@ class _MainScreenState extends State<MainScreen> {
           // Multi-Attribute Comparison Section
           _buildMultiAttributeHeader(),
           if (_isMultiAttributeExpanded) ...[
-            _buildAttributeSelector(uniqueTestKeys, testKeyToName),
+            _buildAttributeSelector(graphTestKeys, testKeyToName),
             const SizedBox(height: 12),
             _buildMultiAttributeChart(validReports, testKeyToName),
           ],
           const SizedBox(height: 40),
           
-          _buildCategorizedGraphs(validReports, uniqueTestKeys, testKeyToName),
+          _buildCategorizedGraphs(validReports, graphTestKeys, testKeyToName),
           const SizedBox(height: 32),
           _buildRecentResultsTable(validReports, uniqueTestKeys, testKeyToName),
           const SizedBox(height: 100), // padding for bottom nav

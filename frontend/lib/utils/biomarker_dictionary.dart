@@ -78,9 +78,9 @@ class BiomarkerDictionary {
 
   static const List<BiomarkerEntry> entries = [
     // ─── CBC ──────────────────────────────────────────────
-    BiomarkerEntry(key: 'hemoglobin_g_dl', standardName: 'Hemoglobin', unit: 'g/dL', referenceRange: '13.8 - 17.2', allowedUnits: ['g/dL', 'g/L'], aliases: ['Hb', 'Haemoglobin', 'HGB', 'Hgb'], description: 'The protein in red blood cells that carries oxygen throughout the body.'),
-    BiomarkerEntry(key: 'rbc_count_mil_ul', standardName: 'RBC Count', unit: 'mil/uL', referenceRange: '4.5 - 5.9', allowedUnits: ['mil/uL', '10^12/L'], aliases: ['Red Blood Cell Count', 'RBC', 'Erythrocyte Count'], description: 'The total number of red blood cells in a volume of blood.'),
-    BiomarkerEntry(key: 'hematocrit_pct', standardName: 'Hematocrit', unit: '%', referenceRange: '36.1 - 50.3', allowedUnits: ['%'], aliases: ['HCT', 'Haematocrit', 'PCV', 'Packed Cell Volume'], description: 'The proportion of blood that consists of red blood cells.'),
+    BiomarkerEntry(key: 'hemoglobin_g_dl', standardName: 'Hemoglobin', unit: 'g/dL', referenceRange: 'Male: 13.8 - 17.2 | Female: 12.1 - 15.1', allowedUnits: ['g/dL', 'g/L'], aliases: ['Hb', 'Haemoglobin', 'HGB', 'Hgb'], description: 'The protein in red blood cells that carries oxygen throughout the body.'),
+    BiomarkerEntry(key: 'rbc_count_mil_ul', standardName: 'RBC Count', unit: 'mil/uL', referenceRange: 'Male: 4.5 - 5.9 | Female: 4.1 - 5.1', allowedUnits: ['mil/uL', '10^12/L'], aliases: ['Red Blood Cell Count', 'RBC', 'Erythrocyte Count'], description: 'The total number of red blood cells in a volume of blood.'),
+    BiomarkerEntry(key: 'hematocrit_pct', standardName: 'Hematocrit', unit: '%', referenceRange: 'Male: 40.7 - 50.3 | Female: 36.1 - 44.3', allowedUnits: ['%', 'fraction', 'L/L'], aliases: ['HCT', 'Haematocrit', 'PCV', 'Packed Cell Volume'], description: 'The proportion of blood that consists of red blood cells.'),
     BiomarkerEntry(key: 'mcv_fl', standardName: 'MCV', unit: 'fL', referenceRange: '80 - 100', allowedUnits: ['fL'], aliases: ['Mean Corpuscular Volume'], description: 'The average size of your red blood cells.'),
     BiomarkerEntry(key: 'mch_pg', standardName: 'MCH', unit: 'pg', referenceRange: '27 - 33', allowedUnits: ['pg'], aliases: ['Mean Corpuscular Hemoglobin', 'Mean Corpuscular Haemoglobin'], description: 'The average amount of hemoglobin in each red blood cell.'),
     BiomarkerEntry(key: 'mchc_g_dl', standardName: 'MCHC', unit: 'g/dL', referenceRange: '32 - 36', allowedUnits: ['g/dL', 'g/L'], aliases: ['Mean Corpuscular Hemoglobin Concentration'], description: 'The average concentration of hemoglobin in a given volume of red blood cells.'),
@@ -111,12 +111,12 @@ class BiomarkerDictionary {
 
     // ─── Lipid Profile ────────────────────────────────────
     BiomarkerEntry(key: 'total_cholesterol_mg_dl', standardName: 'Total Cholesterol', unit: 'mg/dL', referenceRange: '< 200', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['Cholesterol', 'Tot. Cholesterol', 'TC', 'Chol', 'S. Cholesterol', 'Serum Cholesterol'], description: 'The total amount of cholesterol found in your blood.'),
-    BiomarkerEntry(key: 'hdl_mg_dl', standardName: 'HDL Cholesterol', unit: 'mg/dL', referenceRange: '> 40', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['HDL', 'HDL-C', 'High Density Lipoprotein'], description: "Known as 'good' cholesterol; it helps remove other forms of cholesterol from your bloodstream."),
+    BiomarkerEntry(key: 'hdl_mg_dl', standardName: 'HDL Cholesterol', unit: 'mg/dL', referenceRange: 'Male: > 40 | Female: > 50', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['HDL', 'HDL-C', 'High Density Lipoprotein'], description: "Known as 'good' cholesterol; it helps remove other forms of cholesterol from your bloodstream."),
     BiomarkerEntry(key: 'ldl_mg_dl', standardName: 'LDL Cholesterol', unit: 'mg/dL', referenceRange: '< 100', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['LDL', 'LDL-C', 'Low Density Lipoprotein'], description: "Known as 'bad' cholesterol; high levels can lead to plaque buildup in arteries."),
     BiomarkerEntry(key: 'vldl_mg_dl', standardName: 'VLDL Cholesterol', unit: 'mg/dL', referenceRange: '2 - 30', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['VLDL', 'VLDL-C', 'Very Low Density Lipoprotein'], description: 'A type of blood fat that carries triglycerides.'),
     BiomarkerEntry(key: 'triglycerides_mg_dl', standardName: 'Triglycerides', unit: 'mg/dL', referenceRange: '< 150', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['TG', 'Trigs', 'Triglyceride', 'S. Triglycerides'], description: 'A type of fat (lipid) found in your blood, used for energy.'),
     BiomarkerEntry(key: 'non_hdl_mg_dl', standardName: 'Non-HDL Cholesterol', unit: 'mg/dL', referenceRange: '< 130', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['Non HDL', 'Non-HDL'], description: 'Total cholesterol minus HDL; represents all potentially harmful cholesterol.'),
-    BiomarkerEntry(key: 'total_hdl_ratio', standardName: 'Total/HDL Ratio', unit: '', referenceRange: '< 5.0', aliases: ['TC/HDL', 'Cholesterol/HDL Ratio'], description: 'The ratio of total cholesterol to HDL, used to assess heart disease risk.'),
+    BiomarkerEntry(key: 'total_hdl_ratio', standardName: 'Total/HDL Ratio', unit: '', referenceRange: '< 5.0 (Optimal < 3.5)', aliases: ['TC/HDL', 'Cholesterol/HDL Ratio'], description: 'The ratio of total cholesterol to HDL, used to assess heart disease risk.'),
     BiomarkerEntry(key: 'ldl_hdl_ratio', standardName: 'LDL/HDL Ratio', unit: '', referenceRange: '< 3.0', aliases: [], description: 'The ratio of LDL to HDL cholesterol.'),
     BiomarkerEntry(key: 'hdl_ldl_ratio', standardName: 'HDL/LDL Ratio', unit: '', referenceRange: '> 0.3', aliases: [], description: 'The ratio of HDL to LDL cholesterol.'),
 
@@ -134,20 +134,20 @@ class BiomarkerDictionary {
     BiomarkerEntry(key: 'a_g_ratio', standardName: 'A/G Ratio', unit: '', referenceRange: '1.1 - 2.5', aliases: ['Albumin/Globulin Ratio', 'AG Ratio'], description: 'The ratio of albumin to globulin in the blood.'),
 
     // ─── Kidney Function ──────────────────────────────────
-    BiomarkerEntry(key: 'creatinine_mg_dl', standardName: 'Creatinine', unit: 'mg/dL', referenceRange: '0.74 - 1.35', allowedUnits: ['mg/dL', 'umol/L', 'µmol/L'], aliases: ['S. Creatinine', 'Serum Creatinine', 'Creat'], description: 'A waste product from muscle breakdown, filtered by the kidneys.'),
+    BiomarkerEntry(key: 'creatinine_mg_dl', standardName: 'Creatinine', unit: 'mg/dL', referenceRange: 'Male: 0.74 - 1.35 | Female: 0.59 - 1.04', allowedUnits: ['mg/dL', 'umol/L', 'µmol/L'], aliases: ['S. Creatinine', 'Serum Creatinine', 'Creat'], description: 'A waste product from muscle breakdown, filtered by the kidneys.'),
     BiomarkerEntry(key: 'urea_mg_dl', standardName: 'Urea', unit: 'mg/dL', referenceRange: '15 - 40', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['Blood Urea', 'S. Urea', 'Serum Urea'], description: 'A waste product formed in the liver when protein is broken down.'),
     BiomarkerEntry(key: 'bun_mg_dl', standardName: 'BUN', unit: 'mg/dL', referenceRange: '7 - 20', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['Blood Urea Nitrogen'], description: 'The amount of nitrogen in your blood that comes from the waste product urea.'),
-    BiomarkerEntry(key: 'bun_creatinine_ratio', standardName: 'BUN/Creatinine Ratio', unit: '', referenceRange: '10 - 20', aliases: [], description: 'The ratio of BUN to creatinine, used to diagnose acute kidney issues.'),
+    BiomarkerEntry(key: 'bun_creatinine_ratio', standardName: 'BUN/Creatinine Ratio', unit: '', referenceRange: '10:1 - 20:1', aliases: [], description: 'The ratio of BUN to creatinine, used to diagnose acute kidney issues.'),
     BiomarkerEntry(key: 'sodium_mmol_l', standardName: 'Sodium', unit: 'mmol/L', referenceRange: '135 - 145', allowedUnits: ['mmol/L', 'mEq/L'], aliases: ['Na', 'Na+', 'S. Sodium', 'Serum Sodium'], description: 'An electrolyte that helps maintain fluid balance and nerve function.'),
     BiomarkerEntry(key: 'potassium_mmol_l', standardName: 'Potassium', unit: 'mmol/L', referenceRange: '3.5 - 5.0', allowedUnits: ['mmol/L', 'mEq/L'], aliases: ['K', 'K+', 'S. Potassium', 'Serum Potassium'], description: 'An electrolyte vital for heart and muscle function.'),
     BiomarkerEntry(key: 'chloride_mmol_l', standardName: 'Chloride', unit: 'mmol/L', referenceRange: '96 - 106', allowedUnits: ['mmol/L', 'mEq/L'], aliases: ['Cl', 'Cl-', 'S. Chloride', 'Serum Chloride'], description: 'An electrolyte that helps maintain proper blood volume and pressure.'),
-    BiomarkerEntry(key: 'uric_acid_mg_dl', standardName: 'Uric Acid', unit: 'mg/dL', referenceRange: '2.4 - 7.0', allowedUnits: ['mg/dL', 'µmol/L'], aliases: ['S. Uric Acid', 'Serum Uric Acid'], description: 'A waste product from the breakdown of purines; high levels can cause gout.'),
+    BiomarkerEntry(key: 'uric_acid_mg_dl', standardName: 'Uric Acid', unit: 'mg/dL', referenceRange: 'Male: 3.4 - 7.0 | Female: 2.4 - 6.0', allowedUnits: ['mg/dL', 'µmol/L'], aliases: ['S. Uric Acid', 'Serum Uric Acid'], description: 'A waste product from the breakdown of purines; high levels can cause gout.'),
     BiomarkerEntry(key: 'egfr_ml_min_173m2', standardName: 'eGFR', unit: 'mL/min/1.73m²', referenceRange: '> 90', allowedUnits: ['mL/min/1.73m²', 'mL/s/1.73m²'], aliases: ['Estimated GFR', 'Glomerular Filtration Rate'], description: 'A calculation of how well the kidneys are filtering waste from the blood.'),
 
     // ─── Iron Profile ─────────────────────────────────────
-    BiomarkerEntry(key: 'iron_ug_dl', standardName: 'Iron', unit: 'ug/dL', referenceRange: '65 - 176', allowedUnits: ['ug/dL', 'umol/L'], aliases: ['S. Iron', 'Serum Iron', 'Fe'], description: 'A mineral used by the body to make hemoglobin.'),
-    BiomarkerEntry(key: 'uibc_ug_dl', standardName: 'UIBC', unit: 'ug/dL', referenceRange: '112 - 346', allowedUnits: ['ug/dL', 'umol/L'], aliases: ['Unsaturated Iron Binding Capacity'], description: 'The reserve capacity of transferrin to bind iron.'),
-    BiomarkerEntry(key: 'tibc_ug_dl', standardName: 'TIBC', unit: 'ug/dL', referenceRange: '240 - 450', allowedUnits: ['ug/dL', 'umol/L'], aliases: ['Total Iron Binding Capacity'], description: 'The total capacity of the blood to carry iron.'),
+    BiomarkerEntry(key: 'iron_ug_dl', standardName: 'Iron', unit: 'ug/dL', referenceRange: 'Male: 65 - 176 | Female: 50 - 170', allowedUnits: ['ug/dL', 'umol/L', 'µmol/L'], aliases: ['S. Iron', 'Serum Iron', 'Fe'], description: 'A mineral used by the body to make hemoglobin.'),
+    BiomarkerEntry(key: 'uibc_ug_dl', standardName: 'UIBC', unit: 'ug/dL', referenceRange: '112 - 346', allowedUnits: ['ug/dL', 'umol/L', 'µmol/L'], aliases: ['Unsaturated Iron Binding Capacity'], description: 'The reserve capacity of transferrin to bind iron.'),
+    BiomarkerEntry(key: 'tibc_ug_dl', standardName: 'TIBC', unit: 'ug/dL', referenceRange: '240 - 450', allowedUnits: ['ug/dL', 'umol/L', 'µmol/L'], aliases: ['Total Iron Binding Capacity'], description: 'The total capacity of the blood to carry iron.'),
     BiomarkerEntry(key: 'transferrin_saturation_pct', standardName: 'Transferrin Saturation', unit: '%', referenceRange: '20 - 50', allowedUnits: ['%'], aliases: ['TSAT', 'Iron Saturation'], description: 'The percentage of transferrin that is saturated with iron.'),
 
     // ─── HbA1c ────────────────────────────────────────────
@@ -157,8 +157,8 @@ class BiomarkerDictionary {
 
     // ─── Urine ACR ────────────────────────────────────────
     BiomarkerEntry(key: 'urine_albumin_mg_l', standardName: 'Urine Albumin', unit: 'mg/L', referenceRange: '< 30', allowedUnits: ['mg/L'], aliases: ['Microalbumin', 'U. Albumin'], description: 'Small amounts of albumin in the urine, an early sign of kidney disease.'),
-    BiomarkerEntry(key: 'urine_creatinine_mg_dl', standardName: 'Urine Creatinine', unit: 'mg/dL', referenceRange: '20 - 275', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['U. Creatinine'], description: 'Creatinine measured in a urine sample.'),
-    BiomarkerEntry(key: 'albumin_creatinine_ratio', standardName: 'Albumin/Creatinine Ratio', unit: '', referenceRange: '< 30', aliases: ['ACR', 'Urine ACR'], description: 'The ratio of albumin to creatinine in the urine, used to detect kidney damage.'),
+    BiomarkerEntry(key: 'urine_creatinine_mg_dl', standardName: 'Urine Creatinine', unit: 'mg/dL', referenceRange: 'Male: 20 - 275 | Female: 15 - 225', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['U. Creatinine'], description: 'Creatinine measured in a urine sample.'),
+    BiomarkerEntry(key: 'albumin_creatinine_ratio', standardName: 'Albumin/Creatinine Ratio', unit: '', referenceRange: '< 30', allowedUnits: ['mg/g', 'mg/mmol'], aliases: ['ACR', 'Urine ACR'], description: 'The ratio of albumin to creatinine in the urine, used to detect kidney damage.'),
 
     // ─── Calcium & Phosphorus ─────────────────────────────
     BiomarkerEntry(key: 'calcium_mg_dl', standardName: 'Calcium', unit: 'mg/dL', referenceRange: '8.5 - 10.2', allowedUnits: ['mg/dL', 'mmol/L'], aliases: ['Ca', 'Ca++', 'S. Calcium', 'Serum Calcium', 'Total Calcium'], description: 'Important for bone health, muscle function, and nerve signaling.'),
@@ -180,18 +180,19 @@ class BiomarkerDictionary {
     BiomarkerEntry(key: 'appearance', standardName: 'Appearance', unit: '', referenceRange: 'Clear', aliases: ['Urine Appearance'], description: 'The clarity or turbidity of the urine.'),
     BiomarkerEntry(key: 'specific_gravity', standardName: 'Specific Gravity', unit: '', referenceRange: '1.005 - 1.030', aliases: ['Sp. Gravity', 'SG'], description: 'Measures the concentration of particles in the urine.'),
     BiomarkerEntry(key: 'ph', standardName: 'pH', unit: '', referenceRange: '4.5 - 8.0', aliases: ['Urine pH'], description: 'Measures the acidity or alkalinity of the urine.'),
-    BiomarkerEntry(key: 'proteins', standardName: 'Proteins', unit: '', referenceRange: 'Negative', aliases: ['Urine Protein', 'Protein'], description: 'Detects the presence of protein in the urine.'),
+    BiomarkerEntry(key: 'proteins', standardName: 'Proteins', unit: '', referenceRange: 'Negative or < 15', allowedUnits: ['mg/dL', 'g/L'], aliases: ['Urine Protein', 'Protein'], description: 'Detects the presence of protein in the urine.'),
     BiomarkerEntry(key: 'glucose', standardName: 'Glucose (Urine)', unit: '', referenceRange: 'Negative', aliases: ['Urine Glucose', 'Sugar'], description: 'Detects the presence of sugar in the urine.'),
     BiomarkerEntry(key: 'bilirubin', standardName: 'Bilirubin (Urine)', unit: '', referenceRange: 'Negative', aliases: ['Urine Bilirubin'], description: 'Detects processed bilirubin in the urine.'),
     BiomarkerEntry(key: 'ketones', standardName: 'Ketones', unit: '', referenceRange: 'Negative', aliases: ['Urine Ketones', 'Ketone Bodies'], description: 'Detects ketones, a byproduct of fat breakdown.'),
     BiomarkerEntry(key: 'blood', standardName: 'Blood (Urine)', unit: '', referenceRange: 'Negative', aliases: ['Urine Blood', 'Occult Blood'], description: 'Detects the presence of blood or hemoglobin in the urine.'),
-    BiomarkerEntry(key: 'urobilinogen', standardName: 'Urobilinogen', unit: '', referenceRange: '0.2 - 1.0 or Normal', aliases: ['Urine Urobilinogen'], description: 'A byproduct of bilirubin breakdown found in urine.'),
+    BiomarkerEntry(key: 'urobilinogen', standardName: 'Urobilinogen', unit: '', referenceRange: '0.2 - 1.0 EU/dL or Normal', allowedUnits: ['EU/dL', 'µmol/L'], aliases: ['Urine Urobilinogen'], description: 'A byproduct of bilirubin breakdown found in urine.'),
     BiomarkerEntry(key: 'nitrites', standardName: 'Nitrites', unit: '', referenceRange: 'Negative', aliases: ['Urine Nitrites', 'Nitrite'], description: 'Often indicates the presence of a urinary tract infection (UTI).'),
-    BiomarkerEntry(key: 'wbc_pus_cells_hpf', standardName: 'WBC / Pus Cells', unit: '/HPF', referenceRange: '0 - 5', allowedUnits: ['/HPF'], aliases: ['Pus Cells', 'WBC (Urine)', 'Leucocytes'], description: 'Presence of white blood cells in urine, indicating infection or inflammation.'),
-    BiomarkerEntry(key: 'rbc', standardName: 'RBC (Urine)', unit: '/HPF', referenceRange: '0 - 2', aliases: ['Red Blood Cells (Urine)'], description: 'Presence of red blood cells in urine.'),
-    BiomarkerEntry(key: 'epithelial_cells_hpf', standardName: 'Epithelial Cells', unit: '/HPF', referenceRange: '0 - 5', allowedUnits: ['/HPF'], aliases: ['Ep. Cells', 'Squamous Epithelial Cells'], description: 'Cells that line the urinary tract.'),
+    BiomarkerEntry(key: 'wbc_pus_cells_hpf', standardName: 'WBC / Pus Cells', unit: '/HPF', referenceRange: '0 - 5', allowedUnits: ['/HPF', 'x10^6/L'], aliases: ['Pus Cells', 'WBC (Urine)', 'Leucocytes'], description: 'Presence of white blood cells in urine, indicating infection or inflammation.'),
+    BiomarkerEntry(key: 'rbc', standardName: 'RBC (Urine)', unit: '/HPF', referenceRange: '0 - 2', allowedUnits: ['/HPF', 'x10^6/L'], aliases: ['Red Blood Cells (Urine)'], description: 'Presence of red blood cells in urine.'),
+    BiomarkerEntry(key: 'epithelial_cells_hpf', standardName: 'Epithelial Cells', unit: '/HPF', referenceRange: '0 - 5', allowedUnits: ['/HPF', 'x10^6/L'], aliases: ['Ep. Cells', 'Squamous Epithelial Cells'], description: 'Cells that line the urinary tract.'),
     BiomarkerEntry(key: 'casts', standardName: 'Casts', unit: '/LPF', referenceRange: 'Negative', allowedUnits: ['/LPF'], aliases: ['Urine Casts'], description: 'Cylindrical structures formed in the kidney tubules.'),
     BiomarkerEntry(key: 'crystals', standardName: 'Crystals', unit: '', referenceRange: 'Negative', aliases: ['Urine Crystals'], description: 'Solid particles formed from chemicals in the urine.'),
+    BiomarkerEntry(key: 'others', standardName: 'Others', unit: '', referenceRange: 'Negative / Nil', aliases: ['Urine Others', 'Other'], description: 'Any other elements observed in urine.'),
   ];
 
   /// Normalize a string for comparison: lowercase, remove special chars.
@@ -233,38 +234,70 @@ class BiomarkerDictionary {
       }
     }
 
-    // 4. Normalized containment match (both directions)
+    // Helper to get normalized words from a string
+    List<String> getWords(String s) {
+      return s.toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty)
+          .toList();
+    }
+
+    final inputWords = getWords(input);
+    if (inputWords.isEmpty) return null;
+
     BiomarkerEntry? bestMatch;
-    int bestScore = 0;
+    double bestScore = 0.0;
+
     for (final e in entries) {
-      final nameNorm = _normalize(e.standardName);
-      int score = 0;
-      if (nameNorm == inputNorm) {
-        score = 100;
-      } else if (nameNorm.contains(inputNorm) && inputNorm.length >= 3) {
-        score = 70 + inputNorm.length;
-      } else if (inputNorm.contains(nameNorm) && nameNorm.length >= 3) {
-        score = 60 + nameNorm.length;
-      }
-      // Also check aliases normalized
-      for (final alias in e.aliases) {
-        final aliasNorm = _normalize(alias);
-        if (aliasNorm == inputNorm) {
-          score = 100;
-        } else if (aliasNorm.contains(inputNorm) && inputNorm.length >= 3 && score < 65) {
-          score = 65;
-        } else if (inputNorm.contains(aliasNorm) && aliasNorm.length >= 3 && score < 55) {
-          score = 55;
+      final targets = [e.standardName, ...e.aliases];
+      
+      for (final target in targets) {
+        final targetWords = getWords(target);
+        if (targetWords.isEmpty) continue;
+
+        // Calculate intersection
+        int intersection = 0;
+        final tempTargetWords = List<String>.from(targetWords);
+        for (final iw in inputWords) {
+          final idx = tempTargetWords.indexOf(iw);
+          if (idx != -1) {
+            intersection++;
+            tempTargetWords.removeAt(idx);
+          }
         }
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = e;
+
+        if (intersection == 0) continue;
+
+        // Calculate overlap coefficient (intersection / min(inputWords.length, targetWords.length))
+        final double overlap = intersection / (inputWords.length < targetWords.length ? inputWords.length : targetWords.length);
+        
+        // Calculate Jaccard similarity (intersection / union)
+        final int union = inputWords.length + targetWords.length - intersection;
+        final double jaccard = intersection / union;
+
+        // Combine into a composite score
+        double score = (jaccard * 0.6) + (overlap * 0.4);
+
+        // Boost score if the first word matches exactly
+        if (inputWords.first == targetWords.first) {
+          score += 0.1;
+        }
+
+        // Penalty for matching extremely short common words like "abs" alone
+        if (inputWords.length == 1 && inputWords.first.length <= 3) {
+          score *= 0.2; // Severely penalize single short word matches
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = e;
+        }
       }
     }
 
-    // Only return if we have a reasonable confidence
-    return bestScore >= 55 ? bestMatch : null;
+    // Return the match only if it meets our confidence threshold of 0.5
+    return bestScore >= 0.5 ? bestMatch : null;
   }
 
   /// Get autocomplete suggestions for a partial input.

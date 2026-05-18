@@ -587,6 +587,66 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
+  bool _exceedsReferenceRange(String valueStr, String rangeStr) {
+    if (valueStr.isEmpty || rangeStr.isEmpty) return false;
+
+    final valStrClean = valueStr.replaceAll(',', '').trim();
+    if (valStrClean.startsWith('<') || valStrClean.startsWith('>')) {
+      if (valStrClean.replaceAll(' ', '') == rangeStr.replaceAll(' ', '')) {
+        return false;
+      }
+      return false;
+    }
+
+    final val = double.tryParse(valStrClean);
+    if (val == null) return false;
+
+    final rangeClean = rangeStr.replaceAll(',', '').trim();
+
+    double? combinedMin;
+    double? combinedMax;
+    bool hasRange = false;
+
+    // 1. Extract all "X - Y" ranges (handles "13.8 - 17.2" or "Male: 13.8-17.2 | Female: 12.1-15.1")
+    final rangeMatches = RegExp(r'(\d*\.?\d+)\s*-\s*(\d*\.?\d+)').allMatches(rangeClean);
+    for (final match in rangeMatches) {
+      final minVal = double.tryParse(match.group(1)!);
+      final maxVal = double.tryParse(match.group(2)!);
+      if (minVal != null && maxVal != null) {
+        combinedMin = (combinedMin == null) ? minVal : (minVal < combinedMin ? minVal : combinedMin);
+        combinedMax = (combinedMax == null) ? maxVal : (maxVal > combinedMax ? maxVal : combinedMax);
+        hasRange = true;
+      }
+    }
+
+    // 2. Extract all "< X" limits (handles "< 200")
+    final lessMatches = RegExp(r'<\s*(\d*\.?\d+)').allMatches(rangeClean);
+    for (final match in lessMatches) {
+      final maxVal = double.tryParse(match.group(1)!);
+      if (maxVal != null) {
+        combinedMax = (combinedMax == null) ? maxVal : (maxVal > combinedMax ? maxVal : combinedMax);
+        hasRange = true;
+      }
+    }
+
+    // 3. Extract all "> X" limits (handles "> 40")
+    final greaterMatches = RegExp(r'>\s*(\d*\.?\d+)').allMatches(rangeClean);
+    for (final match in greaterMatches) {
+      final minVal = double.tryParse(match.group(1)!);
+      if (minVal != null) {
+        combinedMin = (combinedMin == null) ? minVal : (minVal < combinedMin ? minVal : combinedMin);
+        hasRange = true;
+      }
+    }
+
+    if (!hasRange) return false;
+
+    if (combinedMin != null && val < combinedMin) return true;
+    if (combinedMax != null && val > combinedMax) return true;
+
+    return false;
+  }
+
   List<Widget> _buildGroupedTestResults() {
     if (_data.results.isEmpty) {
       return [
@@ -661,6 +721,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
   Widget _buildResultCard(int index, TestResult result) {
     final isMatched = _matchedIndices.contains(index);
     final matchEntry = _matchedEntries[index];
+    final String currentRefRange = result.referenceRange ?? (matchEntry?.referenceRange ?? '');
+    final bool isExceeding = _exceedsReferenceRange(result.value, currentRefRange);
 
     return GlassCard(
       padding: const EdgeInsets.all(16),
@@ -835,6 +897,24 @@ class _VerifyScreenState extends State<VerifyScreen> {
                     _hasChanges = true;
                   },
                 ),
+          if (isExceeding)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline_rounded, size: 14, color: Theme.of(context).colorScheme.error),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Value exceeds reference range',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

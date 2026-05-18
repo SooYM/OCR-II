@@ -196,10 +196,10 @@ void main() {
 
   group('UnitConverter - Reference Range Conversion', () {
     test('Hemoglobin range g/dL → g/L (X - Y format)', () {
-      final r = UnitConverter.convertRange('hemoglobin_g_dl', '13.8 - 17.2', 'g/dL', 'g/L');
+      final r = UnitConverter.convertRange('hemoglobin_g_dl', '13.5 - 17.5', 'g/dL', 'g/L');
       final parts = r.split(' - ');
-      expect(double.parse(parts[0]), closeTo(138, 1));
-      expect(double.parse(parts[1]), closeTo(172, 1));
+      expect(double.parse(parts[0]), closeTo(135, 1));
+      expect(double.parse(parts[1]), closeTo(175, 1));
     });
     
     test('Cholesterol range mg/dL → mmol/L (< X format)', () {

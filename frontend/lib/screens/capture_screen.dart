@@ -249,7 +249,39 @@ class _CaptureScreenState extends State<CaptureScreen>
               style: TextStyle(fontSize: 14, height: 1.5),
             ),
           ),
-          const SizedBox(height: 40),
+          
+          const SizedBox(height: 24),
+          // --- CAMERA GUIDE (Option 4) ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.tips_and_updates_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Tips for High Accuracy:', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.primary)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTipRow(Icons.light_mode_rounded, 'Ensure the room is well-lit'),
+                  _buildTipRow(Icons.crop_free_rounded, 'Keep the camera parallel to the paper'),
+                  _buildTipRow(Icons.center_focus_strong_rounded, 'Make sure text is sharp and in focus'),
+                ],
+              ),
+            ),
+          ),
+          // --------------------------------
+          
+          const SizedBox(height: 32),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -267,6 +299,21 @@ class _CaptureScreenState extends State<CaptureScreen>
                 onTap: () => _pickImage(ImageSource.gallery),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTipRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.9))),
           ),
         ],
       ),

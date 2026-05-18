@@ -162,6 +162,26 @@ class UnitConverter {
       didConvert = tryConvert(['uiu/ml', 'µiu/ml'], ['miu/l'], 1.0);
     }
 
+    // ─── ADDED CONVERSIONS ───────────────────────────────
+    else if (key == 'proteins') {
+      didConvert = tryConvert(['g/l'], ['mg/dl'], 0.01);
+    }
+    else if (key == 'urobilinogen') {
+      didConvert = tryConvert(['umol/l', 'µmol/l'], ['eu/dl'], 17.0);
+    }
+    else if (['wbc_pus_cells_hpf', 'rbc', 'epithelial_cells_hpf'].contains(key)) {
+      didConvert = tryConvert(['x10^6/l', 'cells/ul', 'cells/µl', '10^6/l'], ['/hpf'], 1.0);
+    }
+    else if (key == 'albumin_creatinine_ratio') {
+      didConvert = tryConvert(['mg/mmol'], ['mg/g'], 0.113);
+    }
+    else if (['hematocrit_pct', 'rdw_cv_pct', 'platelet_rdw_pct', 'p_lcr_pct', 'img_pct', 'imm_pct', 'iml_pct', 'lic_pct', 'transferrin_saturation_pct', 'hbf_pct'].contains(key)) {
+      didConvert = tryConvert(['fraction', 'l/l'], ['%'], 0.01);
+    }
+    else if (key == 'pct_pct') {
+      didConvert = tryConvert(['ml/l'], ['%'], 10.0);
+    }
+
     // ─── HbA1c (Non-linear conversion) ───────────────────
     // NGSP (%) ↔ IFCC (mmol/mol): mmol/mol = (% - 2.152) / 0.09148
     else if (key == 'hba1c_pct') {
@@ -208,21 +228,14 @@ class UnitConverter {
   /// Converts a reference range string from one unit to another
   static String convertRange(String key, String range, String fromUnit, String toUnit) {
     if (range.isEmpty || fromUnit == toUnit) return range;
+
+    // Use a regex to match all individual numeric values in the range string
+    final regex = RegExp(r'(\d*\.?\d+)');
     
-    // Split the range string on hyphen with optional spaces
-    final regex = RegExp(r'\s*-\s*');
-    final parts = range.split(regex);
-    if (parts.length == 2) {
-      final p1 = convert(key, parts[0], fromUnit, toUnit);
-      final p2 = convert(key, parts[1], fromUnit, toUnit);
-      if (p1.wasConverted && p2.wasConverted) {
-        return '${p1.convertedValue} - ${p2.convertedValue}';
-      }
-    } else {
-      final p = convert(key, range, fromUnit, toUnit);
-      if (p.wasConverted) return p.convertedValue;
-    }
-    
-    return range;
+    return range.replaceAllMapped(regex, (match) {
+      final numStr = match.group(0)!;
+      final res = convert(key, numStr, fromUnit, toUnit);
+      return res.wasConverted ? res.convertedValue : numStr;
+    });
   }
 }

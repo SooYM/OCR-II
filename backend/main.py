@@ -13,6 +13,8 @@ import base64
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List as TypingList
+import cv2
+import numpy as np
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -78,6 +80,8 @@ DB_PATH = Path("medical_reports.db")
 llm_client = OpenAI(
     api_key=OPENAI_API_KEY,
 )
+
+TEMP_REPORTS = {}
 
 # ─── Supabase Client ─────────────────────────────────────────────────────────
 
@@ -305,9 +309,37 @@ async def run_ocr(file_path: Path) -> str:
         image = Image.open(file_path).convert("L")
         return pytesseract.image_to_string(image, lang="eng")
 
+def preprocess_image(image_path: Path) -> Path:
+    """Enhance image contrast and clarity for OCR using OpenCV."""
+    try:
+        # Read image
+        img = cv2.imread(str(image_path))
+        if img is None: return image_path
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Increase contrast using CLAHE
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        contrast_img = clahe.apply(gray)
+        
+        # Save preprocessed image to a temp file
+        processed_path = image_path.with_name(f"processed_{image_path.name}")
+        cv2.imwrite(str(processed_path), contrast_img)
+        return processed_path
+    except Exception as e:
+        print(f"Image preprocessing failed: {e}")
+        return image_path
+
 def encode_image(image_path: Path) -> str:
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
+    # Apply preprocessing before encoding
+    processed_path = preprocess_image(image_path)
+    with open(processed_path, "rb") as image_file:
+        b64 = base64.b64encode(image_file.read()).decode('utf-8')
+    # Cleanup temp file
+    if processed_path != image_path and processed_path.exists():
+        processed_path.unlink()
+    return b64
 
 async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     """Uses OpenAI Vision to parse an image directly into structured JSON."""
@@ -320,26 +352,35 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     keys_list = "\n".join([f"- {k}" for k in extraction_keys])
     
     prompt = f"""
+    You are an expert medical data extraction assistant.
     Extract medical data directly from the image and return it as a JSON object.
     Ensure you extract ALL test items accurately and do not miss any rows.
     
     The output MUST exactly match the following JSON keys. 
     If a value is missing in the report, use an empty string "". 
+    If a unit is present on the report for a test, INCLUDE the unit in the string alongside the value (e.g., "5.17 mmol/L", "150 g/L").
     DO NOT use null or omit keys.
     
     Fields to extract (all as strings):
     {keys_list}
 
-    IMPORTANT MAPPING RULES:
-    1. Standardize units: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
+    IMPORTANT MAPPING RULES & EXAMPLES:
+    1. Standardize units in keys: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
     2. Map common names: 
        - 'WBC' -> 'wbc_cells_ul'
        - 'RBC' -> 'rbc_count_mil_ul'
-       - 'HGB' -> 'hemoglobin_g_dl'
-       - 'HCT' -> 'hematocrit_pct'
-       - 'PLT' -> 'platelet_count_x10_3_ul'
-       - 'SG' -> 'specific_gravity'
-    3. If multiple tests exist for the same category, pick the most specific one.
+       - 'HGB' or 'Hemoglobin' -> 'hemoglobin_g_dl'
+       - 'Cholesterol' -> 'total_cholesterol_mg_dl'
+    3. EDGE CASES & SYMBOLS:
+       - If a result has a less-than/greater-than sign, include it: "< 0.3", "> 100".
+       - If a result is a textual qualitative value, extract it exactly as written: "Negative", "Clear", "Pale Yellow".
+    4. FEW-SHOT EXAMPLE:
+       If the image shows: "Cholesterol Total: 5.17 mmol/L" and "WBC: 4.5 x10^3/uL",
+       Your JSON should include:
+       {{
+          "total_cholesterol_mg_dl": "5.17 mmol/L",
+          "wbc_cells_ul": "4.5 x10^3/uL"
+       }}
 
     Return ONLY the JSON object. Do not wrap in markdown tags.
     """
@@ -396,22 +437,28 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
 
     The output MUST exactly match the following JSON keys.
     If a value is missing in the report, use an empty string "".
+    If a unit is present on the report for a test, INCLUDE the unit in the string alongside the value.
     DO NOT use null or omit keys.
 
     Fields to extract (all as strings):
     {keys_list}
 
-    IMPORTANT MAPPING RULES:
-    1. Standardize units: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
-    2. Map common names:
+    IMPORTANT MAPPING RULES & EXAMPLES:
+    1. Map common names:
        - 'WBC' -> 'wbc_cells_ul'
        - 'RBC' -> 'rbc_count_mil_ul'
        - 'HGB' -> 'hemoglobin_g_dl'
-       - 'HCT' -> 'hematocrit_pct'
-       - 'PLT' -> 'platelet_count_x10_3_ul'
-       - 'SG' -> 'specific_gravity'
-    3. If multiple tests exist for the same category, pick the most specific one.
-    4. Patient info (medid, labreference, dates) should appear once — take from whichever page has it.
+    2. Patient info (medid, labreference, dates) should appear once — take from whichever page has it.
+    3. EDGE CASES & SYMBOLS:
+       - If a result has a '<' or '>', include it: "< 0.5".
+       - If a result is qualitative, extract exact text: "Negative", "Trace".
+    4. FEW-SHOT EXAMPLE:
+       If the image shows: "Cholesterol Total: 5.17 mmol/L" and "Urine Glucose: Negative",
+       Your JSON should include:
+       {{
+          "total_cholesterol_mg_dl": "5.17 mmol/L",
+          "glucose": "Negative"
+       }}
 
     Return ONLY the JSON object. Do not wrap in markdown tags.
     """
@@ -645,19 +692,31 @@ def normalize_structured_data(data: dict) -> dict:
         
         parts = key.split('_')
         name = " ".join(parts[:-1]).title() if len(parts) > 1 else key.title()
-        unit = ""
-        if key.endswith('_g_dl'): unit = "g/dL"
-        elif key.endswith('_mg_dl'): unit = "mg/dL"
-        elif key.endswith('_mil_ul'): unit = "mil/uL"
-        elif key.endswith('_pct'): unit = "%"
-        elif key.endswith('_fl'): unit = "fL"
-        elif key.endswith('_pg'): unit = "pg"
-        elif key.endswith('_ul'): unit = "uL"
-        elif key.endswith('_uiu_ml'): unit = "uIU/mL"
-        elif key.endswith('_mmol_l'): unit = "mmol/L"
+        # Parse value and extracted unit from LLM string
+        val_str = str(value).strip()
+        match = re.search(r'^([<>]?\s*(?:\d{1,3}(?:,\d{3})+|\d*\.?\d+))\s*(x?10\^.*|[a-zA-Z%µ/].*)$', val_str, re.IGNORECASE)
+        if match:
+            clean_val = match.group(1).strip()
+            extracted_unit = match.group(2).strip()
+        else:
+            clean_val = val_str
+            extracted_unit = ""
+
+        std_unit = ""
+        if key.endswith('_g_dl'): std_unit = "g/dL"
+        elif key.endswith('_mg_dl'): std_unit = "mg/dL"
+        elif key.endswith('_mil_ul'): std_unit = "mil/uL"
+        elif key.endswith('_pct'): std_unit = "%"
+        elif key.endswith('_fl'): std_unit = "fL"
+        elif key.endswith('_pg'): std_unit = "pg"
+        elif key.endswith('_ul'): std_unit = "uL"
+        elif key.endswith('_uiu_ml'): std_unit = "uIU/mL"
+        elif key.endswith('_mmol_l'): std_unit = "mmol/L"
+        
+        final_unit = extracted_unit if extracted_unit else std_unit
         
         # Include 'key' so we can map it back on update
-        results.append({"test_item": name, "value": value, "unit": unit, "key": key})
+        results.append({"test_item": name, "value": clean_val, "unit": final_unit, "key": key})
 
     # Return a combined object that Flutter can parse
     return {
@@ -782,6 +841,11 @@ async def mark_report_sent(report_id: str):
         conn.close()
 
 async def get_report_by_id(report_id: str):
+    if report_id in TEMP_REPORTS:
+        report = dict(TEMP_REPORTS[report_id])
+        report["user_verified"] = bool(report.get("user_verified", 0))
+        return report
+
     if STORAGE_ENGINE == "supabase" and supabase:
         response = supabase.table("reports").select("*").eq("id", report_id).execute()
         if response.data and len(response.data) > 0:
@@ -1007,7 +1071,7 @@ async def change_password(data: dict, current_user: dict = Depends(get_current_u
 async def get_my_reports(current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     if STORAGE_ENGINE == "supabase" and supabase:
-        response = supabase.table("reports").select("*").eq("user_id", user_id).order("upload_time", desc=True).execute()
+        response = supabase.table("reports").select("*").eq("user_id", user_id).eq("status", "sent").order("upload_time", desc=True).execute()
         reports = response.data or []
         for r in reports:
             r["user_verified"] = bool(r.get("user_verified", 0))
@@ -1016,7 +1080,7 @@ async def get_my_reports(current_user: dict = Depends(get_current_user)):
         conn = sqlite3.connect(str(DB_PATH))
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM reports WHERE user_id = ? ORDER BY upload_time DESC", (user_id,))
+        cursor.execute("SELECT * FROM reports WHERE user_id = ? AND status = 'sent' ORDER BY upload_time DESC", (user_id,))
         rows = cursor.fetchall()
         conn.close()
         results = []
@@ -1484,11 +1548,11 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
                 "raw_text": raw_text
             }
 
-        # Save to DB only if NOT duplicate
+        # Save to TEMP_REPORTS instead of DB
         report_metadata["status"] = "completed"
         report_metadata["raw_text"] = raw_text
         report_metadata["structured_data"] = structured_data
-        await save_report(report_metadata)
+        TEMP_REPORTS[report_id] = report_metadata
         
         return {
             "id": report_id,
@@ -1575,11 +1639,11 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
                 "raw_text": raw_text
             }
 
-        # Save to DB only if NOT duplicate
+        # Save to TEMP_REPORTS instead of DB
         report_metadata["status"] = "completed"
         report_metadata["raw_text"] = raw_text
         report_metadata["structured_data"] = structured_data
-        await save_report(report_metadata)
+        TEMP_REPORTS[report_id] = report_metadata
 
         return {
             "id": report_id,
@@ -1612,6 +1676,12 @@ async def get_report(report_id: str):
 @app.put("/api/reports/{report_id}")
 async def update_report(report_id: str, updated_data: dict):
     """Update structured data for a report (tester corrections)."""
+    # If this is the first update (e.g. during Send), persist the report from TEMP_REPORTS to the DB
+    if report_id in TEMP_REPORTS:
+        report_metadata = TEMP_REPORTS[report_id]
+        await save_report(report_metadata)
+        del TEMP_REPORTS[report_id]
+
     report = await get_report_by_id(report_id)
     if not report: raise HTTPException(status_code=404, detail="Not found")
 
@@ -1640,6 +1710,12 @@ async def update_report(report_id: str, updated_data: dict):
 @app.post("/api/reports/{report_id}/send")
 async def send_report(report_id: str):
     """Mark report as verified and sent — the final step in the tester flow."""
+    # Just in case send_report is called and the report is still in TEMP_REPORTS, persist it now
+    if report_id in TEMP_REPORTS:
+        report_metadata = TEMP_REPORTS[report_id]
+        await save_report(report_metadata)
+        del TEMP_REPORTS[report_id]
+
     report = await get_report_by_id(report_id)
     if not report: raise HTTPException(status_code=404, detail="Not found")
     await mark_report_sent(report_id)
