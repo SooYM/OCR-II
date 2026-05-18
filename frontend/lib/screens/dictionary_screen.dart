@@ -131,6 +131,18 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                     ),
                                   ),
                                 ),
+                              if (entry.allowedUnits.length > 1)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    'Allowed Units: ${entry.allowedUnits.join(", ")}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -337,7 +349,9 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                           Padding(
                                             padding: const EdgeInsets.only(top: 4),
                                             child: Text(
-                                              'Unit: ${entry.unit}',
+                                              entry.allowedUnits.length > 1 
+                                                ? 'Units: ${entry.allowedUnits.join(", ")}'
+                                                : 'Unit: ${entry.unit}',
                                               style: TextStyle(
                                                 color: Theme.of(context).colorScheme.primary,
                                                 fontSize: 11,

@@ -461,6 +461,151 @@ STAGING_SCHEMA_KEYS = [
     "fbs_mg_dl", "plbs_mg_dl"
 ]
 
+SCHEMA_TYPES = {
+    "medid": "BIGINT",
+    "labreference": "TEXT",
+    "sample_id": "BIGINT",
+    "collected": "DATE",
+    "time": "TIME",
+    "reported_time": "TIME",
+    "urine_colour": "TEXT",
+    "appearance": "TEXT",
+    "specific_gravity": "DOUBLE PRECISION",
+    "ph": "DOUBLE PRECISION",
+    "proteins": "TEXT",
+    "glucose": "TEXT",
+    "bilirubin": "TEXT",
+    "ketones": "TEXT",
+    "blood": "TEXT",
+    "urobilinogen": "TEXT",
+    "nitrites": "TEXT",
+    "wbc_pus_cells_hpf": "TEXT",
+    "rbc": "TEXT",
+    "epithelial_cells_hpf": "TEXT",
+    "casts": "TEXT",
+    "crystals": "TEXT",
+    "others": "TEXT",
+    "hemoglobin_g_dl": "DOUBLE PRECISION",
+    "rbc_count_mil_ul": "DOUBLE PRECISION",
+    "hematocrit_pct": "DOUBLE PRECISION",
+    "mcv_fl": "DOUBLE PRECISION",
+    "mch_pg": "BIGINT",
+    "mchc_g_dl": "DOUBLE PRECISION",
+    "rdw_cv_pct": "DOUBLE PRECISION",
+    "rdw_sd_fl": "DOUBLE PRECISION",
+    "wbc_cells_ul": "BIGINT",
+    "neutrophils_pct": "BIGINT",
+    "lymphocytes_pct": "BIGINT",
+    "eosinophils_pct": "BIGINT",
+    "monocytes_pct": "BIGINT",
+    "basophils_pct": "DOUBLE PRECISION",
+    "abs_neutrophils": "DOUBLE PRECISION",
+    "abs_lymphocytes": "DOUBLE PRECISION",
+    "abs_monocytes": "DOUBLE PRECISION",
+    "abs_eosinophils": "DOUBLE PRECISION",
+    "abs_basophils": "DOUBLE PRECISION",
+    "platelet_count_x10_3_ul": "BIGINT",
+    "mpv_fl": "DOUBLE PRECISION",
+    "platelet_rdw_pct": "BIGINT",
+    "pct_pct": "DOUBLE PRECISION",
+    "p_lcr_pct": "DOUBLE PRECISION",
+    "img_pct": "DOUBLE PRECISION",
+    "imm_pct": "DOUBLE PRECISION",
+    "iml_pct": "DOUBLE PRECISION",
+    "lic_pct": "DOUBLE PRECISION",
+    "total_cholesterol_mg_dl": "BIGINT",
+    "hdl_mg_dl": "BIGINT",
+    "ldl_mg_dl": "DOUBLE PRECISION",
+    "vldl_mg_dl": "TEXT",
+    "triglycerides_mg_dl": "TEXT",
+    "non_hdl_mg_dl": "BIGINT",
+    "total_hdl_ratio": "DOUBLE PRECISION",
+    "ldl_hdl_ratio": "DOUBLE PRECISION",
+    "hdl_ldl_ratio": "DOUBLE PRECISION",
+    "bilirubin_total_mg_dl": "DOUBLE PRECISION",
+    "bilirubin_direct_mg_dl": "DOUBLE PRECISION",
+    "bilirubin_indirect_mg_dl": "DOUBLE PRECISION",
+    "alp_u_l": "BIGINT",
+    "alt_sgpt_u_l": "BIGINT",
+    "ast_sgot_u_l": "BIGINT",
+    "ggt_u_l": "BIGINT",
+    "protein_total_g_dl": "DOUBLE PRECISION",
+    "albumin_g_dl": "DOUBLE PRECISION",
+    "globulin_g_dl": "DOUBLE PRECISION",
+    "a_g_ratio": "TEXT",
+    "creatinine_mg_dl": "DOUBLE PRECISION",
+    "urea_mg_dl": "DOUBLE PRECISION",
+    "bun_mg_dl": "DOUBLE PRECISION",
+    "bun_creatinine_ratio": "DOUBLE PRECISION",
+    "sodium_mmol_l": "BIGINT",
+    "potassium_mmol_l": "DOUBLE PRECISION",
+    "chloride_mmol_l": "BIGINT",
+    "uric_acid_mg_dl": "DOUBLE PRECISION",
+    "egfr_ml_min_173m2": "DOUBLE PRECISION",
+    "iron_ug_dl": "BIGINT",
+    "uibc_ug_dl": "BIGINT",
+    "tibc_ug_dl": "BIGINT",
+    "transferrin_saturation_pct": "DOUBLE PRECISION",
+    "hba1c_pct": "DOUBLE PRECISION",
+    "estimated_avg_glucose_mg_dl": "DOUBLE PRECISION",
+    "hbf_pct": "DOUBLE PRECISION",
+    "urine_albumin_mg_l": "DOUBLE PRECISION",
+    "urine_creatinine_mg_dl": "DOUBLE PRECISION",
+    "albumin_creatinine_ratio": "DOUBLE PRECISION",
+    "calcium_mg_dl": "DOUBLE PRECISION",
+    "phosphorus_mg_dl": "DOUBLE PRECISION",
+    "tt3_ng_dl": "BIGINT",
+    "tt4_ug_dl": "DOUBLE PRECISION",
+    "tsh_uiu_ml": "DOUBLE PRECISION",
+    "fasting_glucose_mg_dl": "BIGINT",
+    "postprandial_glucose_mg_dl": "BIGINT",
+    "fbs_mg_dl": "BIGINT",
+    "plbs_mg_dl": "BIGINT",
+}
+
+def validate_and_cast_value(k: str, v: any):
+    if v is None or str(v).strip() == "":
+        return None
+    typ = SCHEMA_TYPES.get(k)
+    s = str(v).strip()
+    if not typ or typ == "TEXT":
+        return s
+    
+    if typ == "BIGINT":
+        match = re.search(r'(-?\d*\.?\d+)', s)
+        if match:
+            return int(round(float(match.group(1))))
+        raise ValueError(f"Invalid INT64 format: {s}")
+        
+    elif typ == "DOUBLE PRECISION":
+        match = re.search(r'(-?\d*\.?\d+)', s)
+        if match:
+            return float(match.group(1))
+        raise ValueError(f"Invalid FLOAT64 format: {s}")
+        
+    elif typ == "DATE":
+        # Ignore time if present by splitting by space or T
+        s_date = s.split(' ')[0].split('T')[0]
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', s_date): return s_date
+        formats = ["%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]
+        from datetime import datetime
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(s_date, fmt)
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+        raise ValueError(f"Invalid DATE format (expected YYYY-MM-DD): {s}")
+        
+    elif typ == "TIME":
+        # Extract time part if date is present
+        match = re.search(r'(\d{2}:\d{2}(:\d{2})?)', s)
+        if match:
+            return match.group(1)
+        raise ValueError(f"Invalid TIME format (expected HH:MM or HH:MM:SS): {s}")
+        
+    return s
+
 def normalize_structured_data(data: dict) -> dict:
     """Ensure all required keys exist and return a structure friendly to the Flutter UI."""
     # 1. Standardize the flat data
@@ -550,27 +695,19 @@ def get_clean_flat_data(data: dict) -> dict:
             elif k.endswith('_mg_l'): std_unit = "mg/L"
             elif k.endswith('_ug_dl'): std_unit = "ug/dL"
 
+            val_to_cast = v
             res = results_map.get(k)
             if res and std_unit and res.get("unit"):
                 extracted_unit = res.get("unit")
                 converted_val = convert_unit(k, v, extracted_unit, std_unit)
                 if converted_val is not None:
-                    flat_data[k] = converted_val
-                else:
-                    flat_data[k] = v
-            else:
-                # Use raw text or numeric extraction fallback
-                # Only extract float for numeric columns (from hemoglobin onwards)
-                idx = STAGING_SCHEMA_KEYS.index("hemoglobin_g_dl")
-                if STAGING_SCHEMA_KEYS.index(k) >= idx:
-                    # Strip to just numeric
-                    num_match = re.search(r'([0-9]*\.?[0-9]+)', str(v))
-                    if num_match:
-                        flat_data[k] = float(num_match.group(1))
-                    else:
-                        flat_data[k] = None
-                else:
-                    flat_data[k] = v
+                    val_to_cast = converted_val
+
+            # OCR Mode: ignore if format not right
+            try:
+                flat_data[k] = validate_and_cast_value(k, val_to_cast)
+            except ValueError:
+                flat_data[k] = None
 
     return flat_data
 
@@ -1477,6 +1614,26 @@ async def update_report(report_id: str, updated_data: dict):
     """Update structured data for a report (tester corrections)."""
     report = await get_report_by_id(report_id)
     if not report: raise HTTPException(status_code=404, detail="Not found")
+
+    # User Entry Validation Mode: warning user if format not right
+    incoming_results = updated_data.get("structured_data", {}).get("results", [])
+    incoming_struct = updated_data.get("structured_data", {})
+
+    for item in incoming_results:
+        k = item.get("key")
+        v = item.get("value")
+        if k in SCHEMA_TYPES:
+            try:
+                validate_and_cast_value(k, v)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Warning: The format for '{k}' is incorrect. Expected {SCHEMA_TYPES[k]}. Error: {str(e)}")
+
+    if "date" in incoming_struct:
+        try:
+            validate_and_cast_value("collected", incoming_struct["date"])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Warning: The format for 'date' is incorrect. Expected DATE. Error: {str(e)}")
+
     await update_report_in_db(report_id, updated_data)
     return {"status": "updated"}
 

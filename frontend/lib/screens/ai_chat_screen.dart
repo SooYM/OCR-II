@@ -54,7 +54,11 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
       if (mounted) {
         setState(() => _sessions = sessions);
         if (sessions.isNotEmpty && _currentSessionId == null && _messages.length <= 1) {
-          _loadSessionMessages(sessions.first);
+          // Only auto-load if the last session is less than 4 hours old
+          final timeSinceLastChat = DateTime.now().difference(sessions.first.createdAt);
+          if (timeSinceLastChat.inHours < 4) {
+            _loadSessionMessages(sessions.first);
+          }
         }
       }
     } catch (e) {

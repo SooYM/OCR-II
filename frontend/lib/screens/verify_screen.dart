@@ -31,6 +31,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
   final Set<int> _matchedIndices = {};
   final Set<int> _convertedIndices = {};
   final Map<int, BiomarkerEntry> _matchedEntries = {};
+  final Map<int, UniqueKey> _valueFieldKeys = {};
 
   @override
   void initState() {
@@ -72,32 +73,52 @@ class _VerifyScreenState extends State<VerifyScreen> {
   void _normalizeResults() {
     for (int i = 0; i < _data.results.length; i++) {
       final result = _data.results[i];
-      final match = BiomarkerDictionary.match(result.testItem);
+      BiomarkerEntry? match;
+      
+      // 1. Try to match by key (crucial for saved reports where backend changed testItem)
+      if (result.key != null && result.key!.isNotEmpty) {
+        match = BiomarkerDictionary.getEntryByKey(result.key!);
+      }
+      
+      // 2. Fallback to name matching
+      match ??= BiomarkerDictionary.match(result.testItem);
+
       if (match != null) {
         _matchedIndices.add(i);
         _matchedEntries[i] = match;
         // Set key if missing
         result.key ??= match.key;
-        
-        // Auto convert unit and value if needed
-        if (match.unit.isNotEmpty && result.unit != null && result.unit!.isNotEmpty) {
-          final conversion = UnitConverter.convert(match.key, result.value, result.unit, match.unit);
-          if (conversion.wasConverted) {
-            result.value = conversion.convertedValue;
-            _convertedIndices.add(i);
-          }
-        }
 
-        // Set unit if empty or non-standard or we just converted it
-        if ((result.unit == null || result.unit!.isEmpty || match.unit.isNotEmpty) && match.unit.isNotEmpty) {
+        // Always set unit from dictionary (clears wrong OCR units for qualitative items like urine glucose/bilirubin)
+        if (match.allowedUnits.isNotEmpty) {
+          // Has allowed units — normalize OCR casing or default to standard
+          final normalized = (result.unit != null && result.unit!.isNotEmpty)
+              ? _matchUnitCasing(result.unit!, match.allowedUnits)
+              : null;
+          result.unit = normalized ?? match.unit;
+        } else {
+          // No allowed units (qualitative/unitless) — always use dictionary unit (usually empty)
           result.unit = match.unit;
         }
+
         // Set reference range if empty
         if ((result.referenceRange == null || result.referenceRange!.isEmpty) && match.referenceRange != null) {
           result.referenceRange = match.referenceRange;
         }
       }
     }
+  }
+
+  /// Match an OCR-extracted unit string to the correct casing from allowedUnits.
+  /// Returns the correctly-cased unit if found, null otherwise.
+  String? _matchUnitCasing(String ocrUnit, List<String> allowedUnits) {
+    final lower = ocrUnit.toLowerCase().replaceAll(' ', '');
+    for (final allowed in allowedUnits) {
+      if (allowed.toLowerCase().replaceAll(' ', '') == lower) {
+        return allowed;
+      }
+    }
+    return null;
   }
 
   Future<void> _handleSend() async {
@@ -368,32 +389,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                if (_data.results.isEmpty)
-                  GlassCard(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        Icon(Icons.inbox_outlined,
-                            size: 36,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5)),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No test results extracted',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  ...List.generate(_data.results.length, (index) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _buildResultCard(index, _data.results[index]),
-                    );
-                  }),
+                ..._buildGroupedTestResults(),
 
                 const SizedBox(height: 24),
 
@@ -591,6 +587,77 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
+  List<Widget> _buildGroupedTestResults() {
+    if (_data.results.isEmpty) {
+      return [
+        GlassCard(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Icon(Icons.inbox_outlined, size: 36, color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5)),
+              const SizedBox(height: 12),
+              Text(
+                'No test results extracted',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
+              ),
+            ],
+          ),
+        )
+      ];
+    }
+
+    final Map<String, List<int>> grouped = {};
+    for (var category in BiomarkerDictionary.medicalCategories.keys) {
+      grouped[category] = [];
+    }
+    grouped['Other Metrics'] = [];
+
+    for (int i = 0; i < _data.results.length; i++) {
+      final match = _matchedEntries[i];
+      String category = 'Other Metrics';
+      
+      if (match != null) {
+        for (var entry in BiomarkerDictionary.medicalCategories.entries) {
+          if (entry.value.contains(match.key)) {
+            category = entry.key;
+            break;
+          }
+        }
+      }
+      grouped[category]!.add(i);
+    }
+
+    grouped.removeWhere((key, value) => value.isEmpty);
+
+    final List<Widget> widgets = [];
+    for (var entry in grouped.entries) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 16, 4, 12),
+          child: Text(
+            entry.key.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: Theme.of(context).colorScheme.primary,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+      );
+      for (int index in entry.value) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildResultCard(index, _data.results[index]),
+          ),
+        );
+      }
+    }
+    
+    return widgets;
+  }
+
   Widget _buildResultCard(int index, TestResult result) {
     final isMatched = _matchedIndices.contains(index);
     final matchEntry = _matchedEntries[index];
@@ -650,16 +717,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
                               _matchedEntries[index] = newMatch;
                               result.key = newMatch.key;
 
-                              // Auto convert unit and value if needed
-                              if (newMatch.unit.isNotEmpty && result.unit != null && result.unit!.isNotEmpty) {
-                                final conversion = UnitConverter.convert(newMatch.key, result.value, result.unit, newMatch.unit);
-                                if (conversion.wasConverted) {
-                                  result.value = conversion.convertedValue;
-                                  _convertedIndices.add(index);
-                                }
+                              if (newMatch.unit.isNotEmpty && (result.unit == null || result.unit!.isEmpty)) {
+                                result.unit = newMatch.unit;
                               }
-
-                              if (newMatch.unit.isNotEmpty) result.unit = newMatch.unit;
                               if (newMatch.referenceRange != null && (result.referenceRange == null || result.referenceRange!.isEmpty)) {
                                 result.referenceRange = newMatch.referenceRange;
                               }
@@ -706,6 +766,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
               Expanded(
                 flex: 2,
                 child: _buildMiniField(
+                  key: _valueFieldKeys[index],
                   label: 'Value',
                   value: result.value,
                   onChanged: (v) {
@@ -717,24 +778,55 @@ class _VerifyScreenState extends State<VerifyScreen> {
               const SizedBox(width: 12),
               Expanded(
                 flex: 1,
-                child: _buildUnitDropdown(
-                  label: 'Unit',
-                  value: result.unit ?? '',
-                  biomarkerValue: result.value,
-                  onChanged: (v) {
-                    if (v != null) {
-                      result.unit = v;
-                      _hasChanges = true;
-                    }
-                  },
-                ),
+                child: (isMatched && matchEntry!.allowedUnits.length > 1)
+                    // Multiple units available — show dropdown for conversion
+                    ? _buildUnitDropdown(
+                        label: 'Unit',
+                        value: result.unit ?? matchEntry.unit,
+                        biomarkerValue: result.value,
+                        allowedUnits: matchEntry.allowedUnits,
+                        onChanged: (v) {
+                          if (v != null && v != result.unit) {
+                            final oldUnit = result.unit ?? matchEntry.unit;
+                            // Convert reference range
+                            if (result.referenceRange != null && result.referenceRange!.isNotEmpty) {
+                              final newRange = UnitConverter.convertRange(matchEntry.key, result.referenceRange!, oldUnit, v);
+                              result.referenceRange = newRange;
+                            }
+                            // Convert value
+                            if (result.value.isNotEmpty) {
+                              final conversion = UnitConverter.convert(matchEntry.key, result.value, oldUnit, v);
+                              if (conversion.wasConverted) {
+                                result.value = conversion.convertedValue;
+                                _valueFieldKeys[index] = UniqueKey();
+                                if (!_convertedIndices.contains(index)) {
+                                  _convertedIndices.add(index);
+                                }
+                              }
+                            }
+                            setState(() {
+                              result.unit = v;
+                              _hasChanges = true;
+                            });
+                          }
+                        },
+                      )
+                    // Single or no unit — show as static text
+                    : _buildStaticField(
+                        label: 'Unit',
+                        value: isMatched
+                            ? (result.unit ?? matchEntry!.unit)
+                            : (result.unit ?? ''),
+                      ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           // Reference range
           isMatched
-              ? _buildStaticField(label: 'Reference Range', value: result.referenceRange ?? '')
+              ? _buildStaticField(
+                  label: 'Reference Range',
+                  value: result.referenceRange ?? '')
               : _buildMiniField(
                   label: 'Reference Range',
                   value: result.referenceRange ?? '',
@@ -783,11 +875,13 @@ class _VerifyScreenState extends State<VerifyScreen> {
   }
 
   Widget _buildMiniField({
+    Key? key,
     required String label,
     required String value,
     required Function(String) onChanged,
   }) {
     return Column(
+      key: key,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
@@ -831,41 +925,26 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
-  List<String> _getRelatedUnits(String currentUnit) {
-    if (currentUnit.isEmpty) return ['mg/dL', 'mmol/L', 'g/dL', 'uL', 'uIU/mL', 'umol/L', 'fL', 'pg', '%', 'x10^3/uL', 'mil/uL', 'U/L', 'ng/dL', 'µg/dL'];
-    
-    final lowerUnit = currentUnit.toLowerCase();
-    if (lowerUnit.contains('mol') || lowerUnit.contains('g/dl') || lowerUnit.contains('g/l') || lowerUnit.contains('mg') || lowerUnit.contains('ug') || lowerUnit.contains('ng')) {
-       return ['mg/dL', 'mmol/L', 'g/dL', 'ug/dL', 'umol/L', 'mg/L', 'ng/dL', 'µg/dL'];
-    } else if (lowerUnit.contains('ul') || lowerUnit.contains('10^') || lowerUnit.contains('mil')) {
-       return ['x10^3/uL', 'mil/uL', 'uL', '/uL'];
-    } else if (lowerUnit.contains('fl') || lowerUnit.contains('pg')) {
-       return ['fL', 'pg'];
-    } else if (lowerUnit.contains('%') || lowerUnit.contains('pct')) {
-       return ['%'];
-    } else if (lowerUnit.contains('iu') || lowerUnit.contains('u/l')) {
-       return ['uIU/mL', 'mIU/L', 'IU/L', 'U/L'];
-    }
-    return ['mg/dL', 'mmol/L', 'g/dL', 'uL', 'uIU/mL', 'umol/L', 'fL', 'pg', '%', 'x10^3/uL', 'mil/uL', 'U/L', 'ng/dL', 'µg/dL'];
-  }
+  Widget _buildUnitDropdown({required String label, required String value, required String? biomarkerValue, required List<String> allowedUnits, required Function(String?) onChanged}) {
+    List<String> units = List.from(allowedUnits);
 
-  Widget _buildUnitDropdown({required String label, required String value, required String? biomarkerValue, required Function(String?) onChanged}) {
-    // Check if the biomarker value is numeric. If not, unit should be N/A
-    bool isNumeric = false;
-    if (biomarkerValue != null && biomarkerValue.isNotEmpty) {
-      // Try parsing as double, but also handle cases like "2+" or "TNTC" which are not standard numbers
-      isNumeric = double.tryParse(biomarkerValue.trim()) != null;
+    // Case-insensitive: match current value to an item in allowedUnits
+    String effectiveValue = value;
+    if (effectiveValue.isNotEmpty) {
+      final lowerValue = effectiveValue.toLowerCase();
+      final match = units.cast<String?>().firstWhere(
+        (u) => u!.toLowerCase() == lowerValue,
+        orElse: () => null,
+      );
+      if (match != null) {
+        effectiveValue = match;
+      } else {
+        // OCR unit not in allowedUnits — insert it so dropdown doesn't crash
+        units.insert(0, effectiveValue);
+      }
     }
 
-    final String effectiveValue = isNumeric ? value : 'N/A';
-    final List<String> commonUnits = isNumeric ? _getRelatedUnits(effectiveValue) : ['N/A'];
-    
-    // Ensure the current value is in the list to avoid dropdown assertion errors
-    if (effectiveValue.isNotEmpty && !commonUnits.contains(effectiveValue)) {
-      commonUnits.insert(0, effectiveValue);
-    }
-    
-    final dropdownValue = effectiveValue.isEmpty ? (commonUnits.isNotEmpty ? commonUnits[0] : null) : effectiveValue;
+    final dropdownValue = effectiveValue.isEmpty ? (units.isNotEmpty ? units[0] : null) : effectiveValue;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -884,27 +963,27 @@ class _VerifyScreenState extends State<VerifyScreen> {
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(isNumeric ? 0.3 : 0.1),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
             ),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: dropdownValue,
               isExpanded: true,
-              icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: isNumeric ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
+              icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
               elevation: 4,
               borderRadius: BorderRadius.circular(12),
               dropdownColor: Theme.of(context).colorScheme.surface,
               style: TextStyle(
-                color: isNumeric ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.outline,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
-              onChanged: isNumeric ? onChanged : null, // Disable if non-numeric
-              items: commonUnits.map<DropdownMenuItem<String>>((String val) {
+              onChanged: onChanged,
+              items: units.map<DropdownMenuItem<String>>((String val) {
                 return DropdownMenuItem<String>(
                   value: val,
                   child: Text(val),
