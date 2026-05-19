@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../models/report_model.dart';
 import '../utils/formatters.dart';
 import '../utils/date_utils.dart';
+import '../utils/unit_converter.dart';
 import 'capture_screen.dart';
 import 'report_history_screen.dart';
 import 'ai_chat_screen.dart';
@@ -190,19 +191,20 @@ class _MainScreenState extends State<MainScreen> {
               gradient: AppTheme.accentGradient(context),
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             ),
-            child: const Icon(Icons.dashboard_rounded, color: Colors.white, size: 22),
+            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Dashboard',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                        color: Theme.of(context).colorScheme.onSurface, letterSpacing: -0.3)),
-                Text('Healthcare Biomarker Analytics',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-              ],
+            child: Text(
+              _getGreeting(),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Theme.of(context).colorScheme.onSurface,
+                letterSpacing: -0.3,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 12),
@@ -390,6 +392,9 @@ class _MainScreenState extends State<MainScreen> {
     double minY = double.infinity;
     double maxY = double.negativeInfinity;
 
+    final entry = BiomarkerDictionary.getEntryByKey(testKey);
+    final targetUnit = entry?.unit ?? '';
+
     for (int i = 0; i < validReports.length; i++) {
       final report = validReports[i];
       final result = report.structuredData!.results.firstWhere(
@@ -397,8 +402,16 @@ class _MainScreenState extends State<MainScreen> {
         orElse: () => TestResult(testItem: '', value: '-'),
       );
       if (result.value != '-') {
-        final val = _parseValue(result.value);
+        double? val = _parseValue(result.value);
         if (val != null) {
+          final srcUnit = (result.unit == null || result.unit!.isEmpty) ? targetUnit : result.unit!;
+          if (srcUnit.isNotEmpty && targetUnit.isNotEmpty && srcUnit != targetUnit) {
+            final conv = UnitConverter.convert(testKey, val.toString(), srcUnit, targetUnit);
+            if (conv.wasConverted) {
+              val = double.tryParse(conv.convertedValue) ?? val;
+            }
+          }
+
           spots.add(FlSpot(i.toDouble(), val));
           if (val < minY) minY = val;
           if (val > maxY) maxY = val;
@@ -414,7 +427,7 @@ class _MainScreenState extends State<MainScreen> {
     if (padding == 0) padding = 1.0;
 
     return GestureDetector(
-      onTap: () => _showFullScreenChart(displayName, spots, minX, maxX, minY, maxY, padding, validReports),
+      onTap: () => _showFullScreenChart(testKey, displayName, validReports),
       child: GlassCard(
         padding: const EdgeInsets.all(16),
         child: SizedBox(
@@ -499,7 +512,7 @@ class _MainScreenState extends State<MainScreen> {
                     lineBarsData: [
                       LineChartBarData(
                         spots: spots,
-                        isCurved: true,
+                        isCurved: false,
                         color: Theme.of(context).colorScheme.primary,
                         barWidth: 3,
                         isStrokeCapRound: true,
@@ -528,183 +541,16 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  void _showFullScreenChart(String displayName, List<FlSpot> spots, double minX, double maxX, double minY, double maxY, double padding, List<MedicalReport> validReports) {
+  void _showFullScreenChart(String testKey, String displayName, List<MedicalReport> validReports) {
     Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        pageBuilder: (context, animation, secondaryAnimation) {
-          // Dynamically adapt label counts based on the actual screen width to prevent overlap
-          final screenWidth = MediaQuery.of(context).size.width;
-          final maxLabels = (screenWidth / 95).floor().clamp(2, 8);
-          final bottomInterval = (validReports.length / maxLabels).ceilToDouble();
-
-          return FadeTransition(
-            opacity: animation,
-            child: Scaffold(
-              backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.97),
-              body: SafeArea(
-                child: Column(
-                  children: [
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(Icons.close_rounded, size: 20, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(displayName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
-                                Text('Trend Analysis', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.accentGradient(context),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.show_chart_rounded, size: 20, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Full chart
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 36, 16),
-                        child: LineChart(
-                          LineChartData(
-                            minX: minX, maxX: maxX,
-                            minY: minY - padding, maxY: maxY + padding,
-                            gridData: FlGridData(
-                              show: true,
-                              drawVerticalLine: true,
-                              horizontalInterval: padding > 0 ? padding : null,
-                              getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 0.8),
-                              getDrawingVerticalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 0.5),
-                            ),
-                            titlesData: FlTitlesData(
-                              show: true,
-                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true, reservedSize: 40, 
-                                  interval: bottomInterval > 0 ? bottomInterval : 1,
-                                  getTitlesWidget: (value, meta) {
-                                    int index = value.toInt();
-                                    if (index >= 0 && index < validReports.length) {
-                                      final report = validReports[index];
-                                      final date = _parseDate(report.structuredData?.date, report.uploadTime);
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 10.0),
-                                        child: Text(DateFormat('MMM d, yy').format(date), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
-                                      );
-                                    }
-                                    return const SizedBox();
-                                  },
-                                ),
-                              ),
-                              leftTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true, reservedSize: 48,
-                                  getTitlesWidget: (value, meta) {
-                                    return Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11));
-                                  },
-                                ),
-                              ),
-                            ),
-                            borderData: FlBorderData(show: false),
-                            lineTouchData: LineTouchData(
-                              touchTooltipData: LineTouchTooltipData(
-                                getTooltipColor: (touchedSpot) => const Color(0xFF1F2937),
-                                fitInsideHorizontally: true,
-                                fitInsideVertically: true,
-                                getTooltipItems: (touchedSpots) {
-                                  return touchedSpots.map((spot) {
-                                    final index = spot.x.toInt();
-                                    String dateLabel = '';
-                                    if (index >= 0 && index < validReports.length) {
-                                      final report = validReports[index];
-                                      final date = _parseDate(report.structuredData?.date, report.uploadTime);
-                                      dateLabel = DateFormat('MMM d, yyyy').format(date);
-                                    }
-                                    final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
-                                    return LineTooltipItem(
-                                      '$valStr\n$dateLabel',
-                                      const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
-                                    );
-                                  }).toList();
-                                },
-                              ),
-                            ),
-                            lineBarsData: [
-                              LineChartBarData(
-                                spots: spots,
-                                isCurved: true,
-                                color: Theme.of(context).colorScheme.primary,
-                                barWidth: 3.5,
-                                isStrokeCapRound: true,
-                                dotData: FlDotData(
-                                  show: true,
-                                  getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                                    radius: 6, color: Theme.of(context).colorScheme.primary, strokeWidth: 3, strokeColor: Theme.of(context).colorScheme.surface,
-                                  ),
-                                ),
-                                belowBarData: BarAreaData(
-                                  show: true,
-                                  gradient: LinearGradient(
-                                    colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.25), Theme.of(context).colorScheme.primary.withValues(alpha: 0.0)],
-                                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Data points summary
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: GlassCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildStatItem('Min', minY.toStringAsFixed(1)),
-                            Container(width: 1, height: 30, color: Theme.of(context).colorScheme.outline),
-                            _buildStatItem('Max', maxY.toStringAsFixed(1)),
-                            Container(width: 1, height: 30, color: Theme.of(context).colorScheme.outline),
-                            _buildStatItem('Points', spots.length.toString()),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+      MaterialPageRoute(
+        builder: (_) => _FullScreenChartPage(
+          testKey: testKey,
+          displayName: displayName,
+          validReports: validReports,
+          parseDate: _parseDate,
+          parseValue: _parseValue,
+        ),
       ),
     );
   }
@@ -936,8 +782,6 @@ class _MainScreenState extends State<MainScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_selectedDateRange != null) _buildFilterActiveIndicator(),
-          _buildAiAnalysis(),
-          const SizedBox(height: 32),
           
           // Multi-Attribute Comparison Section
           _buildMultiAttributeHeader(),
@@ -1989,4 +1833,540 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
       onTap: onTap,
     );
   }
+}
+
+// ─── Full Screen Chart with Unit Switching ──────────────────────────────────
+
+class _FullScreenChartPage extends StatefulWidget {
+  final String testKey;
+  final String displayName;
+  final List<MedicalReport> validReports;
+  final DateTime Function(String?, String) parseDate;
+  final double? Function(String) parseValue;
+
+  const _FullScreenChartPage({
+    required this.testKey,
+    required this.displayName,
+    required this.validReports,
+    required this.parseDate,
+    required this.parseValue,
+  });
+
+  @override
+  State<_FullScreenChartPage> createState() => _FullScreenChartPageState();
+}
+
+class _FullScreenChartPageState extends State<_FullScreenChartPage> {
+  late BiomarkerEntry? _entry;
+  late List<String> _availableUnits;
+  late String _selectedUnit;
+  late String _defaultUnit;
+  bool _sortNewestFirst = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _entry = BiomarkerDictionary.getEntryByKey(widget.testKey);
+    _defaultUnit = _entry?.unit ?? '';
+    _availableUnits = _entry != null && _entry!.allowedUnits.isNotEmpty
+        ? List<String>.from(_entry!.allowedUnits)
+        : [_defaultUnit];
+    if (_availableUnits.isEmpty || (_availableUnits.length == 1 && _availableUnits.first.isEmpty)) {
+      _availableUnits = [''];
+    }
+    _selectedUnit = _defaultUnit;
+  }
+
+  double? _convertValue(double original, String? sourceUnit) {
+    final src = (sourceUnit == null || sourceUnit.isEmpty) ? _defaultUnit : sourceUnit;
+    if (src.isEmpty || src == _selectedUnit) return original;
+    
+    final result = UnitConverter.convert(
+      widget.testKey,
+      original.toString(),
+      src,
+      _selectedUnit,
+    );
+    if (result.wasConverted) {
+      return double.tryParse(result.convertedValue);
+    }
+    return original;
+  }
+
+  /// Parse reference range numbers from the dictionary entry
+  (double?, double?) _parseRefRange() {
+    if (_entry == null) return (null, null);
+    final range = _selectedUnit == _defaultUnit
+        ? _entry!.referenceRange
+        : _entry!.referenceRangeSI;
+    if (range == null || range.isEmpty || range == 'N/A') return (null, null);
+
+    final nums = RegExp(r'[\d]+\.?[\d]*').allMatches(range).map((m) => double.tryParse(m.group(0)!)).whereType<double>().toList();
+    if (nums.length >= 2) {
+      return (nums[0], nums[1]);
+    }
+    // Single value with < or >
+    if (nums.length == 1) {
+      if (range.contains('<')) return (null, nums[0]);
+      if (range.contains('>')) return (nums[0], null);
+    }
+    return (null, null);
+  }
+
+  String _getRefRangeText() {
+    if (_entry == null) return '';
+    if (_selectedUnit == _defaultUnit) {
+      return _entry!.referenceRange ?? '';
+    }
+    return _entry!.referenceRangeSI ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    // Build spots with current unit
+    List<_ChartDataPoint> dataPoints = [];
+    double minY = double.infinity;
+    double maxY = double.negativeInfinity;
+
+    for (int i = 0; i < widget.validReports.length; i++) {
+      final report = widget.validReports[i];
+      final result = report.structuredData!.results.firstWhere(
+        (res) => (res.key ?? res.testItem) == widget.testKey,
+        orElse: () => TestResult(testItem: '', value: '-'),
+      );
+      if (result.value != '-') {
+        final rawVal = widget.parseValue(result.value);
+        if (rawVal != null) {
+          final val = _convertValue(rawVal, result.unit) ?? rawVal;
+          final date = widget.parseDate(report.structuredData?.date, report.uploadTime);
+          dataPoints.add(_ChartDataPoint(date, val, i.toDouble()));
+          
+          if (val < minY) minY = val;
+          if (val > maxY) maxY = val;
+        }
+      }
+    }
+
+    final spots = dataPoints.map((dp) => FlSpot(dp.index, dp.value)).toList();
+
+    if (minY == double.infinity) minY = 0;
+    if (maxY == double.negativeInfinity) maxY = 10;
+    double padding = (maxY - minY) * 0.25;
+    if (padding == 0) padding = 1.0;
+
+    final (refLow, refHigh) = _parseRefRange();
+
+    // Adjust chart bounds to include reference range
+    double chartMinY = minY - padding;
+    double chartMaxY = maxY + padding;
+    if (refLow != null && refLow < chartMinY) chartMinY = refLow - padding * 0.5;
+    if (refHigh != null && refHigh > chartMaxY) chartMaxY = refHigh + padding * 0.5;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxLabels = (screenWidth / 95).floor().clamp(2, 8);
+    final bottomInterval = (widget.validReports.length / maxLabels).ceilToDouble();
+    final refText = _getRefRangeText();
+    final unitLabel = _selectedUnit.isNotEmpty ? ' ($_selectedUnit)' : '';
+
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.close_rounded, size: 20, color: cs.onSurface.withValues(alpha: 0.7)),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(widget.displayName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                              Text('Trend Analysis$unitLabel', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
+                            ],
+                          ),
+                        ),
+                        if (_availableUnits.length > 1)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedUnit,
+                                isDense: true,
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cs.primary),
+                                icon: Icon(Icons.swap_horiz_rounded, size: 16, color: cs.primary),
+                                items: _availableUnits.map((u) => DropdownMenuItem(
+                                  value: u,
+                                  child: Text(u.isEmpty ? 'Default' : u),
+                                )).toList(),
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _selectedUnit = v);
+                                },
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              gradient: AppTheme.accentGradient(context),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.show_chart_rounded, size: 20, color: Colors.white),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // Reference range info
+                  if (refText.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, size: 16, color: cs.primary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Ref: $refText',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 16),
+
+                  // Chart
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 36, 16),
+                    child: SizedBox(
+                      height: 320,
+                      child: spots.isEmpty
+                          ? Center(child: Text('No numeric data available', style: TextStyle(color: cs.onSurfaceVariant)))
+                          : LineChart(
+                              LineChartData(
+                                minX: 0,
+                                maxX: (widget.validReports.length - 1).toDouble().clamp(1, double.infinity),
+                                minY: chartMinY,
+                                maxY: chartMaxY,
+                                gridData: FlGridData(
+                                  show: true,
+                                  drawVerticalLine: true,
+                                  horizontalInterval: padding > 0 ? padding : null,
+                                  getDrawingHorizontalLine: (value) => FlLine(color: cs.outline, strokeWidth: 0.8),
+                                  getDrawingVerticalLine: (value) => FlLine(color: cs.outline, strokeWidth: 0.5),
+                                ),
+                                titlesData: FlTitlesData(
+                                  show: true,
+                                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                  bottomTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true, reservedSize: 40,
+                                      interval: bottomInterval > 0 ? bottomInterval : 1,
+                                      getTitlesWidget: (value, meta) {
+                                        int index = value.toInt();
+                                        if (index >= 0 && index < widget.validReports.length) {
+                                          final report = widget.validReports[index];
+                                          final date = widget.parseDate(report.structuredData?.date, report.uploadTime);
+                                          return Padding(
+                                            padding: const EdgeInsets.only(top: 10.0),
+                                            child: Text(DateFormat('MMM d, yy').format(date), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
+                                          );
+                                        }
+                                        return const SizedBox();
+                                      },
+                                    ),
+                                  ),
+                                  leftTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true, reservedSize: 48,
+                                      getTitlesWidget: (value, meta) {
+                                        return Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11));
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                borderData: FlBorderData(show: false),
+                                // Reference range band
+                                rangeAnnotations: (refLow != null || refHigh != null)
+                                    ? RangeAnnotations(
+                                        horizontalRangeAnnotations: [
+                                          if (refLow != null && refHigh != null)
+                                            HorizontalRangeAnnotation(
+                                              y1: refLow,
+                                              y2: refHigh,
+                                              color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                                            ),
+                                        ],
+                                      )
+                                    : RangeAnnotations(),
+                                extraLinesData: ExtraLinesData(
+                                  horizontalLines: [
+                                    if (refLow != null)
+                                      HorizontalLine(
+                                        y: refLow,
+                                        color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                                        strokeWidth: 1.5,
+                                        dashArray: [6, 4],
+                                        label: HorizontalLineLabel(
+                                          show: true,
+                                          alignment: Alignment.topLeft,
+                                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF4CAF50).withValues(alpha: 0.8)),
+                                          labelResolver: (_) => 'Low: ${refLow.toStringAsFixed(1)}',
+                                        ),
+                                      ),
+                                    if (refHigh != null)
+                                      HorizontalLine(
+                                        y: refHigh,
+                                        color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                                        strokeWidth: 1.5,
+                                        dashArray: [6, 4],
+                                        label: HorizontalLineLabel(
+                                          show: true,
+                                          alignment: Alignment.bottomLeft,
+                                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF4CAF50).withValues(alpha: 0.8)),
+                                          labelResolver: (_) => 'High: ${refHigh.toStringAsFixed(1)}',
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                lineTouchData: LineTouchData(
+                                  touchTooltipData: LineTouchTooltipData(
+                                    getTooltipColor: (touchedSpot) => const Color(0xFF1F2937),
+                                    fitInsideHorizontally: true,
+                                    fitInsideVertically: true,
+                                    getTooltipItems: (touchedSpots) {
+                                      return touchedSpots.map((spot) {
+                                        final index = spot.x.toInt();
+                                        String dateLabel = '';
+                                        if (index >= 0 && index < widget.validReports.length) {
+                                          final report = widget.validReports[index];
+                                          final date = widget.parseDate(report.structuredData?.date, report.uploadTime);
+                                          dateLabel = DateFormat('MMM d, yyyy').format(date);
+                                        }
+                                        final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+                                        final unitSuffix = _selectedUnit.isNotEmpty ? ' $_selectedUnit' : '';
+                                        return LineTooltipItem(
+                                          '$valStr$unitSuffix\n$dateLabel',
+                                          const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                                        );
+                                      }).toList();
+                                    },
+                                  ),
+                                ),
+                                lineBarsData: [
+                                  LineChartBarData(
+                                    spots: spots,
+                                    isCurved: false,
+                                    color: cs.primary,
+                                    barWidth: 3.5,
+                                    isStrokeCapRound: true,
+                                    dotData: FlDotData(
+                                      show: true,
+                                      getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                                        radius: 6, color: cs.primary, strokeWidth: 3, strokeColor: cs.surface,
+                                      ),
+                                    ),
+                                    belowBarData: BarAreaData(
+                                      show: true,
+                                      gradient: LinearGradient(
+                                        colors: [cs.primary.withValues(alpha: 0.25), cs.primary.withValues(alpha: 0.0)],
+                                        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                    ),
+                  ),
+
+                  // Stats bar
+                  if (spots.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _stat('Min', minY.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), ''), cs),
+                            Container(width: 1, height: 30, color: cs.outline),
+                            _stat('Max', maxY.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), ''), cs),
+                            Container(width: 1, height: 30, color: cs.outline),
+                            _stat('Points', spots.length.toString(), cs),
+                          ],
+                        ),
+                      ),
+                    ),
+                  
+                  if (spots.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Data Points', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: cs.onSurface)),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _sortNewestFirst = !_sortNewestFirst;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: cs.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _sortNewestFirst ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                                    size: 14,
+                                    color: cs.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _sortNewestFirst ? 'Newest First' : 'Oldest First',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Data Points List
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final dp = _sortNewestFirst 
+                        ? dataPoints[dataPoints.length - 1 - index]
+                        : dataPoints[index];
+                    final valStr = dp.value.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+                    final isAbnormal = (refLow != null && dp.value < refLow) || (refHigh != null && dp.value > refHigh);
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isAbnormal ? cs.error.withValues(alpha: 0.3) : cs.outline.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isAbnormal ? cs.error.withValues(alpha: 0.1) : cs.primary.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isAbnormal ? Icons.warning_amber_rounded : Icons.calendar_today_rounded, 
+                              size: 16, 
+                              color: isAbnormal ? cs.error : cs.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(DateFormat('MMM d, yyyy').format(dp.date), style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface)),
+                                if (isAbnormal)
+                                  Text('Out of reference range', style: TextStyle(fontSize: 11, color: cs.error))
+                              ],
+                            ),
+                          ),
+                          Text(
+                            valStr,
+                            style: TextStyle(
+                              fontSize: 16, 
+                              fontWeight: FontWeight.w800, 
+                              color: isAbnormal ? cs.error : cs.onSurface,
+                            ),
+                          ),
+                          if (_selectedUnit.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Text(_selectedUnit, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                  childCount: dataPoints.length,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stat(String label, String value, ColorScheme cs) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: cs.primary)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+}
+
+class _ChartDataPoint {
+  final DateTime date;
+  final double value;
+  final double index;
+  _ChartDataPoint(this.date, this.value, this.index);
 }
