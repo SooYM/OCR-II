@@ -211,9 +211,12 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   Widget _buildLandingUI() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
           GestureDetector(
             onTap: () => _pickImage(ImageSource.camera),
             child: AnimatedBuilder(
@@ -301,6 +304,7 @@ class _CaptureScreenState extends State<CaptureScreen>
             ],
           ),
         ],
+      ),
       ),
     );
   }

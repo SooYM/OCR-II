@@ -18,6 +18,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   bool _isLoading = false;
+  final Set<String> _expandedSections = {};
 
   @override
   void initState() {
@@ -218,6 +219,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showUserGuide() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Text('How to Use MedScan'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildGuideStep('1. Scan a Report', 'Go to the Scan tab and capture or upload your physical medical reports. Ensure the image is clear and well-lit.'),
+              const SizedBox(height: 12),
+              _buildGuideStep('2. Verify Results', 'Review the AI-extracted data. You can edit any incorrectly extracted numbers or select a different unit if needed.'),
+              const SizedBox(height: 12),
+              _buildGuideStep('3. View Analytics', 'Navigate to the Dashboard to see your historical trends across different biomarkers.'),
+              const SizedBox(height: 12),
+              _buildGuideStep('4. Ask AI', 'Confused about a reading? Tap the AI Chat button in the middle of the navigation bar and ask the assistant to explain your results in simple terms.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Got it!')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuideStep(String title, String description) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Theme.of(context).colorScheme.primary)),
+        const SizedBox(height: 4),
+        Text(description, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -259,6 +299,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // Profile Section
                     _buildSection(
                       title: 'Profile Settings',
+                      icon: Icons.person_outline_rounded,
                       children: [
                         _buildTextField(
                           label: 'Full Name',
@@ -286,6 +327,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // App Preferences
                     _buildSection(
                       title: 'App Preferences',
+                      icon: Icons.palette_outlined,
                       children: [
                         ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -316,6 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // Medical Reference
                     _buildSection(
                       title: 'Medical Reference',
+                      icon: Icons.menu_book_rounded,
                       children: [
                         _buildActionTile(
                           label: 'Data Dictionary & Units',
@@ -334,9 +377,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     const SizedBox(height: 20),
 
+                    // Support & Guide
+                    _buildSection(
+                      title: 'Support & Guide',
+                      icon: Icons.help_outline_rounded,
+                      children: [
+                        _buildActionTile(
+                          label: 'App User Guide',
+                          subtitle: 'Learn how to use MedScan',
+                          icon: Icons.lightbulb_outline_rounded,
+                          color: Colors.amber.shade600,
+                          onTap: _showUserGuide,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
                     // Account Actions
                     _buildSection(
                       title: 'Account Actions',
+                      icon: Icons.manage_accounts_rounded,
                       children: [
                         _buildActionTile(
                           label: 'Change Password',
@@ -373,21 +434,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSection({required String title, required List<Widget> children}) {
+  Widget _buildSection({required String title, required List<Widget> children, IconData? icon}) {
+    final isExpanded = _expandedSections.contains(title);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(title.toUpperCase(),
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.primary, letterSpacing: 1.2)),
-        ),
-        GlassCard(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: children,
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              if (isExpanded) {
+                _expandedSections.remove(title);
+              } else {
+                _expandedSections.add(title);
+              }
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: isExpanded ? 0.6 : 0.35),
+              borderRadius: isExpanded
+                  ? const BorderRadius.vertical(top: Radius.circular(16))
+                  : BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Text(title,
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                ),
+                AnimatedRotation(
+                  turns: isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 250),
+                  child: Icon(Icons.keyboard_arrow_down_rounded, size: 22, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
           ),
+        ),
+        AnimatedCrossFade(
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: GlassCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
+          crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 250),
+          sizeCurve: Curves.easeInOut,
         ),
       ],
     );

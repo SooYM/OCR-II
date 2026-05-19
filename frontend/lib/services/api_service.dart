@@ -311,6 +311,19 @@ class ApiService {
     }
   }
 
+  /// Delete a chat session and all its messages
+  static Future<void> deleteChatSession(String sessionId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/api/chat/sessions/$sessionId'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
   /// Delete a report by ID
   static Future<void> deleteReport(String reportId) async {
     final response = await http.delete(

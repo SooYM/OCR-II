@@ -37,7 +37,7 @@ class _MainScreenState extends State<MainScreen> {
   
   // Multi-Attribute Chart state
   final Set<String> _selectedMultiAttributes = {};
-  final Set<String> _expandedProfiles = {};
+
   DateTimeRange? _selectedDateRange;
   final List<Color> _lineColors = [
     const Color(0xFF6C63FF), // Primary
@@ -385,6 +385,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget? _buildMiniChart(String testKey, List<MedicalReport> validReports, String displayName) {
     List<FlSpot> spots = [];
+    bool isDiscrete = false;
     double minX = 0;
     double maxX = (validReports.length - 1).toDouble();
     if (maxX < 1) maxX = 1;
@@ -395,6 +396,31 @@ class _MainScreenState extends State<MainScreen> {
     final entry = BiomarkerDictionary.getEntryByKey(testKey);
     final targetUnit = entry?.unit ?? '';
 
+    // Parse ref range for numeric abnormal detection
+    double? refLow, refHigh;
+    if (entry != null && entry.referenceRange != null && entry.referenceRange != 'N/A') {
+      final nums = RegExp(r'[\d]+\.?[\d]*').allMatches(entry.referenceRange!).map((m) => double.tryParse(m.group(0)!)).whereType<double>().toList();
+      if (nums.length >= 2) {
+        refLow = nums[0]; refHigh = nums[1];
+      } else if (nums.length == 1) {
+        if (entry.referenceRange!.contains('<')) refHigh = nums[0];
+        if (entry.referenceRange!.contains('>')) refLow = nums[0];
+      }
+    }
+
+    // Pass 1: check if discrete
+    for (int i = 0; i < validReports.length; i++) {
+      final report = validReports[i];
+      final result = report.structuredData!.results.firstWhere(
+        (res) => (res.key ?? res.testItem) == testKey,
+        orElse: () => TestResult(testItem: '', value: '-'),
+      );
+      if (result.value != '-' && _parseValue(result.value) == null && DiscreteValueFormatter.parse(result.value) != null) {
+        isDiscrete = true;
+        break;
+      }
+    }
+
     for (int i = 0; i < validReports.length; i++) {
       final report = validReports[i];
       final result = report.structuredData!.results.firstWhere(
@@ -402,19 +428,29 @@ class _MainScreenState extends State<MainScreen> {
         orElse: () => TestResult(testItem: '', value: '-'),
       );
       if (result.value != '-') {
-        double? val = _parseValue(result.value);
-        if (val != null) {
-          final srcUnit = (result.unit == null || result.unit!.isEmpty) ? targetUnit : result.unit!;
-          if (srcUnit.isNotEmpty && targetUnit.isNotEmpty && srcUnit != targetUnit) {
-            final conv = UnitConverter.convert(testKey, val.toString(), srcUnit, targetUnit);
-            if (conv.wasConverted) {
-              val = double.tryParse(conv.convertedValue) ?? val;
-            }
+        if (isDiscrete) {
+          int? dVal = DiscreteValueFormatter.parse(result.value);
+          if (dVal != null) {
+            double val = dVal.toDouble();
+            spots.add(FlSpot(i.toDouble(), val));
+            if (val < minY) minY = val;
+            if (val > maxY) maxY = val;
           }
+        } else {
+          double? val = _parseValue(result.value);
+          if (val != null) {
+            final srcUnit = (result.unit == null || result.unit!.isEmpty) ? targetUnit : result.unit!;
+            if (srcUnit.isNotEmpty && targetUnit.isNotEmpty && srcUnit != targetUnit) {
+              final conv = UnitConverter.convert(testKey, val.toString(), srcUnit, targetUnit);
+              if (conv.wasConverted) {
+                val = double.tryParse(conv.convertedValue) ?? val;
+              }
+            }
 
-          spots.add(FlSpot(i.toDouble(), val));
-          if (val < minY) minY = val;
-          if (val > maxY) maxY = val;
+            spots.add(FlSpot(i.toDouble(), val));
+            if (val < minY) minY = val;
+            if (val > maxY) maxY = val;
+          }
         }
       }
     }
@@ -422,9 +458,12 @@ class _MainScreenState extends State<MainScreen> {
     if (spots.isEmpty) return null;
 
     if (minY == double.infinity) minY = 0;
-    if (maxY == double.negativeInfinity) maxY = 10;
-    double padding = (maxY - minY) * 0.2;
+    if (maxY == double.negativeInfinity) maxY = isDiscrete ? 5 : 10;
+    double padding = isDiscrete ? 0.5 : (maxY - minY) * 0.2;
     if (padding == 0) padding = 1.0;
+    
+    double yInterval = isDiscrete ? 1 : ((maxY + padding) - (minY - padding)) / 4;
+    if (yInterval <= 0) yInterval = 1;
 
     return GestureDetector(
       onTap: () => _showFullScreenChart(testKey, displayName, validReports),
@@ -446,12 +485,18 @@ class _MainScreenState extends State<MainScreen> {
                 height: 140,
                 child: LineChart(
                   LineChartData(
-                    minX: minX, maxX: maxX,
-                    minY: minY - padding, maxY: maxY + padding,
+                    minX: minX - 0.5, maxX: maxX + 0.5,
+                    minY: isDiscrete ? -1.5 : minY - padding,
+                    maxY: isDiscrete ? 5.5 : maxY + padding,
                     gridData: FlGridData(
                       show: true, drawVerticalLine: false,
-                      horizontalInterval: padding > 0 ? padding : null,
-                      getDrawingHorizontalLine: (value) => FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 1),
+                      horizontalInterval: isDiscrete ? 1 : (padding > 0 ? padding : null),
+                      getDrawingHorizontalLine: (value) {
+                        if (isDiscrete && value == 0) {
+                          return FlLine(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6), strokeWidth: 1.5, dashArray: [4, 4]);
+                        }
+                        return FlLine(color: Theme.of(context).colorScheme.outline, strokeWidth: 1);
+                      },
                     ),
                     titlesData: FlTitlesData(
                       show: true,
@@ -462,13 +507,14 @@ class _MainScreenState extends State<MainScreen> {
                           showTitles: true, reservedSize: 32, 
                           interval: (validReports.length > 5) ? (validReports.length / 4).ceilToDouble() : 1,
                           getTitlesWidget: (value, meta) {
+                            if (value % 1 != 0) return const SizedBox();
                             int index = value.toInt();
                             if (index >= 0 && index < validReports.length) {
                               final report = validReports[index];
                               final date = _parseDate(report.structuredData?.date, report.uploadTime);
                               return Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
-                                child: Text(DateFormat('MMM d, yy').format(date), style: TextStyle(fontSize: 10)),
+                                child: Text(DateFormat('MMM d, yy').format(date), style: const TextStyle(fontSize: 10)),
                               );
                             }
                             return const SizedBox();
@@ -477,8 +523,19 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                       leftTitles: AxisTitles(
                         sideTitles: SideTitles(
-                          showTitles: true, reservedSize: 36,
+                          showTitles: true, reservedSize: 36, interval: isDiscrete ? 1 : yInterval,
                           getTitlesWidget: (value, meta) {
+                            if (value == meta.max || value == meta.min) return const SizedBox();
+                            if (isDiscrete) {
+                              int v = value.toInt();
+                              if (v < -1 || v > 5) return const SizedBox();
+                              String t = '';
+                              if (v == -1) t = 'Neg';
+                              else if (v == 1) t = 'Tr';
+                              else if (v == 5) t = 'Pos';
+                              else if (v > 0) t = '${v-1}+';
+                              return Text(t, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 9));
+                            }
                             return Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10));
                           },
                         ),
@@ -499,8 +556,12 @@ class _MainScreenState extends State<MainScreen> {
                               final date = _parseDate(report.structuredData?.date, report.uploadTime);
                               dateLabel = DateFormat('MMM d, yyyy').format(date);
                             }
-                            // Clean up trailing zeros up to 3 decimal places
-                            final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+                            String valStr;
+                            if (isDiscrete) {
+                              valStr = DiscreteValueFormatter.format(spot.y.toInt());
+                            } else {
+                              valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+                            }
                             return LineTooltipItem(
                               '$valStr\n$dateLabel',
                               const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
@@ -513,17 +574,29 @@ class _MainScreenState extends State<MainScreen> {
                       LineChartBarData(
                         spots: spots,
                         isCurved: false,
+                        isStepLineChart: isDiscrete,
                         color: Theme.of(context).colorScheme.primary,
                         barWidth: 3,
                         isStrokeCapRound: true,
                         dotData: FlDotData(
                           show: true,
-                          getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                            radius: 4, color: Theme.of(context).colorScheme.primary, strokeWidth: 2, strokeColor: Theme.of(context).colorScheme.surface,
-                          ),
+                          getDotPainter: (spot, percent, barData, index) {
+                            bool isAbnormal = false;
+                            if (isDiscrete) {
+                              isAbnormal = spot.y > 0;
+                            } else {
+                              isAbnormal = (refLow != null && spot.y < refLow) || (refHigh != null && spot.y > refHigh);
+                            }
+                            return FlDotCirclePainter(
+                              radius: 4, 
+                              color: isAbnormal ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary, 
+                              strokeWidth: 2, 
+                              strokeColor: Theme.of(context).colorScheme.surface,
+                            );
+                          },
                         ),
                         belowBarData: BarAreaData(
-                          show: true,
+                          show: !isDiscrete,
                           gradient: LinearGradient(
                             colors: [Theme.of(context).colorScheme.primary.withValues(alpha: 0.3), Theme.of(context).colorScheme.primary.withValues(alpha: 0.0)],
                             begin: Alignment.topCenter, end: Alignment.bottomCenter,
@@ -773,7 +846,7 @@ class _MainScreenState extends State<MainScreen> {
       'ketones', 'blood', 'urobilinogen', 'nitrites', 'casts', 'crystals', 'others'
     };
 
-    final Set<String> graphTestKeys = uniqueTestKeys.where((k) => !nonNumericKeys.contains(k)).toSet();
+    final Set<String> multiAttributeKeys = uniqueTestKeys.where((k) => !nonNumericKeys.contains(k)).toSet();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -786,13 +859,13 @@ class _MainScreenState extends State<MainScreen> {
           // Multi-Attribute Comparison Section
           _buildMultiAttributeHeader(),
           if (_isMultiAttributeExpanded) ...[
-            _buildAttributeSelector(graphTestKeys, testKeyToName),
+            _buildAttributeSelector(multiAttributeKeys, testKeyToName),
             const SizedBox(height: 12),
             _buildMultiAttributeChart(validReports, testKeyToName),
           ],
           const SizedBox(height: 40),
           
-          _buildCategorizedGraphs(validReports, graphTestKeys, testKeyToName),
+          _buildCategorizedGraphs(validReports, uniqueTestKeys, testKeyToName),
           const SizedBox(height: 32),
           _buildRecentResultsTable(validReports, uniqueTestKeys, testKeyToName),
           const SizedBox(height: 100), // padding for bottom nav
@@ -848,7 +921,7 @@ class _MainScreenState extends State<MainScreen> {
         final color = _lineColors[colorIndex % _lineColors.length];
         lines.add(LineChartBarData(
           spots: spots,
-          isCurved: true,
+          isCurved: false,
           color: color,
           barWidth: 3.5,
           isStrokeCapRound: true,
@@ -1346,129 +1419,63 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildRecentResultsTable(List<MedicalReport> validReports, Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
-    final List<DataRow> rows = [];
+    final List<DataColumn> columns = [
+      DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface))),
+    ];
 
+    final List<String> orderedKeys = [];
+
+    // Group keys by category for ordering
     for (var entry in BiomarkerDictionary.medicalCategories.entries) {
-      final category = entry.key;
       final categoryKeys = entry.value;
       final availableKeys = uniqueTestKeys.where((k) => categoryKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
-
-      if (availableKeys.isNotEmpty) {
-        final isExpanded = _expandedProfiles.contains(category);
-        // Subheading Row
-        rows.add(
-          DataRow(
-            color: WidgetStateProperty.all(Theme.of(context).colorScheme.primary.withValues(alpha: 0.05)),
-            onSelectChanged: (selected) {
-              setState(() {
-                if (isExpanded) {
-                  _expandedProfiles.remove(category);
-                } else {
-                  _expandedProfiles.add(category);
-                }
-              });
-            },
-            cells: [
-              DataCell(Row(
-                children: [
-                  Icon(isExpanded ? Icons.expand_more_rounded : Icons.chevron_right_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text(category.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary, fontSize: 12, letterSpacing: 1.1)),
-                ],
-              )),
-              ...List.generate(validReports.length, (_) => const DataCell(SizedBox())),
-            ],
-          ),
-        );
-
-        // Data Rows (Only if expanded)
-        if (isExpanded) {
-          for (final testKey in availableKeys) {
-            rows.add(
-              DataRow(
-                cells: [
-                  DataCell(Padding(
-                    padding: const EdgeInsets.only(left: 28), // Indent to align with text after icon
-                    child: Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  )),
-                  ...validReports.map((report) {
-                    final result = report.structuredData!.results.firstWhere(
-                      (res) => (res.key ?? res.testItem) == testKey,
-                      orElse: () => TestResult(testItem: testKey, value: '-'),
-                    );
-                    final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
-                    return DataCell(
-                      Text(valueText, style: TextStyle(
-                        color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
-                        fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
-                      )),
-                    );
-                  }),
-                ],
-              ),
-            );
-          }
-        }
-      }
+      orderedKeys.addAll(availableKeys);
     }
 
-    // Other metrics not in categories
+    // Other metrics
     final categorizedKeys = BiomarkerDictionary.medicalCategories.values.expand((e) => e).toSet();
     final otherKeys = uniqueTestKeys.where((k) => !categorizedKeys.contains(k)).toList()..sort((a, b) => (testKeyToName[a] ?? a).compareTo(testKeyToName[b] ?? b));
+    orderedKeys.addAll(otherKeys);
+
+    // Build columns
+    for (var k in orderedKeys) {
+      columns.add(DataColumn(
+        label: Text(testKeyToName[k] ?? k, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary)),
+      ));
+    }
+
+    final List<DataRow> rows = [];
     
-    if (otherKeys.isNotEmpty) {
-      final isOtherExpanded = _expandedProfiles.contains('OTHER_METRICS');
-      rows.add(
-        DataRow(
-          color: WidgetStateProperty.all(Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)),
-          onSelectChanged: (selected) {
-            setState(() {
-              if (isOtherExpanded) {
-                _expandedProfiles.remove('OTHER_METRICS');
-              } else {
-                _expandedProfiles.add('OTHER_METRICS');
-              }
-            });
-          },
-          cells: [
-            DataCell(Row(
-              children: [
-                Icon(isOtherExpanded ? Icons.expand_more_rounded : Icons.chevron_right_rounded, size: 20),
-                const SizedBox(width: 8),
-                const Text('OTHER METRICS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1)),
-              ],
+    // Sort reports newest first for the table view
+    final sortedReports = List<MedicalReport>.from(validReports)..sort((a, b) => 
+      _parseDate(b.structuredData?.date, b.uploadTime).compareTo(_parseDate(a.structuredData?.date, a.uploadTime))
+    );
+
+    for (var report in sortedReports) {
+      final date = _parseDate(report.structuredData?.date, report.uploadTime);
+      final dateStr = DateFormat('MMM d, yyyy').format(date);
+      
+      final List<DataCell> cells = [
+        DataCell(Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600))),
+      ];
+
+      for (var k in orderedKeys) {
+        final result = report.structuredData!.results.firstWhere(
+          (res) => (res.key ?? res.testItem) == k,
+          orElse: () => TestResult(testItem: k, value: '-'),
+        );
+        final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
+        cells.add(
+          DataCell(
+            Text(valueText, style: TextStyle(
+              color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
+              fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
             )),
-            ...List.generate(validReports.length, (_) => const DataCell(SizedBox())),
-          ],
-        ),
-      );
-      if (isOtherExpanded) {
-        for (final testKey in otherKeys) {
-          rows.add(
-            DataRow(
-              cells: [
-                DataCell(Padding(
-                  padding: const EdgeInsets.only(left: 28),
-                  child: Text(testKeyToName[testKey] ?? testKey, style: const TextStyle(fontWeight: FontWeight.w600)),
-                )),
-                ...validReports.map((report) {
-                  final result = report.structuredData!.results.firstWhere(
-                    (res) => (res.key ?? res.testItem) == testKey,
-                    orElse: () => TestResult(testItem: testKey, value: '-'),
-                  );
-                  final valueText = result.value == '-' ? '-' : '${result.value} ${result.unit ?? ''}'.trim();
-                  return DataCell(
-                    Text(valueText, style: TextStyle(
-                      color: result.value == '-' ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
-                      fontWeight: result.value == '-' ? FontWeight.w400 : FontWeight.w500,
-                    )),
-                  );
-                }),
-              ],
-            ),
-          );
-        }
+          )
+        );
       }
+      
+      rows.add(DataRow(cells: cells));
     }
 
     return Column(
@@ -1493,18 +1500,7 @@ class _MainScreenState extends State<MainScreen> {
                 dividerThickness: 1,
                 dataRowMinHeight: 48,
                 dataRowMaxHeight: 48,
-                columns: [
-                  DataColumn(
-                    label: Text('Biomarker', style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
-                  ),
-                  ...validReports.map((r) {
-                    final date = _parseDate(r.structuredData?.date, r.uploadTime);
-                    final dateStr = DateFormat('MMM d, yyyy').format(date);
-                    return DataColumn(
-                      label: Text(dateStr, style: TextStyle(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary)),
-                    );
-                  }),
-                ],
+                columns: columns,
                 rows: rows,
               ),
             ),
@@ -1531,8 +1527,35 @@ class _MainScreenState extends State<MainScreen> {
                   label: 'Dashboard', gradient: AppTheme.accentGradient(context)),
               _buildNavItem(index: 1, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
                   label: 'Scan', gradient: AppTheme.primaryGradient(context)),
-              _buildNavItem(index: 2, icon: Icons.auto_awesome_outlined, activeIcon: Icons.auto_awesome_rounded,
-                  label: 'AI Chat', gradient: LinearGradient(colors: [Theme.of(context).colorScheme.secondary, const Color(0xFF7C4DFF)])),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _currentIndex = 2),
+                  behavior: HitTestBehavior.opaque,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(colors: [Theme.of(context).colorScheme.secondary, const Color(0xFF7C4DFF)]),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.4),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('AI Chat', style: TextStyle(fontSize: 10, fontWeight: _currentIndex == 2 ? FontWeight.w700 : FontWeight.w500, color: _currentIndex == 2 ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6))),
+                    ],
+                  ),
+                ),
+              ),
               _buildNavItem(index: 3, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
                   label: 'My Reports', gradient: const LinearGradient(colors: [AppTheme.warning, Color(0xFFFF8A65)])),
               _buildNavItem(index: 4, icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded,
@@ -1927,8 +1950,22 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
 
     // Build spots with current unit
     List<_ChartDataPoint> dataPoints = [];
+    bool isDiscrete = false;
     double minY = double.infinity;
     double maxY = double.negativeInfinity;
+
+    // Check if discrete
+    for (int i = 0; i < widget.validReports.length; i++) {
+      final report = widget.validReports[i];
+      final result = report.structuredData!.results.firstWhere(
+        (res) => (res.key ?? res.testItem) == widget.testKey,
+        orElse: () => TestResult(testItem: '', value: '-'),
+      );
+      if (result.value != '-' && widget.parseValue(result.value) == null && DiscreteValueFormatter.parse(result.value) != null) {
+        isDiscrete = true;
+        break;
+      }
+    }
 
     for (int i = 0; i < widget.validReports.length; i++) {
       final report = widget.validReports[i];
@@ -1937,14 +1974,25 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
         orElse: () => TestResult(testItem: '', value: '-'),
       );
       if (result.value != '-') {
-        final rawVal = widget.parseValue(result.value);
-        if (rawVal != null) {
-          final val = _convertValue(rawVal, result.unit) ?? rawVal;
-          final date = widget.parseDate(report.structuredData?.date, report.uploadTime);
-          dataPoints.add(_ChartDataPoint(date, val, i.toDouble()));
-          
-          if (val < minY) minY = val;
-          if (val > maxY) maxY = val;
+        if (isDiscrete) {
+          int? dVal = DiscreteValueFormatter.parse(result.value);
+          if (dVal != null) {
+            double val = dVal.toDouble();
+            final date = widget.parseDate(report.structuredData?.date, report.uploadTime);
+            dataPoints.add(_ChartDataPoint(date, val, i.toDouble(), isDiscrete: true));
+            if (val < minY) minY = val;
+            if (val > maxY) maxY = val;
+          }
+        } else {
+          final rawVal = widget.parseValue(result.value);
+          if (rawVal != null) {
+            final val = _convertValue(rawVal, result.unit) ?? rawVal;
+            final date = widget.parseDate(report.structuredData?.date, report.uploadTime);
+            dataPoints.add(_ChartDataPoint(date, val, i.toDouble(), isDiscrete: false));
+            
+            if (val < minY) minY = val;
+            if (val > maxY) maxY = val;
+          }
         }
       }
     }
@@ -1952,18 +2000,22 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
     final spots = dataPoints.map((dp) => FlSpot(dp.index, dp.value)).toList();
 
     if (minY == double.infinity) minY = 0;
-    if (maxY == double.negativeInfinity) maxY = 10;
-    double padding = (maxY - minY) * 0.25;
+    if (maxY == double.negativeInfinity) maxY = isDiscrete ? 5 : 10;
+    double padding = isDiscrete ? 0.5 : (maxY - minY) * 0.25;
     if (padding == 0) padding = 1.0;
+    
+    double yInterval = isDiscrete ? 1 : ((maxY + padding) - (minY - padding)) / 5;
+    if (yInterval <= 0) yInterval = 1;
 
     final (refLow, refHigh) = _parseRefRange();
 
     // Adjust chart bounds to include reference range
-    double chartMinY = minY - padding;
-    double chartMaxY = maxY + padding;
-    if (refLow != null && refLow < chartMinY) chartMinY = refLow - padding * 0.5;
-    if (refHigh != null && refHigh > chartMaxY) chartMaxY = refHigh + padding * 0.5;
-
+    double chartMinY = isDiscrete ? -1.5 : minY - padding;
+    double chartMaxY = isDiscrete ? 5.5 : maxY + padding;
+    if (!isDiscrete) {
+      if (refLow != null && refLow < chartMinY) chartMinY = refLow - padding * 0.5;
+      if (refHigh != null && refHigh > chartMaxY) chartMaxY = refHigh + padding * 0.5;
+    }
     final screenWidth = MediaQuery.of(context).size.width;
     final maxLabels = (screenWidth / 95).floor().clamp(2, 8);
     final bottomInterval = (widget.validReports.length / maxLabels).ceilToDouble();
@@ -2080,15 +2132,20 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                           ? Center(child: Text('No numeric data available', style: TextStyle(color: cs.onSurfaceVariant)))
                           : LineChart(
                               LineChartData(
-                                minX: 0,
-                                maxX: (widget.validReports.length - 1).toDouble().clamp(1, double.infinity),
+                                minX: -0.5,
+                                maxX: (widget.validReports.length - 1).toDouble().clamp(1, double.infinity) + 0.5,
                                 minY: chartMinY,
                                 maxY: chartMaxY,
                                 gridData: FlGridData(
                                   show: true,
                                   drawVerticalLine: true,
-                                  horizontalInterval: padding > 0 ? padding : null,
-                                  getDrawingHorizontalLine: (value) => FlLine(color: cs.outline, strokeWidth: 0.8),
+                                  horizontalInterval: isDiscrete ? 1 : (padding > 0 ? padding : null),
+                                  getDrawingHorizontalLine: (value) {
+                                    if (isDiscrete && value == 0) {
+                                      return FlLine(color: cs.onSurfaceVariant.withValues(alpha: 0.6), strokeWidth: 1.5, dashArray: [4, 4]);
+                                    }
+                                    return FlLine(color: cs.outline, strokeWidth: 0.8);
+                                  },
                                   getDrawingVerticalLine: (value) => FlLine(color: cs.outline, strokeWidth: 0.5),
                                 ),
                                 titlesData: FlTitlesData(
@@ -2100,6 +2157,7 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                       showTitles: true, reservedSize: 40,
                                       interval: bottomInterval > 0 ? bottomInterval : 1,
                                       getTitlesWidget: (value, meta) {
+                                        if (value % 1 != 0) return const SizedBox();
                                         int index = value.toInt();
                                         if (index >= 0 && index < widget.validReports.length) {
                                           final report = widget.validReports[index];
@@ -2115,8 +2173,19 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                   ),
                                   leftTitles: AxisTitles(
                                     sideTitles: SideTitles(
-                                      showTitles: true, reservedSize: 48,
+                                      showTitles: true, reservedSize: 48, interval: isDiscrete ? 1 : yInterval,
                                       getTitlesWidget: (value, meta) {
+                                        if (value == meta.max || value == meta.min) return const SizedBox();
+                                        if (isDiscrete) {
+                                          int v = value.toInt();
+                                          if (v < -1 || v > 5) return const SizedBox();
+                                          String t = '';
+                                          if (v == -1) t = 'Neg';
+                                          else if (v == 1) t = 'Tr';
+                                          else if (v == 5) t = 'Pos';
+                                          else if (v > 0) t = '${v-1}+';
+                                          return Text(t, style: const TextStyle(fontSize: 11));
+                                        }
                                         return Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11));
                                       },
                                     ),
@@ -2180,8 +2249,13 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                           final date = widget.parseDate(report.structuredData?.date, report.uploadTime);
                                           dateLabel = DateFormat('MMM d, yyyy').format(date);
                                         }
-                                        final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
-                                        final unitSuffix = _selectedUnit.isNotEmpty ? ' $_selectedUnit' : '';
+                                        String valStr;
+                                        if (isDiscrete) {
+                                          valStr = DiscreteValueFormatter.format(spot.y.toInt());
+                                        } else {
+                                          valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+                                        }
+                                        final unitSuffix = _selectedUnit.isNotEmpty && !isDiscrete ? ' $_selectedUnit' : '';
                                         return LineTooltipItem(
                                           '$valStr$unitSuffix\n$dateLabel',
                                           const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
@@ -2194,17 +2268,29 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                   LineChartBarData(
                                     spots: spots,
                                     isCurved: false,
+                                    isStepLineChart: isDiscrete,
                                     color: cs.primary,
                                     barWidth: 3.5,
                                     isStrokeCapRound: true,
                                     dotData: FlDotData(
                                       show: true,
-                                      getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                                        radius: 6, color: cs.primary, strokeWidth: 3, strokeColor: cs.surface,
-                                      ),
+                                      getDotPainter: (spot, percent, barData, index) {
+                                        bool isAbnormal = false;
+                                        if (isDiscrete) {
+                                          isAbnormal = spot.y > 0;
+                                        } else {
+                                          isAbnormal = (refLow != null && spot.y < refLow) || (refHigh != null && spot.y > refHigh);
+                                        }
+                                        return FlDotCirclePainter(
+                                          radius: 6, 
+                                          color: isAbnormal ? cs.error : cs.primary, 
+                                          strokeWidth: 3, 
+                                          strokeColor: cs.surface,
+                                        );
+                                      },
                                     ),
                                     belowBarData: BarAreaData(
-                                      show: true,
+                                      show: !isDiscrete,
                                       gradient: LinearGradient(
                                         colors: [cs.primary.withValues(alpha: 0.25), cs.primary.withValues(alpha: 0.0)],
                                         begin: Alignment.topCenter, end: Alignment.bottomCenter,
@@ -2218,7 +2304,7 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                   ),
 
                   // Stats bar
-                  if (spots.isNotEmpty)
+                  if (dataPoints.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       child: Container(
@@ -2230,17 +2316,19 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _stat('Min', minY.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), ''), cs),
-                            Container(width: 1, height: 30, color: cs.outline),
-                            _stat('Max', maxY.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), ''), cs),
-                            Container(width: 1, height: 30, color: cs.outline),
-                            _stat('Points', spots.length.toString(), cs),
+                            if (!isDiscrete) ...[
+                              _stat('Min', minY.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), ''), cs),
+                              Container(width: 1, height: 30, color: cs.outline),
+                              _stat('Max', maxY.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), ''), cs),
+                              Container(width: 1, height: 30, color: cs.outline),
+                            ],
+                            _stat('Points', dataPoints.length.toString(), cs),
                           ],
                         ),
                       ),
                     ),
                   
-                  if (spots.isNotEmpty)
+                  if (dataPoints.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                       child: Row(
@@ -2291,8 +2379,17 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                     final dp = _sortNewestFirst 
                         ? dataPoints[dataPoints.length - 1 - index]
                         : dataPoints[index];
-                    final valStr = dp.value.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
-                    final isAbnormal = (refLow != null && dp.value < refLow) || (refHigh != null && dp.value > refHigh);
+                    
+                    String valStr = '';
+                    bool isAbnormal = false;
+                    
+                    if (dp.isDiscrete) {
+                      valStr = DiscreteValueFormatter.format(dp.value.toInt());
+                      isAbnormal = dp.value > 0; // Trace, 1+, Positive etc are typically abnormal
+                    } else {
+                      valStr = dp.value.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+                      isAbnormal = (refLow != null && dp.value < refLow) || (refHigh != null && dp.value > refHigh);
+                    }
                     
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
@@ -2323,7 +2420,7 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                               children: [
                                 Text(DateFormat('MMM d, yyyy').format(dp.date), style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface)),
                                 if (isAbnormal)
-                                  Text('Out of reference range', style: TextStyle(fontSize: 11, color: cs.error))
+                                  Text(dp.isDiscrete ? 'Abnormal result detected' : 'Out of reference range', style: TextStyle(fontSize: 11, color: cs.error))
                               ],
                             ),
                           ),
@@ -2335,7 +2432,7 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                               color: isAbnormal ? cs.error : cs.onSurface,
                             ),
                           ),
-                          if (_selectedUnit.isNotEmpty) ...[
+                          if (_selectedUnit.isNotEmpty && !dp.isDiscrete) ...[
                             const SizedBox(width: 4),
                             Text(_selectedUnit, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                           ],
@@ -2368,5 +2465,6 @@ class _ChartDataPoint {
   final DateTime date;
   final double value;
   final double index;
-  _ChartDataPoint(this.date, this.value, this.index);
+  final bool isDiscrete;
+  _ChartDataPoint(this.date, this.value, this.index, {this.isDiscrete = false});
 }

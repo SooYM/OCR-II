@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
-
 import '../models/chat_models.dart';
 
 /// Dedicated AI Clinical Chatbot screen with threaded conversation.
@@ -91,6 +89,76 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
           _initNewChat();
         });
       }
+    }
+  }
+
+  Future<void> _deleteSession(ChatSession session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Chat'),
+        content: Text('Delete "${session.title}"? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ApiService.deleteChatSession(session.id);
+      if (mounted) {
+        setState(() {
+          _sessions.removeWhere((s) => s.id == session.id);
+          if (_currentSessionId == session.id) {
+            _initNewChat();
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearAllSessions() async {
+    if (_sessions.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear All Chats'),
+        content: Text('Delete all ${_sessions.length} conversations? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final sessionsToDelete = List<ChatSession>.from(_sessions);
+    for (final session in sessionsToDelete) {
+      try {
+        await ApiService.deleteChatSession(session.id);
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        _sessions.clear();
+        _initNewChat();
+      });
     }
   }
 
@@ -588,54 +656,164 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.chat_bubble_outline_rounded, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
-            const SizedBox(height: 16),
-            Text('No chat history yet', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 16)),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.chat_bubble_outline_rounded, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+            ),
+            const SizedBox(height: 20),
+            Text('No conversations yet', style: TextStyle(color: cs.onSurface, fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text('Start a new chat to see it here', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14)),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      itemCount: _sessions.length,
-      itemBuilder: (context, index) {
-        final session = _sessions[index];
-        final isCurrent = session.id == _currentSessionId;
-        return ListTile(
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isCurrent ? cs.primary.withValues(alpha: 0.1) : cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.chat_rounded,
-              size: 20,
-              color: isCurrent ? cs.primary : cs.onSurfaceVariant,
-            ),
+    return Column(
+      children: [
+        // Clear all button
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Text(
+                '${_sessions.length} conversation${_sessions.length == 1 ? '' : 's'}',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: _clearAllSessions,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: cs.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.delete_sweep_rounded, size: 16, color: cs.error),
+                      const SizedBox(width: 4),
+                      Text('Clear All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.error)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          title: Text(
-            session.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-              color: isCurrent ? cs.primary : cs.onSurface,
-            ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _sessions.length,
+            itemBuilder: (context, index) {
+              final session = _sessions[index];
+              final isCurrent = session.id == _currentSessionId;
+              final now = DateTime.now();
+              final diff = now.difference(session.createdAt);
+              String timeLabel;
+              if (diff.inMinutes < 1) {
+                timeLabel = 'Just now';
+              } else if (diff.inHours < 1) {
+                timeLabel = '${diff.inMinutes}m ago';
+              } else if (diff.inDays < 1) {
+                timeLabel = '${diff.inHours}h ago';
+              } else if (diff.inDays < 7) {
+                timeLabel = '${diff.inDays}d ago';
+              } else {
+                timeLabel = DateFormat('MMM d').format(session.createdAt);
+              }
+
+              return Dismissible(
+                key: Key(session.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(right: 20),
+                  decoration: BoxDecoration(
+                    color: cs.error,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.delete_rounded, color: Colors.white, size: 22),
+                ),
+                confirmDismiss: (_) async {
+                  await _deleteSession(session);
+                  return false; // We handle removal in _deleteSession
+                },
+                child: GestureDetector(
+                  onTap: () {
+                    DefaultTabController.of(context).animateTo(0);
+                    if (!isCurrent) _loadSessionMessages(session);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? cs.primary.withValues(alpha: 0.08)
+                          : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(14),
+                      border: isCurrent ? Border.all(color: cs.primary.withValues(alpha: 0.3), width: 1.5) : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isCurrent ? cs.primary.withValues(alpha: 0.15) : cs.surface,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            isCurrent ? Icons.chat_rounded : Icons.chat_bubble_outline_rounded,
+                            size: 18,
+                            color: isCurrent ? cs.primary : cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                session.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w600,
+                                  color: isCurrent ? cs.primary : cs.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                timeLabel,
+                                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => _deleteSession(session),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(Icons.delete_outline_rounded, size: 18, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
-          subtitle: Text(
-            DateFormat('MMM d, yyyy • h:mm a').format(session.createdAt),
-            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-          ),
-          onTap: () {
-            DefaultTabController.of(context).animateTo(0);
-            if (!isCurrent) {
-              _loadSessionMessages(session);
-            }
-          },
-        );
-      },
+        ),
+      ],
     );
   }
 }

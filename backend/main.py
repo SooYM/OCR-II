@@ -1449,6 +1449,30 @@ async def get_chat_messages(session_id: str, current_user: dict = Depends(get_cu
         conn.close()
         return [dict(r) for r in rows]
 
+@app.delete("/api/chat/sessions/{session_id}")
+async def delete_chat_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a chat session and all its messages."""
+    user_id = current_user["id"]
+    if STORAGE_ENGINE == "supabase" and supabase:
+        # Verify ownership
+        session = supabase.table("chat_sessions").select("*").eq("id", session_id).eq("user_id", user_id).execute()
+        if not session.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        supabase.table("chat_messages").delete().eq("session_id", session_id).execute()
+        supabase.table("chat_sessions").delete().eq("id", session_id).eq("user_id", user_id).execute()
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
+        if not cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=404, detail="Session not found")
+        conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM chat_sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
+        conn.commit()
+        conn.close()
+    return {"status": "deleted"}
+
 @app.post("/api/reports/analyze/stream")
 async def analyze_health_trends_stream(
     request: AnalyzeRequest,
