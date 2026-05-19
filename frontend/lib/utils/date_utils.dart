@@ -44,7 +44,11 @@ class DateParser {
       'dd.MM.yyyy', 'MM.dd.yyyy', 'yyyy.MM.dd',
       'dd MMM yyyy', 'MMM dd yyyy', 'MMM dd, yyyy',
       'dd MMMM yyyy', 'MMMM dd yyyy', 'MMMM dd, yyyy',
-      'dd / MM / yyyy'
+      'dd / MM / yyyy',
+      'dd-MMM-yyyy', 'MMM-dd-yyyy', 'yyyy-MMM-dd',
+      'dd.MMM.yyyy', 'MMM.dd.yyyy', 'yyyy.MMM.dd',
+      'dd-MMMM-yyyy', 'MMMM-dd-yyyy', 'yyyy-MMMM-dd',
+      'dd.MMMM.yyyy', 'MMMM.dd.yyyy', 'yyyy.MMMM.dd'
     ];
 
     for (var fmt in formats) {

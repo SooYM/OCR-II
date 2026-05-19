@@ -472,6 +472,30 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                     ),
                     borderData: FlBorderData(show: false),
+                    lineTouchData: LineTouchData(
+                      touchTooltipData: LineTouchTooltipData(
+                        getTooltipColor: (touchedSpot) => const Color(0xFF1F2937),
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipItems: (touchedSpots) {
+                          return touchedSpots.map((spot) {
+                            final index = spot.x.toInt();
+                            String dateLabel = '';
+                            if (index >= 0 && index < validReports.length) {
+                              final report = validReports[index];
+                              final date = _parseDate(report.structuredData?.date, report.uploadTime);
+                              dateLabel = DateFormat('MMM d, yyyy').format(date);
+                            }
+                            // Clean up trailing zeros up to 3 decimal places
+                            final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+                            return LineTooltipItem(
+                              '$valStr\n$dateLabel',
+                              const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                            );
+                          }).toList();
+                        },
+                      ),
+                    ),
                     lineBarsData: [
                       LineChartBarData(
                         spots: spots,
@@ -509,6 +533,11 @@ class _MainScreenState extends State<MainScreen> {
       PageRouteBuilder(
         opaque: false,
         pageBuilder: (context, animation, secondaryAnimation) {
+          // Dynamically adapt label counts based on the actual screen width to prevent overlap
+          final screenWidth = MediaQuery.of(context).size.width;
+          final maxLabels = (screenWidth / 95).floor().clamp(2, 8);
+          final bottomInterval = (validReports.length / maxLabels).ceilToDouble();
+
           return FadeTransition(
             opacity: animation,
             child: Scaffold(
@@ -559,7 +588,7 @@ class _MainScreenState extends State<MainScreen> {
                     // Full chart
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 16, 20, 16),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 36, 16),
                         child: LineChart(
                           LineChartData(
                             minX: minX, maxX: maxX,
@@ -578,7 +607,7 @@ class _MainScreenState extends State<MainScreen> {
                               bottomTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true, reservedSize: 40, 
-                                  interval: (validReports.length > 8) ? (validReports.length / 5).ceilToDouble() : 1,
+                                  interval: bottomInterval > 0 ? bottomInterval : 1,
                                   getTitlesWidget: (value, meta) {
                                     int index = value.toInt();
                                     if (index >= 0 && index < validReports.length) {
@@ -586,7 +615,7 @@ class _MainScreenState extends State<MainScreen> {
                                       final date = _parseDate(report.structuredData?.date, report.uploadTime);
                                       return Padding(
                                         padding: const EdgeInsets.only(top: 10.0),
-                                        child: Text(DateFormat('MMM d, yyyy').format(date), style: const TextStyle(fontSize: 11)),
+                                        child: Text(DateFormat('MMM d, yy').format(date), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
                                       );
                                     }
                                     return const SizedBox();
@@ -605,7 +634,9 @@ class _MainScreenState extends State<MainScreen> {
                             borderData: FlBorderData(show: false),
                             lineTouchData: LineTouchData(
                               touchTooltipData: LineTouchTooltipData(
-                                getTooltipColor: (touchedSpot) => Theme.of(context).colorScheme.surface,
+                                getTooltipColor: (touchedSpot) => const Color(0xFF1F2937),
+                                fitInsideHorizontally: true,
+                                fitInsideVertically: true,
                                 getTooltipItems: (touchedSpots) {
                                   return touchedSpots.map((spot) {
                                     final index = spot.x.toInt();
@@ -615,9 +646,10 @@ class _MainScreenState extends State<MainScreen> {
                                       final date = _parseDate(report.structuredData?.date, report.uploadTime);
                                       dateLabel = DateFormat('MMM d, yyyy').format(date);
                                     }
+                                    final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
                                     return LineTooltipItem(
-                                      '${spot.y.toStringAsFixed(2)}\n$dateLabel',
-                                      TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 13),
+                                      '$valStr\n$dateLabel',
+                                      const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                                     );
                                   }).toList();
                                 },
@@ -1061,18 +1093,21 @@ class _MainScreenState extends State<MainScreen> {
                   lineBarsData: lines,
                   lineTouchData: LineTouchData(
                     touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (touchedSpot) => Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+                      getTooltipColor: (touchedSpot) => const Color(0xFF1F2937),
+                      fitInsideHorizontally: true,
+                      fitInsideVertically: true,
                       getTooltipItems: (touchedSpots) {
                         return touchedSpots.map((spot) {
                           final testKey = _selectedMultiAttributes.elementAt(spot.barIndex);
                           final report = validReports[spot.x.toInt()];
                           final date = _parseDate(report.structuredData?.date, report.uploadTime);
                           final dateStr = DateFormat('MMM d, yyyy').format(date);
+                          final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
 
                           // Add date to the first line of the tooltip
                           String text = (spot.barIndex == 0)
-                              ? '$dateStr\n${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(1)}'
-                              : '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(1)}';
+                              ? '$dateStr\n${testKeyToName[testKey]}: $valStr'
+                              : '${testKeyToName[testKey]}: $valStr';
 
                           return LineTooltipItem(
                             text,
@@ -1113,6 +1148,11 @@ class _MainScreenState extends State<MainScreen> {
       PageRouteBuilder(
         opaque: false,
         pageBuilder: (context, animation, secondaryAnimation) {
+          // Dynamically adapt label counts based on the actual screen width to prevent overlap
+          final screenWidth = MediaQuery.of(context).size.width;
+          final maxLabels = (screenWidth / 95).floor().clamp(2, 8);
+          final bottomInterval = (validReports.length / maxLabels).ceilToDouble();
+
           return FadeTransition(
             opacity: animation,
             child: Scaffold(
@@ -1155,7 +1195,7 @@ class _MainScreenState extends State<MainScreen> {
                     // Large Chart
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 36, 16),
                         child: LineChart(
                           LineChartData(
                             minX: minX, maxX: maxX,
@@ -1173,7 +1213,7 @@ class _MainScreenState extends State<MainScreen> {
                               bottomTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true, reservedSize: 40,
-                                  interval: (validReports.length > 8) ? (validReports.length / 5).ceilToDouble() : 1,
+                                  interval: bottomInterval > 0 ? bottomInterval : 1,
                                   getTitlesWidget: (value, meta) {
                                     int index = value.toInt();
                                     if (index >= 0 && index < validReports.length) {
@@ -1181,7 +1221,7 @@ class _MainScreenState extends State<MainScreen> {
                                       final date = _parseDate(report.structuredData?.date, report.uploadTime);
                                       return Padding(
                                         padding: const EdgeInsets.only(top: 10.0),
-                                        child: Text(DateFormat('MMM d, yyyy').format(date), style: const TextStyle(fontSize: 11)),
+                                        child: Text(DateFormat('MMM d, yy').format(date), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
                                       );
                                     }
                                     return const SizedBox();
@@ -1201,18 +1241,21 @@ class _MainScreenState extends State<MainScreen> {
                             lineBarsData: lines,
                             lineTouchData: LineTouchData(
                               touchTooltipData: LineTouchTooltipData(
-                                getTooltipColor: (touchedSpot) => Theme.of(context).colorScheme.surface,
+                                getTooltipColor: (touchedSpot) => const Color(0xFF1F2937),
+                                fitInsideHorizontally: true,
+                                fitInsideVertically: true,
                                 getTooltipItems: (touchedSpots) {
                                   return touchedSpots.map((spot) {
                                     final testKey = _selectedMultiAttributes.elementAt(spot.barIndex);
                                     final report = validReports[spot.x.toInt()];
                                     final date = _parseDate(report.structuredData?.date, report.uploadTime);
                                     final dateStr = DateFormat('MMM d, yyyy').format(date);
+                                    final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
 
                                     // Add date to the first line of the tooltip
                                     String text = (spot.barIndex == 0)
-                                        ? '$dateStr\n${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(2)}'
-                                        : '${testKeyToName[testKey]}: ${spot.y.toStringAsFixed(2)}';
+                                        ? '$dateStr\n${testKeyToName[testKey]}: $valStr'
+                                        : '${testKeyToName[testKey]}: $valStr';
 
                                     return LineTooltipItem(
                                       text,

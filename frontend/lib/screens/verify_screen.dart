@@ -42,6 +42,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
           patientName: '',
           patientId: '',
           date: '',
+          time: '',
           testName: '',
           doctorName: '',
           hospitalName: '',
@@ -81,7 +82,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
       }
       
       // 2. Fallback to name matching
-      match ??= BiomarkerDictionary.match(result.testItem);
+      match ??= BiomarkerDictionary.match(result.testItem, unit: result.unit);
 
       if (match != null) {
         _matchedIndices.add(i);
@@ -101,9 +102,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
           result.unit = match.unit;
         }
 
-        // Set reference range if empty
-        if ((result.referenceRange == null || result.referenceRange!.isEmpty) && match.referenceRange != null) {
-          result.referenceRange = match.referenceRange;
+        // Set reference range if empty, respecting the extracted unit
+        if (result.referenceRange == null || result.referenceRange!.isEmpty) {
+          final normUnit = result.unit?.toLowerCase().replaceAll(' ', '');
+          final normStdUnit = match.unit.toLowerCase().replaceAll(' ', '');
+          
+          if (normUnit != null && normUnit != normStdUnit && match.referenceRangeSI != null && match.referenceRangeSI!.isNotEmpty && match.referenceRangeSI != 'N/A') {
+            result.referenceRange = match.referenceRangeSI;
+          } else if (match.referenceRange != null) {
+            result.referenceRange = match.referenceRange;
+          }
         }
       }
     }
@@ -145,6 +153,21 @@ class _VerifyScreenState extends State<VerifyScreen> {
     
     // Normalize format before saving
     _data.date = DateFormat('dd / MM / yyyy').format(parsedDate);
+
+    // Validate time if entered
+    if (_data.time != null && _data.time!.trim().isNotEmpty) {
+      final timeStr = _data.time!.trim();
+      final timeRegExp = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$', caseSensitive: false);
+      if (!timeRegExp.hasMatch(timeStr)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            content: const Text('Invalid time format. Please use HH:MM or HH:MM AM/PM'),
+          ),
+        );
+        return;
+      }
+    }
 
     setState(() => _isSending = true);
 
@@ -328,6 +351,17 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         inputFormatters: [DateInputFormatter()],
                         onChanged: (v) {
                           _data.date = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Time',
+                        value: _data.time ?? '',
+                        icon: Icons.access_time_outlined,
+                        hintText: 'e.g., 07:01:00 or 10:00 AM',
+                        onChanged: (v) {
+                          _data.time = v;
                           _hasChanges = true;
                         },
                       ),
@@ -540,6 +574,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     required Function(String) onChanged,
     List<TextInputFormatter>? inputFormatters,
     TextInputType? keyboardType,
+    String? hintText,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -579,6 +614,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   ),
                 ),
                 fillColor: Colors.transparent,
+                hintText: hintText,
+                hintStyle: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                  fontSize: 14,
+                  fontWeight: FontWeight.normal,
+                ),
               ),
             ),
           ),
@@ -772,7 +813,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         onChanged: (v) {
                           result.testItem = v;
                           _hasChanges = true;
-                          final newMatch = BiomarkerDictionary.match(v);
+                          final newMatch = BiomarkerDictionary.match(v, unit: result.unit);
                           setState(() {
                             if (newMatch != null) {
                               _matchedIndices.add(index);

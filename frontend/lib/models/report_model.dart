@@ -53,6 +53,7 @@ class StructuredData {
   String? patientName;
   String? patientId;
   String? date;
+  String? time;
   String? testName;
   String? doctorName;
   String? hospitalName;
@@ -65,6 +66,7 @@ class StructuredData {
     this.patientName,
     this.patientId,
     this.date,
+    this.time,
     this.testName,
     this.doctorName,
     this.hospitalName,
@@ -79,6 +81,7 @@ class StructuredData {
       patientName: json['patient_name'] as String?,
       patientId: json['patient_id'] as String?,
       date: json['date'] as String?,
+      time: json['time'] as String?,
       testName: json['test_name'] as String?,
       doctorName: json['doctor_name'] as String?,
       hospitalName: json['hospital_name'] as String?,
@@ -97,6 +100,7 @@ class StructuredData {
       'patient_name': patientName,
       'patient_id': patientId,
       'date': date,
+      'time': time,
       'test_name': testName,
       'doctor_name': doctorName,
       'hospital_name': hospitalName,

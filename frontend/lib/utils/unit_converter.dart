@@ -1,3 +1,5 @@
+import 'biomarker_dictionary.dart';
+
 class ConversionResult {
   final String originalValue;
   final String convertedValue;
@@ -229,7 +231,28 @@ class UnitConverter {
   static String convertRange(String key, String range, String fromUnit, String toUnit) {
     if (range.isEmpty || fromUnit == toUnit) return range;
 
-    // Use a regex to match all individual numeric values in the range string
+    // First attempt to look up hand-curated reference ranges from the dictionary
+    try {
+      final entry = BiomarkerDictionary.getEntryByKey(key);
+      if (entry != null) {
+        final normTo = _normalizeUnit(toUnit);
+        final normStdUnit = _normalizeUnit(entry.unit);
+
+        // If toUnit is conventional, return conventional
+        if (normTo == normStdUnit) {
+          if (entry.referenceRange != null && entry.referenceRange!.isNotEmpty) {
+            return entry.referenceRange!;
+          }
+        } else {
+          // If toUnit is SI, return SI
+          if (entry.referenceRangeSI != null && entry.referenceRangeSI!.isNotEmpty && entry.referenceRangeSI != 'N/A') {
+            return entry.referenceRangeSI!;
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Fallback to regex-based numeric conversion
     final regex = RegExp(r'(\d*\.?\d+)');
     
     return range.replaceAllMapped(regex, (match) {

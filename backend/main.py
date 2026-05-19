@@ -348,8 +348,13 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     # Dynamically build the prompt based on the schema
     # Exclude columns that are handled by the backend (original_*)
     extraction_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_")]
-    
-    keys_list = "\n".join([f"- {k}" for k in extraction_keys])
+    # Append UI-expected metadata fields with descriptions to instruct the LLM
+    all_keys = extraction_keys + [
+        "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
+        "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
+    ]
+    keys_list = "\n".join([f"- {k}" for k in all_keys])
     
     prompt = f"""
     You are an expert medical data extraction assistant.
@@ -366,15 +371,20 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
 
     IMPORTANT MAPPING RULES & EXAMPLES:
     1. Standardize units in keys: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
-    2. Map common names: 
+    2. Do NOT convert units yourself. Extract the EXACT unit written on the report (e.g., if the report lists "µkat/L" or "ukat/L", do NOT convert it to "U/L"; extract it exactly as "µkat/L" or "ukat/L" inside the string alongside the value).
+    3. RESULT VS REFERENCE RANGE ACCURACY:
+       - DO NOT confuse the patient's actual "Result/Value" column with the "Reference Range/Normal Range" column.
+       - Always verify the column headers to ensure you are extracting the patient's active result. If the patient's result is empty, use "". Do NOT fall back to extracting the reference range value as the result.
+       - For qualitative tests (e.g., urine proteins, glucose, nitrites, etc.), if the patient's result is written as "1+ (positive)", "2+ (positive)", "++", "1+", "+", etc. and the reference is just "positive" or "Negative", standardise/clean the result to just the clean qualitative word (e.g., "positive" or "Negative") to match the reference standard and avoid useless grader prefixes like "1+" unless explicitly requested.
+    4. Map common names: 
        - 'WBC' -> 'wbc_cells_ul'
        - 'RBC' -> 'rbc_count_mil_ul'
        - 'HGB' or 'Hemoglobin' -> 'hemoglobin_g_dl'
        - 'Cholesterol' -> 'total_cholesterol_mg_dl'
-    3. EDGE CASES & SYMBOLS:
+    5. EDGE CASES & SYMBOLS:
        - If a result has a less-than/greater-than sign, include it: "< 0.3", "> 100".
        - If a result is a textual qualitative value, extract it exactly as written: "Negative", "Clear", "Pale Yellow".
-    4. FEW-SHOT EXAMPLE:
+    6. FEW-SHOT EXAMPLE:
        If the image shows: "Cholesterol Total: 5.17 mmol/L" and "WBC: 4.5 x10^3/uL",
        Your JSON should include:
        {{
@@ -427,7 +437,13 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
 
     # Dynamically build the prompt based on the schema
     extraction_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_")]
-    keys_list = "\n".join([f"- {k}" for k in extraction_keys])
+    # Append UI-expected metadata fields with descriptions to instruct the LLM
+    all_keys = extraction_keys + [
+        "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
+        "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
+    ]
+    keys_list = "\n".join([f"- {k}" for k in all_keys])
 
     prompt = f"""
     You are given {len(file_paths)} page(s) of a SINGLE medical blood report.
@@ -449,10 +465,15 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
        - 'RBC' -> 'rbc_count_mil_ul'
        - 'HGB' -> 'hemoglobin_g_dl'
     2. Patient info (medid, labreference, dates) should appear once — take from whichever page has it.
-    3. EDGE CASES & SYMBOLS:
+    3. Do NOT convert units yourself. Extract the EXACT unit written on the report (e.g., if the report lists "µkat/L" or "ukat/L", do NOT convert it to "U/L"; extract it exactly as "µkat/L" or "ukat/L" inside the string alongside the value).
+    4. RESULT VS REFERENCE RANGE ACCURACY:
+       - DO NOT confuse the patient's actual "Result/Value" column with the "Reference Range/Normal Range" column.
+       - Always verify the column headers to ensure you are extracting the patient's active result. If the patient's result is empty, use "". Do NOT fall back to extracting the reference range value as the result.
+       - For qualitative tests (e.g., urine proteins, glucose, nitrites, etc.), if the patient's result is written as "1+ (positive)", "2+ (positive)", "++", "1+", "+", etc. and the reference is just "positive" or "Negative", standardise/clean the result to just the clean qualitative word (e.g., "positive" or "Negative") to match the reference standard and avoid useless grader prefixes like "1+" unless explicitly requested.
+    5. EDGE CASES & SYMBOLS:
        - If a result has a '<' or '>', include it: "< 0.5".
        - If a result is qualitative, extract exact text: "Negative", "Trace".
-    4. FEW-SHOT EXAMPLE:
+    6. FEW-SHOT EXAMPLE:
        If the image shows: "Cholesterol Total: 5.17 mmol/L" and "Urine Glucose: Negative",
        Your JSON should include:
        {{
@@ -631,10 +652,24 @@ def validate_and_cast_value(k: str, v: any):
         raise ValueError(f"Invalid FLOAT64 format: {s}")
         
     elif typ == "DATE":
-        # Ignore time if present by splitting by space or T
-        s_date = s.split(' ')[0].split('T')[0]
+        # Robustly strip time suffix like " 10:00:00 AM" or " 10:00 AM" or " 10:00:00" or "T10:00:00"
+        s_date = re.sub(r'[T\s]+\d{1,2}:\d{2}(:\d{2})?(\s*(AM|PM))?.*$', '', s, flags=re.IGNORECASE).strip()
+        # Clean spaces around separators like / or - or .
+        s_date = re.sub(r'\s*([/\-.])\s*', r'\1', s_date)
+        
         if re.match(r'^\d{4}-\d{2}-\d{2}$', s_date): return s_date
-        formats = ["%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]
+        
+        formats = [
+            "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d",
+            "%d-%m-%Y", "%m-%d-%Y", "%Y-%m-%d",
+            "%d.%m.%Y", "%m.%d.%Y", "%Y.%m.%d",
+            "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y",
+            "%b %d %Y", "%B %d %Y",
+            "%d-%b-%Y", "%b-%d-%Y", "%Y-%b-%d",
+            "%d.%b.%Y", "%b.%d.%Y", "%Y.%b.%d",
+            "%d-%B-%Y", "%B-%d-%Y", "%Y-%B-%d",
+            "%d.%B.%Y", "%B.%d.%Y", "%Y.%B.%d"
+        ]
         from datetime import datetime
         for fmt in formats:
             try:
@@ -645,16 +680,67 @@ def validate_and_cast_value(k: str, v: any):
         raise ValueError(f"Invalid DATE format (expected YYYY-MM-DD): {s}")
         
     elif typ == "TIME":
-        # Extract time part if date is present
-        match = re.search(r'(\d{2}:\d{2}(:\d{2})?)', s)
+        # Extract time part: digit(s) followed by : followed by digits, optionally followed by : and digits, and optionally AM/PM
+        match = re.search(r'(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?', s, re.IGNORECASE)
         if match:
-            return match.group(1)
+            h = int(match.group(1))
+            m = int(match.group(2))
+            sec = int(match.group(3)) if match.group(3) else 0
+            ampm = match.group(4)
+            if ampm:
+                if ampm.upper() == "PM" and h < 12:
+                    h += 12
+                elif ampm.upper() == "AM" and h == 12:
+                    h = 0
+            return f"{h:02d}:{m:02d}:{sec:02d}"
         raise ValueError(f"Invalid TIME format (expected HH:MM or HH:MM:SS): {s}")
         
     return s
 
+def split_value_and_unit(s: str):
+    s = s.strip()
+    if not s:
+        return "", ""
+        
+    # Check if the entire string is just a 10-power unit (no preceding value)
+    # E.g., "10^9/L", "x10^12/L", "10^3/uL", "10^9"
+    if re.match(r'^(x|X|[\*·•])?\s*10\^\d+.*$', s) or re.match(r'^(x|X)?10\^.*$', s):
+        if not re.match(r'^[<>]?\s*\d', s):
+            return "", s
+
+    # Parse standard value prefixes: optional comparative symbol (<, >, <=, >=) followed by digits and optionally hyphen range
+    val_match = re.match(r'^([<>]?\s*=?\s*(?:\d+(?:[.,]\d+)?\s*(?:-\s*\d+(?:[.,]\d+)?)?|\d+))', s)
+    if val_match:
+        clean_val = val_match.group(1).strip()
+        rest = s[val_match.end():].strip()
+        
+        if rest:
+            # Clean up multiplication marks, spaces, and outer wrapping parentheses from unit
+            unit = rest
+            unit = re.sub(r'^[\s\(\*·•]+', '', unit)
+            unit = re.sub(r'^[xX]\s+', '', unit) # Strip 'x' separator but preserve 'x10^3/uL'
+            unit = re.sub(r'[\s\)]+$', '', unit)
+            unit = unit.strip()
+            return clean_val, unit
+        else:
+            return clean_val, ""
+            
+    return s, ""
+
 def normalize_structured_data(data: dict) -> dict:
     """Ensure all required keys exist and return a structure friendly to the Flutter UI."""
+    # Robustly handle different possible input keys for collected and time
+    collected_val = str(data.get("collected", data.get("date", ""))).strip()
+    time_val = str(data.get("time", "")).strip()
+
+    # Automatically extract time from collected if collected has a time and time is empty
+    if collected_val and not time_val:
+        time_match = re.search(r'(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)', collected_val, re.IGNORECASE)
+        if time_match:
+            time_val = time_match.group(1).strip()
+            # Strip the time from collected_val
+            collected_val = re.sub(r'\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?.*$', '', collected_val, flags=re.IGNORECASE).strip()
+
     # 1. Standardize the flat data
     flat = {}
     raw_medid = data.get("medid", data.get("patient_id", ""))
@@ -673,6 +759,10 @@ def normalize_structured_data(data: dict) -> dict:
             flat[key] = clean_id(raw_medid)
         elif key == "labreference":
             flat[key] = clean_id(raw_labref)
+        elif key == "collected":
+            flat[key] = collected_val
+        elif key == "time":
+            flat[key] = time_val
         else:
             val = data.get(key, "")
             flat[key] = str(val) if val is not None else ""
@@ -692,15 +782,8 @@ def normalize_structured_data(data: dict) -> dict:
         
         parts = key.split('_')
         name = " ".join(parts[:-1]).title() if len(parts) > 1 else key.title()
-        # Parse value and extracted unit from LLM string
-        val_str = str(value).strip()
-        match = re.search(r'^([<>]?\s*(?:\d{1,3}(?:,\d{3})+|\d*\.?\d+))\s*(x?10\^.*|[a-zA-Z%µ/].*)$', val_str, re.IGNORECASE)
-        if match:
-            clean_val = match.group(1).strip()
-            extracted_unit = match.group(2).strip()
-        else:
-            clean_val = val_str
-            extracted_unit = ""
+        # Parse value and extracted unit from LLM string using our robust parser
+        clean_val, extracted_unit = split_value_and_unit(str(value))
 
         std_unit = ""
         if key.endswith('_g_dl'): std_unit = "g/dL"
@@ -724,7 +807,10 @@ def normalize_structured_data(data: dict) -> dict:
         "patient_id": flat["medid"],
         "date": flat["collected"],
         "results": results,
-        "notes": flat["others"]
+        "notes": flat["others"],
+        "test_name": str(data.get("test_name", "")).strip(),
+        "doctor_name": str(data.get("doctor_name", "")).strip(),
+        "hospital_name": str(data.get("hospital_name", "")).strip()
     }
 
 def get_clean_flat_data(data: dict) -> dict:
@@ -893,16 +979,76 @@ def backend_normalize_date(date_str):
         return f"{parts[0].zfill(2)}/{parts[1].zfill(2)}/{parts[2]}"
     return clean
 
-def backend_normalize_value(val):
-    if not val: return ""
-    s = str(val).strip().lower()
-    try:
-        # If numeric, normalize to float string to handle 12.5 vs 12.50
-        f = float(s)
-        if f.is_integer(): return str(int(f))
-        return str(f)
-    except:
-        return s
+def backend_compare_values(key: str, val1: str, val2: str) -> bool:
+    if not val1 or not val2:
+        return val1 == val2
+        
+    # Convert and normalize both to standard units
+    def to_std_val_and_float(v):
+        v_str = str(v).strip()
+        if not v_str:
+            return None, None
+            
+        # Parse value and extracted unit using our robust parser
+        clean_val, ext_unit = split_value_and_unit(v_str)
+            
+        # Standard unit based on key
+        std_unit = ""
+        if key.endswith('_g_dl'): std_unit = "g/dL"
+        elif key.endswith('_mg_dl'): std_unit = "mg/dL"
+        elif key.endswith('_mil_ul'): std_unit = "mil/uL"
+        elif key.endswith('_pct'): std_unit = "%"
+        elif key.endswith('_fl'): std_unit = "fL"
+        elif key.endswith('_pg'): std_unit = "pg"
+        elif key.endswith('_ul'): std_unit = "uL"
+        elif key.endswith('_uiu_ml'): std_unit = "uIU/mL"
+        elif key.endswith('_mmol_l'): std_unit = "mmol/L"
+        elif key.endswith('_mg_l'): std_unit = "mg/L"
+        elif key.endswith('_ug_dl'): std_unit = "ug/dL"
+        elif key.endswith('_ng_dl'): std_unit = "ng/dL"
+        
+        # Strip signs like < or > for numeric conversion but keep them in clean_val
+        num_clean = re.sub(r'[<>\s]', '', clean_val)
+        
+        # If conversion is possible
+        if ext_unit and std_unit:
+            try:
+                converted = convert_unit(key, num_clean, ext_unit, std_unit)
+                if converted is not None:
+                    # Re-attach any prefix if needed, or just return the float
+                    prefix = ""
+                    if "<" in clean_val: prefix = "<"
+                    elif ">" in clean_val: prefix = ">"
+                    return f"{prefix}{converted}", float(converted)
+            except:
+                pass
+                
+        try:
+            return clean_val, float(num_clean)
+        except:
+            return clean_val, None
+
+    v1_clean, v1_num = to_std_val_and_float(val1)
+    v2_clean, v2_num = to_std_val_and_float(val2)
+    
+    # If both are numeric, allow a 2% tolerance for conversion/rounding differences
+    if v1_num is not None and v2_num is not None:
+        # Check if they have the same sign (< or >)
+        sign1 = "<" in str(val1) or ">" in str(val1)
+        sign2 = "<" in str(val2) or ">" in str(val2)
+        if sign1 != sign2:
+            return False
+            
+        if v1_num == 0 or v2_num == 0:
+            return v1_num == v2_num
+            
+        # Tolerance check (within 2%)
+        return abs(v1_num - v2_num) / max(abs(v1_num), abs(v2_num)) <= 0.02
+        
+    # Non-numeric or fallback to string compare
+    s1 = str(v1_clean).strip().lower()
+    s2 = str(v2_clean).strip().lower()
+    return s1 == s2
 
 async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str = None):
     """
@@ -931,7 +1077,7 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
             cursor.execute("SELECT * FROM reports WHERE user_id = ?", (user_id,))
             existing_reports = [dict(row) for row in cursor.fetchall()]
             conn.close()
-
+ 
         for report in existing_reports:
             # Skip current
             if exclude_id and report.get("id") == exclude_id:
@@ -968,12 +1114,12 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
                     for key in STAGING_SCHEMA_KEYS:
                         if key in metadata_keys: continue
                         
-                        new_val = backend_normalize_value(new_data.get(key, ""))
-                        old_val = backend_normalize_value(s_data.get(key, ""))
+                        new_val = new_data.get(key, "")
+                        old_val = s_data.get(key, "")
                         
                         if new_val or old_val:
                             total_keys += 1
-                            if new_val == old_val:
+                            if backend_compare_values(key, new_val, old_val):
                                 match_count += 1
                     
                     if total_keys > 0:
@@ -1703,6 +1849,12 @@ async def update_report(report_id: str, updated_data: dict):
             validate_and_cast_value("collected", incoming_struct["date"])
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Warning: The format for 'date' is incorrect. Expected DATE. Error: {str(e)}")
+
+    if "time" in incoming_struct and incoming_struct["time"]:
+        try:
+            validate_and_cast_value("time", incoming_struct["time"])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Warning: The format for 'time' is incorrect. Expected TIME (HH:MM or HH:MM:SS). Error: {str(e)}")
 
     await update_report_in_db(report_id, updated_data)
     return {"status": "updated"}
