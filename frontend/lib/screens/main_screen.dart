@@ -1235,11 +1235,6 @@ class _MainScreenState extends State<MainScreen> {
                               ],
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(gradient: AppTheme.accentGradient(context), borderRadius: BorderRadius.circular(12)),
-                            child: const Icon(Icons.stacked_line_chart_rounded, size: 20, color: Colors.white),
-                          ),
                         ],
                       ),
                     ),
