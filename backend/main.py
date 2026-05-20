@@ -27,6 +27,8 @@ from PIL import Image
 from dotenv import load_dotenv
 from openai import OpenAI
 from supabase import create_client, Client
+from supabase.lib.client_options import ClientOptions
+import httpx
 
 from unit_converter import convert_unit
 
@@ -88,7 +90,10 @@ TEMP_REPORTS = {}
 supabase: Optional[Client] = None
 if STORAGE_ENGINE == "supabase" and SUPABASE_URL and SUPABASE_KEY:
     try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # Create a custom httpx Client to disable HTTP/2 and prevent ConnectionTerminated errors
+        custom_http_client = httpx.Client(http2=False, timeout=httpx.Timeout(20.0))
+        options = ClientOptions(httpx_client=custom_http_client)
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
     except Exception as e:
         print(f"Failed to initialize Supabase: {e}")
 
