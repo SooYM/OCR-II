@@ -2218,15 +2218,6 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                 },
                               ),
                             ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.accentGradient(context),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.show_chart_rounded, size: 20, color: Colors.white),
                           ),
                       ],
                     ),
