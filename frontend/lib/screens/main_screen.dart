@@ -191,7 +191,7 @@ class _MainScreenState extends State<MainScreen> {
               gradient: AppTheme.accentGradient(context),
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             ),
-            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
+            child: const Icon(Icons.trending_up_rounded, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -366,7 +366,7 @@ class _MainScreenState extends State<MainScreen> {
                 BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
               ],
             ),
-            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
+            child: const Icon(Icons.trending_up_rounded, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 16),
           Expanded(
