@@ -37,6 +37,14 @@ class DateParser {
       clean = clean.split('T')[0];
     }
 
+    // Handle Excel date serials (e.g., 43547 is 23-Mar-2019)
+    final intValue = int.tryParse(clean);
+    if (intValue != null && intValue > 30000 && intValue < 60000) {
+      final excelStart = DateTime(1900, 1, 1);
+      // Subtract 2 days because Excel incorrectly treats 1900 as a leap year
+      return excelStart.add(Duration(days: intValue - 2));
+    }
+
     // Try parsing with common formats
     final formats = [
       'dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy/MM/dd',

@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
 import '../models/report_model.dart';
+import '../utils/date_utils.dart';
 import 'verify_screen.dart';
 
 /// Displays the current user's scanned report history.
@@ -41,9 +42,26 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
   String _formatDate(String isoDate) {
     try {
       final dt = DateTime.parse(isoDate);
-      return DateFormat('dd MMM yyyy, HH:mm').format(dt);
+      return DateFormat('dd-MMM-yyyy').format(dt);
     } catch (_) {
       return isoDate;
+    }
+  }
+
+  String _formatReportDate(String? collectedDate, String uploadTime) {
+    if (collectedDate == null || collectedDate.trim().isEmpty) {
+      return 'Not specified';
+    }
+    final parsed = DateParser.parse(collectedDate);
+    if (parsed != null) {
+      return DateFormat('dd-MMM-yyyy').format(parsed);
+    }
+    // Fallback: Try parsing uploadTime
+    try {
+      final parsedUpload = DateTime.parse(uploadTime);
+      return DateFormat('dd-MMM-yyyy').format(parsedUpload);
+    } catch (_) {
+      return collectedDate;
     }
   }
 
@@ -312,7 +330,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                     Icon(Icons.calendar_today_outlined, size: 13, color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.7)),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text('Report Date: ${report.structuredData?.collected ?? 'Not specified'}',
+                      child: Text('Report Date: ${_formatReportDate(report.structuredData?.collected, report.uploadTime)}',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis),
                     ),
