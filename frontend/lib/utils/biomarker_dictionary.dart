@@ -1191,4 +1191,41 @@ class BiomarkerDictionary {
     }
     return results;
   }
+
+  /// Resolve a reference range string based on a patient's gender.
+  /// Handles formats like:
+  /// - 'Male: 13.8 - 17.2 g/dL | Female: 12.1 - 15.1 g/dL'
+  /// - '> 40 mg/dL Male | > 50 mg/dL Female'
+  /// - '0.74 - 1.35 mg/dL Male | 0.59 - 1.04 mg/dL Female'
+  static String resolveReferenceRange(String? referenceRange, String? gender) {
+    if (referenceRange == null || referenceRange.isEmpty) return '';
+    if (gender == null || gender.trim().isEmpty) return referenceRange;
+
+    final cleanGender = gender.trim().toLowerCase();
+    final isMale = cleanGender.startsWith('m') || cleanGender.contains('male');
+    final isFemale = cleanGender.startsWith('f') || cleanGender.contains('female');
+
+    if (!isMale && !isFemale) return referenceRange;
+
+    // Split by '|' or ';' which separate male and female ranges
+    final parts = referenceRange.split(RegExp(r'[|;]'));
+    if (parts.length < 2) return referenceRange;
+
+    for (final part in parts) {
+      final cleanPart = part.toLowerCase();
+      // Check if this part belongs to Male or Female
+      final partIsMale = cleanPart.contains('male') && !cleanPart.contains('female');
+      final partIsFemale = cleanPart.contains('female');
+
+      if (isMale && partIsMale) {
+        // Strip out the prefix/suffix labels like "Male:", " Male", etc.
+        return part.replaceAll(RegExp(r'male:?', caseSensitive: false), '').trim();
+      }
+      if (isFemale && partIsFemale) {
+        return part.replaceAll(RegExp(r'female:?', caseSensitive: false), '').trim();
+      }
+    }
+
+    return referenceRange;
+  }
 }
