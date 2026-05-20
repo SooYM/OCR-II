@@ -19,16 +19,6 @@ class BiomarkerEntry {
     this.allowedUnits = const [],
     this.description,
   });
-
-  String? getGenderedRange(String? gender) {
-    if (referenceRange == null) return null;
-    return BiomarkerDictionary.resolveRangeForGender(referenceRange!, gender);
-  }
-
-  String? getGenderedRangeSI(String? gender) {
-    if (referenceRangeSI == null) return null;
-    return BiomarkerDictionary.resolveRangeForGender(referenceRangeSI!, gender);
-  }
 }
 
 class BiomarkerDictionary {
@@ -1202,37 +1192,42 @@ class BiomarkerDictionary {
     return results;
   }
 
-  /// Resolve a reference range string for a specific gender.
-  static String resolveRangeForGender(String rangeText, String? genderStr) {
-    if (genderStr == null || genderStr.trim().isEmpty) return rangeText;
-    final g = genderStr.trim().toLowerCase();
-    
-    final isMale = g.startsWith('m');
-    final isFemale = g.startsWith('f');
-    
-    if (!isMale && !isFemale) return rangeText;
-    
-    // Split by pipe '|' first
-    final parts = rangeText.contains('|') ? rangeText.split('|') : rangeText.split(RegExp(r'\s+(?:or|and)\s+'));
-    
-    for (final part in parts) {
-      final cleanPart = part.trim();
-      final partLower = cleanPart.toLowerCase();
-      
-      if (isMale && partLower.contains('male') && !partLower.contains('female')) {
-        // Strip out 'Male:' or 'Male'
-        var res = cleanPart.replaceFirst(RegExp(r'^(male|m)\s*:\s*', caseSensitive: false), '').trim();
-        res = res.replaceAll(RegExp(r'\s*male\s*', caseSensitive: false), '').trim();
-        return res;
+  /// Parses a combined reference range string (e.g. "Male: 13.8-17.2 | Female: 12.1-15.1") 
+  /// and returns only the range matching the given gender.
+  static String? getGenderSpecificRange(String? referenceRange, String? gender) {
+    if (referenceRange == null || referenceRange.isEmpty) return referenceRange;
+    if (gender == null || gender.trim().isEmpty) return referenceRange;
+
+    final cleanGender = gender.trim().toLowerCase();
+    final isMale = cleanGender.startsWith('m') && !cleanGender.startsWith('f');
+    final isFemale = cleanGender.startsWith('f');
+
+    if (!isMale && !isFemale) return referenceRange;
+
+    final parts = referenceRange.split('|');
+    if (parts.length < 2) return referenceRange;
+
+    for (var part in parts) {
+      final trimmedPart = part.trim();
+      final lowerPart = trimmedPart.toLowerCase();
+      final partIsFemale = lowerPart.contains('female');
+      final partIsMale = lowerPart.contains('male') && !partIsFemale;
+
+      if (isFemale && partIsFemale) {
+        return _cleanGenderLabels(trimmedPart, 'female');
       }
-      if (isFemale && partLower.contains('female')) {
-        // Strip out 'Female:' or 'Female'
-        var res = cleanPart.replaceFirst(RegExp(r'^(female|f)\s*:\s*', caseSensitive: false), '').trim();
-        res = res.replaceAll(RegExp(r'\s*female\s*', caseSensitive: false), '').trim();
-        return res;
+      if (isMale && partIsMale) {
+        return _cleanGenderLabels(trimmedPart, 'male');
       }
     }
-    
-    return rangeText;
+
+    return referenceRange;
+  }
+
+  static String _cleanGenderLabels(String part, String genderWord) {
+    final regExpPrefix = RegExp('^$genderWord\\s*:\\s*', caseSensitive: false);
+    final regExpSuffix = RegExp('\\s+$genderWord\\s*\$', caseSensitive: false);
+    var cleaned = part.replaceAll(regExpPrefix, '').replaceAll(regExpSuffix, '');
+    return cleaned.trim();
   }
 }

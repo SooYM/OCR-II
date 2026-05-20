@@ -366,6 +366,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+
   Widget? _buildMiniChart(String testKey, List<MedicalReport> validReports, String displayName) {
     List<FlSpot> spots = [];
     bool isDiscrete = false;
@@ -383,7 +384,7 @@ class _MainScreenState extends State<MainScreen> {
     double? refLow, refHigh;
     if (entry != null) {
       final gender = _determineGender(validReports);
-      final rangeText = entry.getGenderedRange(gender);
+      final rangeText = BiomarkerDictionary.getGenderSpecificRange(entry.referenceRange, gender);
       if (rangeText != null && rangeText != 'N/A') {
         final nums = RegExp(r'[\d]+\.?[\d]*').allMatches(rangeText).map((m) => double.tryParse(m.group(0)!)).whereType<double>().toList();
         if (nums.length >= 2) {
@@ -1997,16 +1998,6 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
   }
 }
 
-String? _determineGender(List<MedicalReport> reports) {
-  for (final r in reports) {
-    final g = r.structuredData?.gender;
-    if (g != null && g.trim().isNotEmpty) {
-      return g.trim();
-    }
-  }
-  return null;
-}
-
 // ─── Full Screen Chart with Unit Switching ──────────────────────────────────
 
 class _FullScreenChartPage extends StatefulWidget {
@@ -2070,8 +2061,8 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
     if (_entry == null) return (null, null);
     final gender = _determineGender(widget.validReports);
     final range = _selectedUnit == _defaultUnit
-        ? _entry!.getGenderedRange(gender)
-        : _entry!.getGenderedRangeSI(gender);
+        ? BiomarkerDictionary.getGenderSpecificRange(_entry!.referenceRange, gender)
+        : BiomarkerDictionary.getGenderSpecificRange(_entry!.referenceRangeSI, gender);
     if (range == null || range.isEmpty || range == 'N/A') return (null, null);
 
     final nums = RegExp(r'[\d]+\.?[\d]*').allMatches(range).map((m) => double.tryParse(m.group(0)!)).whereType<double>().toList();
@@ -2090,9 +2081,9 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
     if (_entry == null) return '';
     final gender = _determineGender(widget.validReports);
     if (_selectedUnit == _defaultUnit) {
-      return _entry!.getGenderedRange(gender) ?? '';
+      return BiomarkerDictionary.getGenderSpecificRange(_entry!.referenceRange, gender) ?? '';
     }
-    return _entry!.getGenderedRangeSI(gender) ?? '';
+    return BiomarkerDictionary.getGenderSpecificRange(_entry!.referenceRangeSI, gender) ?? '';
   }
 
   @override
@@ -2609,4 +2600,14 @@ class _ChartDataPoint {
   final double index;
   final bool isDiscrete;
   _ChartDataPoint(this.date, this.value, this.index, {this.isDiscrete = false});
+}
+
+String? _determineGender(List<MedicalReport> reports) {
+  for (final r in reports) {
+    final g = r.structuredData?.gender;
+    if (g != null && g.trim().isNotEmpty) {
+      return g.trim();
+    }
+  }
+  return null;
 }
