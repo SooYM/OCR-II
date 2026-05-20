@@ -52,6 +52,7 @@ class MedicalReport {
 class StructuredData {
   String? patientName;
   String? patientId;
+  String? gender;
   String? date;
   String? time;
   String? testName;
@@ -65,6 +66,7 @@ class StructuredData {
   StructuredData({
     this.patientName,
     this.patientId,
+    this.gender,
     this.date,
     this.time,
     this.testName,
@@ -80,6 +82,7 @@ class StructuredData {
     return StructuredData(
       patientName: json['patient_name'] as String?,
       patientId: json['patient_id'] as String?,
+      gender: json['gender'] as String?,
       date: json['date'] as String?,
       time: json['time'] as String?,
       testName: json['test_name'] as String?,
@@ -99,6 +102,7 @@ class StructuredData {
     return {
       'patient_name': patientName,
       'patient_id': patientId,
+      'gender': gender,
       'date': date,
       'time': time,
       'test_name': testName,

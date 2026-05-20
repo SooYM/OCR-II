@@ -41,6 +41,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
         StructuredData(
           patientName: '',
           patientId: '',
+          gender: '',
           date: '',
           time: '',
           testName: '',
@@ -340,6 +341,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         icon: Icons.numbers,
                         onChanged: (v) {
                           _data.patientId = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Gender',
+                        value: _data.gender ?? '',
+                        icon: Icons.wc_outlined,
+                        onChanged: (v) {
+                          _data.gender = v;
                           _hasChanges = true;
                         },
                       ),
