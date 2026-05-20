@@ -366,7 +366,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-
   Widget? _buildMiniChart(String testKey, List<MedicalReport> validReports, String displayName) {
     List<FlSpot> spots = [];
     bool isDiscrete = false;
@@ -382,21 +381,17 @@ class _MainScreenState extends State<MainScreen> {
 
     // Parse ref range for numeric abnormal detection
     double? refLow, refHigh;
-    if (entry != null && entry.referenceRange != null && entry.referenceRange != 'N/A') {
-      String? patientGender;
-      for (final r in validReports) {
-        if (r.structuredData?.gender != null && r.structuredData!.gender!.isNotEmpty) {
-          patientGender = r.structuredData!.gender;
-          break;
+    if (entry != null) {
+      final gender = _determineGender(validReports);
+      final rangeText = entry.getGenderedRange(gender);
+      if (rangeText != null && rangeText != 'N/A') {
+        final nums = RegExp(r'[\d]+\.?[\d]*').allMatches(rangeText).map((m) => double.tryParse(m.group(0)!)).whereType<double>().toList();
+        if (nums.length >= 2) {
+          refLow = nums[0]; refHigh = nums[1];
+        } else if (nums.length == 1) {
+          if (rangeText.contains('<')) refHigh = nums[0];
+          if (rangeText.contains('>')) refLow = nums[0];
         }
-      }
-      final resolvedRange = BiomarkerDictionary.resolveReferenceRange(entry.referenceRange, patientGender);
-      final nums = RegExp(r'[\d]+\.?[\d]*').allMatches(resolvedRange).map((m) => double.tryParse(m.group(0)!)).whereType<double>().toList();
-      if (nums.length >= 2) {
-        refLow = nums[0]; refHigh = nums[1];
-      } else if (nums.length == 1) {
-        if (resolvedRange.contains('<')) refHigh = nums[0];
-        if (resolvedRange.contains('>')) refLow = nums[0];
       }
     }
 
@@ -2002,6 +1997,16 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
   }
 }
 
+String? _determineGender(List<MedicalReport> reports) {
+  for (final r in reports) {
+    final g = r.structuredData?.gender;
+    if (g != null && g.trim().isNotEmpty) {
+      return g.trim();
+    }
+  }
+  return null;
+}
+
 // ─── Full Screen Chart with Unit Switching ──────────────────────────────────
 
 class _FullScreenChartPage extends StatefulWidget {
@@ -2060,24 +2065,14 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
     return original;
   }
 
-  String? _getPatientGender() {
-    for (final r in widget.validReports) {
-      if (r.structuredData?.gender != null && r.structuredData!.gender!.isNotEmpty) {
-        return r.structuredData!.gender;
-      }
-    }
-    return null;
-  }
-
   /// Parse reference range numbers from the dictionary entry
   (double?, double?) _parseRefRange() {
     if (_entry == null) return (null, null);
-    final rawRange = _selectedUnit == _defaultUnit
-        ? _entry!.referenceRange
-        : _entry!.referenceRangeSI;
-    if (rawRange == null || rawRange.isEmpty || rawRange == 'N/A') return (null, null);
-
-    final range = BiomarkerDictionary.resolveReferenceRange(rawRange, _getPatientGender());
+    final gender = _determineGender(widget.validReports);
+    final range = _selectedUnit == _defaultUnit
+        ? _entry!.getGenderedRange(gender)
+        : _entry!.getGenderedRangeSI(gender);
+    if (range == null || range.isEmpty || range == 'N/A') return (null, null);
 
     final nums = RegExp(r'[\d]+\.?[\d]*').allMatches(range).map((m) => double.tryParse(m.group(0)!)).whereType<double>().toList();
     if (nums.length >= 2) {
@@ -2093,10 +2088,11 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
 
   String _getRefRangeText() {
     if (_entry == null) return '';
-    final rawRange = _selectedUnit == _defaultUnit
-        ? _entry!.referenceRange
-        : _entry!.referenceRangeSI;
-    return BiomarkerDictionary.resolveReferenceRange(rawRange, _getPatientGender());
+    final gender = _determineGender(widget.validReports);
+    if (_selectedUnit == _defaultUnit) {
+      return _entry!.getGenderedRange(gender) ?? '';
+    }
+    return _entry!.getGenderedRangeSI(gender) ?? '';
   }
 
   @override

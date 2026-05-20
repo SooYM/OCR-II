@@ -103,37 +103,19 @@ class _VerifyScreenState extends State<VerifyScreen> {
           result.unit = match.unit;
         }
 
-        // Set reference range if empty, respecting the extracted unit and gender
+        // Set reference range if empty, respecting the extracted unit
         if (result.referenceRange == null || result.referenceRange!.isEmpty) {
           final normUnit = result.unit?.toLowerCase().replaceAll(' ', '');
           final normStdUnit = match.unit.toLowerCase().replaceAll(' ', '');
           
           if (normUnit != null && normUnit != normStdUnit && match.referenceRangeSI != null && match.referenceRangeSI!.isNotEmpty && match.referenceRangeSI != 'N/A') {
-            result.referenceRange = BiomarkerDictionary.resolveReferenceRange(match.referenceRangeSI, _data.gender);
+            result.referenceRange = match.getGenderedRangeSI(_data.gender);
           } else if (match.referenceRange != null) {
-            result.referenceRange = BiomarkerDictionary.resolveReferenceRange(match.referenceRange, _data.gender);
+            result.referenceRange = match.getGenderedRange(_data.gender);
           }
         }
       }
     }
-  }
-
-  void _normalizeReferenceRanges() {
-    setState(() {
-      for (int i = 0; i < _data.results.length; i++) {
-        final result = _data.results[i];
-        final match = _matchedEntries[i];
-        if (match != null) {
-          final normUnit = result.unit?.toLowerCase().replaceAll(' ', '');
-          final normStdUnit = match.unit.toLowerCase().replaceAll(' ', '');
-          if (normUnit != null && normUnit != normStdUnit && match.referenceRangeSI != null && match.referenceRangeSI!.isNotEmpty && match.referenceRangeSI != 'N/A') {
-            result.referenceRange = BiomarkerDictionary.resolveReferenceRange(match.referenceRangeSI, _data.gender);
-          } else if (match.referenceRange != null) {
-            result.referenceRange = BiomarkerDictionary.resolveReferenceRange(match.referenceRange, _data.gender);
-          }
-        }
-      }
-    });
   }
 
   /// Match an OCR-extracted unit string to the correct casing from allowedUnits.
@@ -146,6 +128,25 @@ class _VerifyScreenState extends State<VerifyScreen> {
       }
     }
     return null;
+  }
+
+  void _updateReferenceRangesForGender(String gender) {
+    setState(() {
+      for (int i = 0; i < _data.results.length; i++) {
+        final result = _data.results[i];
+        final match = _matchedEntries[i];
+        if (match != null) {
+          final normUnit = result.unit?.toLowerCase().replaceAll(' ', '');
+          final normStdUnit = match.unit.toLowerCase().replaceAll(' ', '');
+          
+          if (normUnit != null && normUnit != normStdUnit && match.referenceRangeSI != null && match.referenceRangeSI!.isNotEmpty && match.referenceRangeSI != 'N/A') {
+            result.referenceRange = match.getGenderedRangeSI(gender);
+          } else if (match.referenceRange != null) {
+            result.referenceRange = match.getGenderedRange(gender);
+          }
+        }
+      }
+    });
   }
 
   Future<void> _handleSend() async {
@@ -370,7 +371,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         onChanged: (v) {
                           _data.gender = v;
                           _hasChanges = true;
-                          _normalizeReferenceRanges();
+                          _updateReferenceRangesForGender(v);
                         },
                       ),
                       const Divider(),
