@@ -106,7 +106,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
               Expanded(
                 child: ListView(
                   controller: controller,
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).padding.bottom),
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,

@@ -638,6 +638,115 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _showProfileDescription(String category) {
+    final descriptions = {
+      'Urine': 'Urine profile analyzes urine color, clarity, chemistry, and microscopic findings to detect urinary tract infections, kidney issues, or diabetes.',
+      'CBC': 'Complete Blood Count (CBC) evaluates overall health and detects a wide range of disorders, including anemia, infection, and leukemia, by measuring red blood cells, white blood cells, and platelets.',
+      'Platelet Profile': 'Platelet profile measures platelet count and size characteristics to assess blood clotting capability and monitor bone marrow function.',
+      'Lipid Profile': 'Lipid profile measures cholesterol and triglyceride levels in the blood to assess risk of cardiovascular disease, heart attacks, or strokes.',
+      'Liver Function': 'Liver function tests measure enzyme, protein, and bilirubin levels to assess the health of the liver, gallbladder, and bile ducts.',
+      'Kidney Function': 'Kidney function tests check levels of creatinine, urea, and electrolytes in the blood to evaluate how well the kidneys are filtering waste.',
+      'Iron Profile': 'Iron profile evaluates iron levels, total iron-binding capacity, and transferrin saturation to diagnose iron deficiency, anemia, or iron overload.',
+      'HbA1c': 'HbA1c (Glycated Hemoglobin) measures average blood glucose levels over the past 2-3 months to screen for and monitor diabetes.',
+      'Urine ACR': 'Urine Albumin-to-Creatinine Ratio (ACR) screens for kidney damage (early kidney disease) by measuring albumin protein leaking into urine relative to creatinine.',
+      'Calcium & Phos': 'Calcium & Phosphorus profile measures essential minerals to assess bone health, parathyroid gland function, and kidney health.',
+      'Thyroid Profile': 'Thyroid profile measures hormones (T3, T4, TSH) to evaluate thyroid gland function, helping diagnose hypothyroidism or hyperthyroidism.',
+      'Glucose - Fasting': 'Fasting Glucose measures blood sugar levels after an overnight fast to screen for prediabetes or diabetes.',
+      'Glucose - PP': 'Postprandial (PP) Glucose measures blood sugar levels 2 hours after a meal to evaluate how your body processes sugar after eating.',
+      'Glucose (Diagnopath)': 'Fasting and postprandial blood sugar measurements to monitor glucose control and screen for diabetes.',
+      'Other Biomarkers': 'Additional laboratory biomarkers and clinical indicators not classified under standard profiles.',
+    };
+
+    final description = descriptions[category] ?? 'No description available for this profile.';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.fromLTRB(24, 16, 24, 32 + MediaQuery.of(context).padding.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      category,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.5,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'Got it',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildCategorizedGraphs(List<MedicalReport> validReports, Set<String> uniqueTestKeys, Map<String, String> testKeyToName) {
     if (uniqueTestKeys.isEmpty) return const SizedBox();
 
@@ -665,7 +774,20 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                  child: Text('🩸 $category', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                  child: Row(
+                    children: [
+                      Text('🩸 $category', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => _showProfileDescription(category),
+                        child: Icon(
+                          Icons.help_outline_rounded,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -701,7 +823,20 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                child: Text('🔬 Other Biomarkers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                child: Row(
+                  children: [
+                    Text('🔬 Other Biomarkers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _showProfileDescription('Other Biomarkers'),
+                      child: Icon(
+                        Icons.help_outline_rounded,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -1720,7 +1855,10 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
               Flexible(
                 child: SingleChildScrollView(
                   controller: _scrollController,
-                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 16),
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).padding.bottom +
+                        (MediaQuery.of(context).viewInsets.bottom > 0 ? 90 : 16),
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1823,6 +1961,7 @@ class _FilterBottomSheetContentState extends State<_FilterBottomSheetContent> {
         TextFormField(
           controller: controller,
           focusNode: focusNode,
+          scrollPadding: const EdgeInsets.only(bottom: 90.0),
           keyboardType: TextInputType.number,
           inputFormatters: [DateInputFormatter()],
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
