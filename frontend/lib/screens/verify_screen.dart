@@ -59,6 +59,13 @@ class _VerifyScreenState extends State<VerifyScreen> {
     // Auto-normalize results against the standard dictionary
     _normalizeResults();
     
+    // Sync date and collected fields so they are never mismatched
+    if (_data.date == null || _data.date!.isEmpty) {
+      _data.date = _data.collected;
+    } else if (_data.collected == null || _data.collected!.isEmpty) {
+      _data.collected = _data.date;
+    }
+
     // Normalize date format if possible
     if (_data.date != null && _data.date!.isNotEmpty) {
       final dt = DateParser.parse(_data.date!);
@@ -66,6 +73,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
         final d = dt.day.toString().padLeft(2, '0');
         final m = dt.month.toString().padLeft(2, '0');
         _data.date = '$d / $m / ${dt.year}';
+        _data.collected = _data.date;
       }
     }
   }
@@ -153,6 +161,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     
     // Normalize format before saving
     _data.date = DateFormat('dd / MM / yyyy').format(parsedDate);
+    _data.collected = _data.date;
 
     // Validate time if entered
     if (_data.time != null && _data.time!.trim().isNotEmpty) {
@@ -351,6 +360,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         inputFormatters: [DateInputFormatter()],
                         onChanged: (v) {
                           _data.date = v;
+                          _data.collected = v;
                           _hasChanges = true;
                         },
                       ),

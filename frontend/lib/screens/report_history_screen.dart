@@ -262,11 +262,12 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     final resultCount = report.structuredData?.results.length ?? 0;
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => VerifyScreen(report: report)),
         );
+        _loadReports();
       },
       child: GlassCard(
         padding: const EdgeInsets.all(16),
