@@ -1156,10 +1156,19 @@ class _MainScreenState extends State<MainScreen> {
                           final dateStr = DateFormat('MMM d, yyyy').format(date);
                           final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
 
+                          final result = report.structuredData?.results.firstWhere(
+                            (res) => (res.key ?? res.testItem) == testKey,
+                            orElse: () => TestResult(testItem: testKey, value: '-'),
+                          );
+                          final String unitStr = (result != null && result.unit != null && result.unit!.isNotEmpty)
+                              ? result.unit!
+                              : (BiomarkerDictionary.getEntryByKey(testKey)?.unit ?? '');
+                          final displayUnit = unitStr.isNotEmpty ? ' $unitStr' : '';
+
                           // Add date to the first line of the tooltip
                           String text = (spot.barIndex == 0)
-                              ? '$dateStr\n${testKeyToName[testKey]}: $valStr'
-                              : '${testKeyToName[testKey]}: $valStr';
+                              ? '$dateStr\n${testKeyToName[testKey]}: $valStr$displayUnit'
+                              : '${testKeyToName[testKey]}: $valStr$displayUnit';
 
                           return LineTooltipItem(
                             text,
@@ -1299,10 +1308,19 @@ class _MainScreenState extends State<MainScreen> {
                                     final dateStr = DateFormat('MMM d, yyyy').format(date);
                                     final valStr = spot.y.toStringAsFixed(3).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
 
+                                    final result = report.structuredData?.results.firstWhere(
+                                      (res) => (res.key ?? res.testItem) == testKey,
+                                      orElse: () => TestResult(testItem: testKey, value: '-'),
+                                    );
+                                    final String unitStr = (result != null && result.unit != null && result.unit!.isNotEmpty)
+                                        ? result.unit!
+                                        : (BiomarkerDictionary.getEntryByKey(testKey)?.unit ?? '');
+                                    final displayUnit = unitStr.isNotEmpty ? ' $unitStr' : '';
+
                                     // Add date to the first line of the tooltip
                                     String text = (spot.barIndex == 0)
-                                        ? '$dateStr\n${testKeyToName[testKey]}: $valStr'
-                                        : '${testKeyToName[testKey]}: $valStr';
+                                        ? '$dateStr\n${testKeyToName[testKey]}: $valStr$displayUnit'
+                                        : '${testKeyToName[testKey]}: $valStr$displayUnit';
 
                                     return LineTooltipItem(
                                       text,
