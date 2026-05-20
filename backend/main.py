@@ -510,6 +510,7 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
 # List of exact columns in staging_medical_records table
 STAGING_SCHEMA_KEYS = [
     "medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", 
+    "gender",
     "urine_colour", "appearance", "specific_gravity", "ph", "proteins", "glucose", 
     "bilirubin", "ketones", "blood", "urobilinogen", "nitrites", "wbc_pus_cells_hpf", 
     "rbc", "epithelial_cells_hpf", "casts", "crystals", "others", "hemoglobin_g_dl", 
@@ -538,6 +539,7 @@ SCHEMA_TYPES = {
     "collected": "DATE",
     "time": "TIME",
     "reported_time": "TIME",
+    "gender": "TEXT",
     "urine_colour": "TEXT",
     "appearance": "TEXT",
     "specific_gravity": "DOUBLE PRECISION",
