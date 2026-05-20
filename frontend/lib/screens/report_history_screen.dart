@@ -262,12 +262,11 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     final resultCount = report.structuredData?.results.length ?? 0;
 
     return GestureDetector(
-      onTap: () async {
-        await Navigator.push(
+      onTap: () {
+        Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => VerifyScreen(report: report)),
         );
-        _loadReports();
       },
       child: GlassCard(
         padding: const EdgeInsets.all(16),
@@ -331,7 +330,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                     Icon(Icons.calendar_today_outlined, size: 13, color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.7)),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text('Report Date: ${_formatReportDate(report.structuredData?.collected, report.uploadTime)}',
+                      child: Text('Report Date: ${_formatReportDate(report.structuredData?.date, report.uploadTime)}',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis),
                     ),
