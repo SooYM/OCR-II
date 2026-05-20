@@ -100,38 +100,22 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   DateTime _parseDate(String? dateStr, String uploadTime) {
-    if (dateStr == null || dateStr.trim().isEmpty) return DateTime.parse(uploadTime);
-    
-    // Normalize spaces around separators (e.g. "15 / 05 / 2026" → "15/05/2026")
-    final normalized = dateStr.trim()
-        .replaceAll(' / ', '/')
-        .replaceAll(' - ', '-')
-        .replaceAll(' . ', '.');
-    
-    final dt = DateTime.tryParse(normalized);
-    if (dt != null) return dt;
-
-    final formats = [
-      DateFormat('dd MMM yyyy'),
-      DateFormat('d MMM yyyy'),
-      DateFormat('dd MMMM yyyy'),
-      DateFormat('d MMMM yyyy'),
-      DateFormat('MMM d, yyyy'),
-      DateFormat('MMMM d, yyyy'),
-      DateFormat('dd/MM/yyyy'),
-      DateFormat('MM/dd/yyyy'),
-      DateFormat('yyyy/MM/dd'),
-      DateFormat('yyyy-MM-dd'),
-      DateFormat('dd-MM-yyyy'),
-    ];
-
-    for (var format in formats) {
+    if (dateStr == null || dateStr.trim().isEmpty) {
       try {
-        return format.parse(normalized);
-      } catch (_) {}
+        return DateTime.parse(uploadTime);
+      } catch (_) {
+        return DateTime.now();
+      }
     }
-
-    return DateTime.parse(uploadTime);
+    
+    final parsed = DateParser.parse(dateStr);
+    if (parsed != null) return parsed;
+    
+    try {
+      return DateTime.parse(uploadTime);
+    } catch (_) {
+      return DateTime.now();
+    }
   }
 
 

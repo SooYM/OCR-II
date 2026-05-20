@@ -4,6 +4,21 @@ class DateParser {
   /// Parses various date string formats into a DateTime.
   /// Aggressively strips time portions and handles 2-digit years.
   static DateTime? parse(String text) {
+    final dt = _parseRaw(text);
+    if (dt == null) return null;
+
+    if (dt.year < 1000) {
+      final twoDigit = dt.year % 100;
+      final currentYear = DateTime.now().year;
+      final currentCentury = (currentYear ~/ 100) * 100;
+      final cutoff = (currentYear + 20) % 100; // e.g. 46 (allow 20 years into the future)
+      final y = twoDigit + ((twoDigit <= cutoff) ? currentCentury : currentCentury - 100);
+      return DateTime(y, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.millisecond, dt.microsecond);
+    }
+    return dt;
+  }
+
+  static DateTime? _parseRaw(String text) {
     if (text.trim().isEmpty) return null;
 
     String clean = text.trim();
