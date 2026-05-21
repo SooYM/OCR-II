@@ -951,6 +951,34 @@ def normalize_structured_data(data: dict) -> dict:
         "hospital_name": str(data.get("hospital_name", "")).strip()
     }
 
+def get_standard_unit_for_key(key: str) -> str:
+    """Returns the standard unit for a given schema key as expected by unit_converter.py."""
+    if key in ["wbc_cells_ul", "abs_neutrophils", "abs_lymphocytes", "abs_monocytes", "abs_eosinophils", "abs_basophils"]:
+        return "cells/uL"
+    if key == "rbc_count_mil_ul":
+        return "mil/uL"
+    if key == "platelet_count_x10_3_ul":
+        return "x10^3/uL"
+    if key == "egfr_ml_min_173m2":
+        return "ml/min/1.73m2"
+    if key in ["alp_u_l", "alt_sgpt_u_l", "ast_sgot_u_l", "ggt_u_l"]:
+        return "U/L"
+        
+    # Suffix matching
+    if key.endswith('_g_dl'): return "g/dL"
+    if key.endswith('_mg_dl'): return "mg/dL"
+    if key.endswith('_mil_ul'): return "mil/uL"
+    if key.endswith('_pct'): return "%"
+    if key.endswith('_fl'): return "fL"
+    if key.endswith('_pg'): return "pg"
+    if key.endswith('_ul'): return "uL"
+    if key.endswith('_uiu_ml'): return "uIU/mL"
+    if key.endswith('_mmol_l'): return "mmol/L"
+    if key.endswith('_mg_l'): return "mg/L"
+    if key.endswith('_ug_dl'): return "ug/dL"
+    if key.endswith('_ng_dl'): return "ng/dL"
+    return ""
+
 def get_clean_flat_data(data: dict) -> dict:
     """Return only the keys that exist in the staging_medical_records table, converting units if needed."""
     # We apply unit conversion before saving to staging table.
@@ -965,18 +993,7 @@ def get_clean_flat_data(data: dict) -> dict:
     for k, v in normalized.items():
         if k in STAGING_SCHEMA_KEYS:
             # Determine standard unit from key
-            std_unit = ""
-            if k.endswith('_g_dl'): std_unit = "g/dL"
-            elif k.endswith('_mg_dl'): std_unit = "mg/dL"
-            elif k.endswith('_mil_ul'): std_unit = "mil/uL"
-            elif k.endswith('_pct'): std_unit = "%"
-            elif k.endswith('_fl'): std_unit = "fL"
-            elif k.endswith('_pg'): std_unit = "pg"
-            elif k.endswith('_ul'): std_unit = "uL"
-            elif k.endswith('_uiu_ml'): std_unit = "uIU/mL"
-            elif k.endswith('_mmol_l'): std_unit = "mmol/L"
-            elif k.endswith('_mg_l'): std_unit = "mg/L"
-            elif k.endswith('_ug_dl'): std_unit = "ug/dL"
+            std_unit = get_standard_unit_for_key(k)
 
             val_to_cast = v
             res = results_map.get(k)
@@ -1140,19 +1157,8 @@ def backend_compare_values(key: str, val1: str, val2: str) -> bool:
         clean_val, ext_unit = split_value_and_unit(v_str)
             
         # Standard unit based on key
-        std_unit = ""
-        if key.endswith('_g_dl'): std_unit = "g/dL"
-        elif key.endswith('_mg_dl'): std_unit = "mg/dL"
-        elif key.endswith('_mil_ul'): std_unit = "mil/uL"
-        elif key.endswith('_pct'): std_unit = "%"
-        elif key.endswith('_fl'): std_unit = "fL"
-        elif key.endswith('_pg'): std_unit = "pg"
-        elif key.endswith('_ul'): std_unit = "uL"
-        elif key.endswith('_uiu_ml'): std_unit = "uIU/mL"
-        elif key.endswith('_mmol_l'): std_unit = "mmol/L"
-        elif key.endswith('_mg_l'): std_unit = "mg/L"
-        elif key.endswith('_ug_dl'): std_unit = "ug/dL"
-        elif key.endswith('_ng_dl'): std_unit = "ng/dL"
+        # Standard unit based on key
+        std_unit = get_standard_unit_for_key(key)
         
         # Strip signs like < or > for numeric conversion but keep them in clean_val
         num_clean = re.sub(r'[<>\s]', '', clean_val)
@@ -1191,6 +1197,11 @@ def backend_compare_values(key: str, val1: str, val2: str) -> bool:
             
         # Tolerance check (within 2%)
         return abs(v1_num - v2_num) / max(abs(v1_num), abs(v2_num)) <= 0.02
+        
+    # Fallback to string comparison for non-numeric/qualitative values or failed conversions
+    if v1_clean is not None and v2_clean is not None:
+        return v1_clean.strip().lower() == v2_clean.strip().lower()
+    return False
         
     # Non-numeric or fallback to string compare
     s1 = str(v1_clean).strip().lower()
