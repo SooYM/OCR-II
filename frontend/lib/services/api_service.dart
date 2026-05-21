@@ -130,6 +130,58 @@ class ApiService {
     }
   }
 
+  // ─── Scanner Preprocessing ──────────────────────────────────────────────────
+
+  /// Run document scanner preprocessing on an image file.
+  /// Returns a map with processed_image_url and filepath.
+  static Future<Map<String, dynamic>> preprocessImage(XFile imageFile, {String mode = 'color'}) async {
+    final uri = Uri.parse('$_baseUrl/api/scanner/preprocess?mode=$mode');
+    final request = http.MultipartRequest('POST', uri);
+
+    request.headers['bypass-tunnel-reminder'] = 'true';
+    request.headers['ngrok-skip-browser-warning'] = 'true';
+    if (AuthService.token != null) {
+      request.headers['Authorization'] = 'Bearer ${AuthService.token}';
+    }
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'image',
+        imageFile.path,
+        filename: imageFile.name,
+      ),
+    );
+
+    final streamedResponse = await request.send().timeout(const Duration(seconds: 180));
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
+  /// Run OCR + LLM parsing on files already preprocessed on the backend.
+  static Future<MedicalReport> uploadPreprocessedReports(List<String> filepaths, List<String> filenames) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/upload-multi/preprocessed'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'filepaths': filepaths,
+        'filenames': filenames,
+      }),
+    ).timeout(const Duration(seconds: 300));
+
+    if (response.statusCode == 200) {
+      return MedicalReport.fromJson(jsonDecode(response.body));
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
   // ─── Manual Report (No OCR) ────────────────────────────────────────────────
 
   /// Create a blank report for manual entry (no OCR/LLM).

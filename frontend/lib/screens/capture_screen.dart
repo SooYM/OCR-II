@@ -26,6 +26,7 @@ class _CaptureScreenState extends State<CaptureScreen>
   String _statusMessage = '';
   double _progress = 0.0;
   late AnimationController _pulseController;
+  bool _enhanceScan = true;
 
   @override
   void initState() {
@@ -77,12 +78,63 @@ class _CaptureScreenState extends State<CaptureScreen>
 
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Uploading ${_selectedImages.length} page(s)...';
-      _progress = 0.15;
+      _statusMessage = _enhanceScan ? 'Initializing scanner...' : 'Uploading ${_selectedImages.length} page(s)...';
+      _progress = 0.10;
     });
 
     try {
-      final report = await ApiService.uploadMultipleReports(_selectedImages);
+      MedicalReport report;
+
+      if (_enhanceScan) {
+        final List<String> filepaths = [];
+        final List<String> filenames = [];
+        bool preprocessFailed = false;
+
+        for (int i = 0; i < _selectedImages.length; i++) {
+          final img = _selectedImages[i];
+          setState(() {
+            _statusMessage = 'Enhancing scan: Page ${i + 1} of ${_selectedImages.length}...';
+            _progress = 0.15 + (0.45 * (i / _selectedImages.length));
+          });
+
+          try {
+            final res = await ApiService.preprocessImage(img);
+            if (res['success'] == true && res['filepath'] != null) {
+              filepaths.add(res['filepath'] as String);
+              filenames.add(img.name);
+            } else {
+              preprocessFailed = true;
+              break;
+            }
+          } catch (e) {
+            print('Preprocessing page ${i + 1} failed: $e. Falling back to original.');
+            preprocessFailed = true;
+            break;
+          }
+        }
+
+        if (preprocessFailed || filepaths.length != _selectedImages.length) {
+          // Fallback to raw upload
+          setState(() {
+            _statusMessage = 'Extracting medical data (fallback to raw)...';
+            _progress = 0.65;
+          });
+          report = await ApiService.uploadMultipleReports(_selectedImages);
+        } else {
+          setState(() {
+            _statusMessage = 'Extracting medical data...';
+            _progress = 0.70;
+          });
+          report = await ApiService.uploadPreprocessedReports(filepaths, filenames);
+        }
+      } else {
+        // Direct OCR on raw upload
+        setState(() {
+          _statusMessage = 'Extracting medical data...';
+          _progress = 0.40;
+        });
+        report = await ApiService.uploadMultipleReports(_selectedImages);
+      }
 
       setState(() {
         _statusMessage = 'Done!';
@@ -645,6 +697,34 @@ class _CaptureScreenState extends State<CaptureScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.document_scanner_rounded,
+                    color: _enhanceScan
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outline,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Enhance Document Scan',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ],
+              ),
+              Switch(
+                value: _enhanceScan,
+                onChanged: (val) {
+                  setState(() => _enhanceScan = val);
+                },
+                activeColor: Theme.of(context).colorScheme.primary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           GradientButton(
             label: 'Analyze ${_selectedImages.length} Page(s)',
             icon: Icons.auto_awesome_rounded,

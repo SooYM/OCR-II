@@ -16,9 +16,10 @@ from typing import Optional, Dict, Any, List as TypingList
 import cv2
 import numpy as np
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import aiofiles
 import bcrypt
@@ -29,6 +30,7 @@ from openai import OpenAI
 from supabase import create_client, Client
 
 from unit_converter import convert_unit
+from services.scanner.pipeline import DocumentScanner
 
 # Google Cloud Dependencies
 try:
@@ -54,6 +56,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 STORAGE_ENGINE = os.getenv("STORAGE_ENGINE", "supabase").lower()
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
@@ -632,8 +636,8 @@ SCHEMA_TYPES = {
     "total_cholesterol_mg_dl": "BIGINT",
     "hdl_mg_dl": "BIGINT",
     "ldl_mg_dl": "DOUBLE PRECISION",
-    "vldl_mg_dl": "TEXT",
-    "triglycerides_mg_dl": "TEXT",
+    "vldl_mg_dl": "DOUBLE PRECISION",
+    "triglycerides_mg_dl": "DOUBLE PRECISION",
     "non_hdl_mg_dl": "BIGINT",
     "total_hdl_ratio": "DOUBLE PRECISION",
     "ldl_hdl_ratio": "DOUBLE PRECISION",
@@ -647,7 +651,7 @@ SCHEMA_TYPES = {
     "protein_total_g_dl": "DOUBLE PRECISION",
     "albumin_g_dl": "DOUBLE PRECISION",
     "globulin_g_dl": "DOUBLE PRECISION",
-    "a_g_ratio": "TEXT",
+    "a_g_ratio": "DOUBLE PRECISION",
     "creatinine_mg_dl": "DOUBLE PRECISION",
     "urea_mg_dl": "DOUBLE PRECISION",
     "bun_mg_dl": "DOUBLE PRECISION",
@@ -1031,12 +1035,16 @@ async def update_report_in_db(report_id: str, update_dict: dict):
     existing = await get_report_by_id(report_id)
     new_structured = update_dict.get("structured_data", {})
     
+    print(f"DEBUG [update_report_in_db] incoming labreference: {new_structured.get('labreference', '(KEY MISSING)')}")
+    
     if existing and existing.get("structured_data"):
         # Merge new UI edits into existing flat data
         # This ensures we keep the 90 columns even if the app doesn't send them all back
         merged = {**existing["structured_data"], **new_structured}
     else:
         merged = new_structured
+
+    print(f"DEBUG [update_report_in_db] merged labreference: {merged.get('labreference', '(KEY MISSING)')}")
 
     # Normalize time if present
     if "time" in merged and merged["time"]:
@@ -1061,23 +1069,68 @@ async def mark_report_sent(report_id: str):
     if STORAGE_ENGINE == "supabase" and supabase:
         supabase.table("reports").update({"user_verified": 1, "status": "sent"}).eq("id", report_id).execute()
         if report.get("structured_data"):
+            sd = report["structured_data"]
+            print(f"DEBUG [mark_report_sent] structured_data labreference: {sd.get('labreference', '(KEY MISSING)')}")
+            print(f"DEBUG [mark_report_sent] structured_data original_labreference: {sd.get('original_labreference', '(KEY MISSING)')}")
+            
             # Ensure only valid columns are inserted into staging_medical_records
-            final_data = get_clean_flat_data(report["structured_data"])
+            final_data = get_clean_flat_data(sd)
             final_data["report_id"] = report_id  # Link back to reports table for cascade delete
-            try:
-                print(f"DEBUG: Attempting upsert to staging_medical_records for report_id: {report_id}")
-                # Use upsert to either insert a new record or update the existing one for this report_id
-                supabase.table("staging_medical_records").upsert(final_data, on_conflict="report_id").execute()
-                print(f"DEBUG: Upsert successful for report: {report_id}")
-            except Exception as e:
-                print(f"DEBUG: Upsert failed: {e}. Trying Delete + Insert fallback...")
+            
+            print(f"DEBUG [mark_report_sent] final_data labreference: {final_data.get('labreference', '(KEY MISSING)')}")
+            print(f"DEBUG [mark_report_sent] final_data original_labreference: {final_data.get('original_labreference', '(KEY MISSING)')}")
+            print(f"DEBUG [mark_report_sent] final_data keys count: {len(final_data)}")
+            # Safety sanitization: re-validate every value to prevent type mismatches
+            # that could silently kill the entire insert (e.g., "2-4" in a NUMERIC column)
+            sanitized_data = {}
+            for k, v in final_data.items():
+                if k == "report_id":
+                    sanitized_data[k] = v
+                    continue
+                if v is None:
+                    sanitized_data[k] = None
+                    continue
                 try:
-                    # Fallback for cases where the UNIQUE constraint hasn't been added to the DB yet
+                    sanitized_data[k] = validate_and_cast_value(k, v)
+                except (ValueError, TypeError):
+                    sanitized_data[k] = None
+            
+            print(f"DEBUG [mark_report_sent] sanitized labreference: {sanitized_data.get('labreference', '(KEY MISSING)')}")
+            
+            try:
+                # Delete existing staging record for this report (if any), then insert fresh
+                # This avoids dependency on a UNIQUE constraint for upsert
+                supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
+                supabase.table("staging_medical_records").insert(sanitized_data).execute()
+                print(f"DEBUG: Insert to staging_medical_records successful for report: {report_id}")
+            except Exception as e:
+                print(f"DEBUG: First insert attempt failed: {e}")
+                # Retry with aggressive numeric extraction for any remaining string values
+                # This handles the case where DB columns are NUMERIC but SCHEMA_TYPES says TEXT
+                # (e.g., epithelial_cells_hpf = "2-4" → DB expects numeric, not string)
+                for k, v in sanitized_data.items():
+                    if k == "report_id" or v is None:
+                        continue
+                    if isinstance(v, str):
+                        # Try to extract a number from strings that look like ranges/qualitative
+                        match = re.search(r'(-?\d*\.?\d+)', str(v))
+                        if match:
+                            try:
+                                sanitized_data[k] = float(match.group(1))
+                            except (ValueError, TypeError):
+                                sanitized_data[k] = None
+                        else:
+                            # Pure text value (e.g., "TNTC", "Negative") — keep as-is for TEXT columns
+                            # If the DB column is NUMERIC, this will still fail but that's a schema issue
+                            pass
+                try:
                     supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
-                    supabase.table("staging_medical_records").insert(final_data).execute()
-                    print(f"DEBUG: Delete + Insert fallback successful for report: {report_id}")
+                    supabase.table("staging_medical_records").insert(sanitized_data).execute()
+                    print(f"DEBUG: Retry insert successful (with numeric extraction) for report: {report_id}")
                 except Exception as e2:
-                    print(f"DEBUG: Critical failure in staging update: {e2}")
+                    print(f"DEBUG: Critical failure in staging insert (retry): {e2}")
+                    print(f"DEBUG: Problematic data keys with values: {[(k, v) for k, v in sanitized_data.items() if v is not None and isinstance(v, str)]}")
+                    raise Exception(f"Failed to write to staging_medical_records: {e2}")
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
@@ -2032,6 +2085,172 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
             conn.commit()
             conn.close()
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@app.post("/api/scanner/preprocess")
+async def scanner_preprocess(
+    request: Request,
+    image: UploadFile = File(...),
+    mode: str = "color",
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Accepts raw captured image, saves it temporarily, runs the document scanning pipeline
+    (edge detection, perspective warp, CamScanner division enhancement), and saves the enhanced
+    output image in static uploads/ directory.
+    """
+    # Generate unique ID for this preprocess session
+    scan_id = str(uuid.uuid4())
+    file_ext = Path(image.filename).suffix or ".jpg"
+    
+    # Paths for raw and preprocessed images
+    raw_path = UPLOAD_DIR / f"raw_{scan_id}{file_ext}"
+    processed_filename = f"scan_{scan_id}.png"
+    processed_path = UPLOAD_DIR / processed_filename
+    
+    # Save the raw file
+    async with aiofiles.open(raw_path, "wb") as f:
+        content = await image.read()
+        await f.write(content)
+        
+    try:
+        # Run document scanner pipeline
+        _, metadata = DocumentScanner.process_image(
+            input_source=str(raw_path),
+            output_path=str(processed_path),
+            mode=mode
+        )
+        
+        # Build serving URL for client
+        base_url = str(request.base_url)
+        # Ensure trailing slash
+        if not base_url.endswith("/"):
+            base_url += "/"
+        processed_url = f"{base_url}uploads/{processed_filename}"
+        
+        # Cleanup raw image to save disk space
+        if raw_path.exists():
+            os.remove(raw_path)
+            
+        return {
+            "success": True,
+            "processed_image_url": processed_url,
+            "filepath": str(processed_path),
+            "metadata": metadata
+        }
+    except Exception as e:
+        # Cleanup raw image on failure
+        if raw_path.exists():
+            try:
+                os.remove(raw_path)
+            except Exception:
+                pass
+        print(f"DEBUG [scanner] Preprocessing error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Scanner preprocessing failed: {str(e)}")
+
+class PreprocessedUploadRequest(BaseModel):
+    filepaths: TypingList[str]
+    filenames: Optional[TypingList[str]] = None
+
+@app.post("/api/upload-multi/preprocessed")
+async def upload_multi_preprocessed(
+    request: PreprocessedUploadRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Runs OCR + LLM parsing on already preprocessed images stored in uploads/ on the server.
+    Accepts single or multiple files.
+    """
+    if not request.filepaths:
+        raise HTTPException(status_code=400, detail="No file paths provided")
+        
+    # Verify all files exist
+    paths: TypingList[Path] = []
+    for fp in request.filepaths:
+        path_obj = Path(fp)
+        if not path_obj.exists():
+            raise HTTPException(status_code=400, detail=f"File does not exist on server: {fp}")
+        paths.append(path_obj)
+        
+    # Generate unified report_id
+    report_id = str(uuid.uuid4())
+    
+    # Filenames formatting
+    filenames = request.filenames or [p.name for p in paths]
+    
+    report_metadata = {
+        "id": report_id,
+        "user_id": current_user["id"],
+        "filename": ", ".join(filenames),
+        "upload_time": datetime.now().isoformat(),
+        "status": "processing",
+        "file_path": str(paths[0]),
+        "raw_text": None,
+        "structured_data": None,
+        "user_verified": 0
+    }
+    
+    try:
+        # Extract structured data
+        if len(paths) == 1:
+            structured_data = await parse_medical_report_llm(paths[0])
+        else:
+            structured_data = await parse_medical_report_multi_llm(paths)
+            
+        raw_text = f"Extracted via OpenAI Vision API ({len(paths)} preprocessed page(s))"
+        
+        # --- DUPLICATE CHECK ---
+        is_duplicate = False
+        try:
+            is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
+        except Exception as e:
+            print(f"[DUPLICATE CHECK ERROR] {e}")
+
+        if is_duplicate:
+            # Delete from DB immediately as requested
+            try:
+                await delete_report(report_id)
+            except Exception as e:
+                print(f"[DELETE ERROR] {e}")
+
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "duplicate",
+                "is_duplicate": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
+        # Save to TEMP_REPORTS instead of DB
+        report_metadata["status"] = "completed"
+        report_metadata["raw_text"] = raw_text
+        report_metadata["structured_data"] = structured_data
+        TEMP_REPORTS[report_id] = report_metadata
+        
+        return {
+            "id": report_id,
+            "filename": ", ".join(filenames),
+            "upload_time": report_metadata["upload_time"],
+            "status": "completed",
+            "structured_data": structured_data,
+            "user_verified": False,
+            "raw_text": raw_text
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if STORAGE_ENGINE == "supabase" and supabase:
+            supabase.table("reports").update({"status": "failed"}).eq("id", report_id).execute()
+        else:
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.execute("UPDATE reports SET status='failed' WHERE id=?", (report_id,))
+            conn.commit()
+            conn.close()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error during extraction: {str(e)}")
 
 @app.get("/api/reports/{report_id}")
 async def get_report(report_id: str):
