@@ -1195,18 +1195,26 @@ def backend_compare_values(key: str, val1: str, val2: str) -> bool:
 async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str = None):
     """
     Compares the newly parsed data with existing reports for the user.
-    Uses a multi-attribute scoring system.
+    Uses a highly robust multi-attribute validation system:
+    1. Cleaned/Normalized Lab Reference Match (handles spaces/dashes).
+    2. Exact Clinical Signature Overlap (>= 85% overlap with >= 5 common non-empty keys, regardless of date).
+    3. Date + Patient ID + Clinical Overlap (Same date and same Patient ID and overlap >= 40%).
+    4. Fuzzy Date Match (+/- 2 days) + Same Patient ID + Clinical Overlap (overlap >= 70%).
     """
     try:
         if not new_data:
             return False
-        
-        # Extract identifiers
+            
+        def clean_ref(ref_str: str) -> str:
+            # Remove all non-alphanumeric characters for clean string comparison
+            return re.sub(r'[^A-Z0-9]', '', str(ref_str).strip().upper())
+            
+        # Extract new report identifiers
         new_date = backend_normalize_date(new_data.get("collected", ""))
         new_medid = str(new_data.get("medid", "")).strip().upper()
-        new_labref = str(new_data.get("labreference", "")).strip().upper()
+        new_labref = clean_ref(new_data.get("labreference", ""))
         
-        print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, LabRef={new_labref}")
+        print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, CleanedLabRef={new_labref}")
         
         # Fetch all reports for this user
         if STORAGE_ENGINE == "supabase" and supabase:
@@ -1219,7 +1227,7 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
             cursor.execute("SELECT * FROM reports WHERE user_id = ?", (user_id,))
             existing_reports = [dict(row) for row in cursor.fetchall()]
             conn.close()
- 
+
         for report in existing_reports:
             # Skip current
             if exclude_id and report.get("id") == exclude_id:
@@ -1232,47 +1240,62 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
             
             if not s_data: continue
                 
-            # 1. Extract existing identifiers
+            # Extract existing report identifiers
             old_date = backend_normalize_date(s_data.get("collected", ""))
             old_medid = str(s_data.get("medid", "")).strip().upper()
-            old_labref = str(s_data.get("labreference", "")).strip().upper()
+            old_labref = clean_ref(s_data.get("labreference", ""))
 
-            # --- CRITERIA 1: Exact Lab Reference Match ---
+            # --- CRITERIA 1: Exact Cleaned Lab Reference Match ---
+            # Handles dashes, slashes, and spaces in references (e.g. B165-AAF4 vs B165AAF4)
             if new_labref and old_labref and new_labref == old_labref:
-                print(f" -> MATCH FOUND: Lab Reference ({new_labref})")
+                print(f" -> MATCH FOUND: Normalized Lab Reference ({new_labref})")
                 return True
 
-            # --- CRITERIA 2: Patient ID + Date + Attribute Overlap ---
-            if new_date and old_date and new_date == old_date:
-                # Match Patient ID if both exist
-                medid_match = (not new_medid or not old_medid or new_medid == old_medid)
+            # Calculate clinical overlap
+            match_count = 0
+            total_keys = 0
+            metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
+            
+            for key in STAGING_SCHEMA_KEYS:
+                if key in metadata_keys: continue
                 
-                if medid_match:
-                    # Compare clinical results
-                    match_count = 0
-                    total_keys = 0
-                    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
-                    
-                    for key in STAGING_SCHEMA_KEYS:
-                        if key in metadata_keys: continue
-                        
-                        new_val = new_data.get(key, "")
-                        old_val = s_data.get(key, "")
-                        
-                        if new_val or old_val:
-                            total_keys += 1
-                            if backend_compare_values(key, new_val, old_val):
-                                match_count += 1
-                    
-                    if total_keys > 0:
-                        overlap = (match_count / total_keys) * 100
-                        print(f" -> CHECKING: Date MATCH ({old_date}), Overlap={overlap:.1f}% ({match_count}/{total_keys})")
-                        
-                        # If date matches, we use a much lower threshold (60% instead of 85%)
-                        # because it's very unlikely to have two different reports on the same day.
-                        if overlap >= 60: 
-                            print(f" -> MATCH FOUND: Clinical Signature on same date")
+                new_val = new_data.get(key, "")
+                old_val = s_data.get(key, "")
+                
+                if new_val or old_val:
+                    total_keys += 1
+                    if backend_compare_values(key, new_val, old_val):
+                        match_count += 1
+            
+            overlap = (match_count / total_keys * 100) if total_keys > 0 else 0
+            
+            # --- CRITERIA 2: Exact Clinical Signature Overlap (High Overlap, Regardless of Date) ---
+            # If >= 5 clinical parameters are present, and >= 85% match exactly, it's the same report
+            if total_keys >= 5 and overlap >= 85:
+                print(f" -> MATCH FOUND: High Clinical Fingerprint Overlap ({overlap:.1f}%)")
+                return True
+
+            # --- CRITERIA 3: Same Date + Same Patient ID + Moderate Overlap ---
+            if new_date and old_date and new_date == old_date:
+                medid_match = (not new_medid or not old_medid or new_medid == old_medid)
+                if medid_match and overlap >= 40:
+                    print(f" -> MATCH FOUND: Same Date & Patient ID with {overlap:.1f}% clinical match")
+                    return True
+
+            # --- CRITERIA 4: Fuzzy Date Match (+/- 2 days) + Same Patient ID + High Overlap ---
+            if new_date and old_date:
+                try:
+                    from datetime import datetime
+                    d1 = datetime.strptime(new_date, "%Y-%m-%d")
+                    d2 = datetime.strptime(old_date, "%Y-%m-%d")
+                    day_diff = abs((d1 - d2).days)
+                    if day_diff <= 2:
+                        medid_match = (not new_medid or not old_medid or new_medid == old_medid)
+                        if medid_match and overlap >= 70:
+                            print(f" -> MATCH FOUND: Fuzzy Date Match ({day_diff} days diff) & {overlap:.1f}% clinical match")
                             return True
+                except Exception as ex:
+                    pass
 
         print(" -> NO DUPLICATE FOUND")
         return False
@@ -1280,7 +1303,7 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
         import traceback
         print(f"[DUPLICATE ERROR] {e}")
         traceback.print_exc()
-        return False # Fallback to not duplicate if check fails
+        return False
 
 # ─── API Endpoints ──────────────────────────────────────────────────────────
 
