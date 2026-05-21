@@ -1098,10 +1098,15 @@ async def get_report_by_id(report_id: str):
 
 async def delete_report(report_id: str):
     if STORAGE_ENGINE == "supabase" and supabase:
+        try:
+            supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
+        except Exception as e:
+            print(f"[DELETE STAGING] Warning: {e}")
         supabase.table("reports").delete().eq("id", report_id).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
+        cursor.execute("DELETE FROM staging_medical_records WHERE report_id = ?", (report_id,))
         cursor.execute("DELETE FROM reports WHERE id = ?", (report_id,))
         conn.commit()
         conn.close()
@@ -2066,6 +2071,28 @@ async def update_report(report_id: str, updated_data: dict):
         except ValueError as e:
             print(f"VALIDATION ERROR: time={incoming_struct['time']}, error={e}")
             raise HTTPException(status_code=400, detail=f"Warning: The format for 'time' is incorrect. Expected TIME (HH:MM or HH:MM:SS). Error: {str(e)}")
+
+    # Normalize the incoming data to flat structure for the duplicate check
+    normalized_incoming = normalize_structured_data(updated_data.get("structured_data", {}))
+    
+    # Run duplicate check
+    is_duplicate = False
+    try:
+        is_duplicate = await check_duplicate_report(report.get("user_id"), normalized_incoming, exclude_id=report_id)
+    except Exception as e:
+        print(f"[DUPLICATE CHECK ERROR] {e}")
+
+    if is_duplicate:
+        # Delete from DB immediately to maintain data integrity
+        try:
+            await delete_report(report_id)
+        except Exception as e:
+            print(f"[DELETE DUPLICATE ERROR] {e}")
+            
+        raise HTTPException(
+            status_code=400, 
+            detail="Duplicate Report: A report with the same date/patient ID/clinical values already exists in your records. This duplicate entry has been discarded."
+        )
 
     await update_report_in_db(report_id, updated_data)
     return {"status": "updated"}
