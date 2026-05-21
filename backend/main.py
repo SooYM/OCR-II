@@ -27,8 +27,6 @@ from PIL import Image
 from dotenv import load_dotenv
 from openai import OpenAI
 from supabase import create_client, Client
-from supabase.lib.client_options import ClientOptions
-import httpx
 
 from unit_converter import convert_unit
 
@@ -38,8 +36,6 @@ try:
     HAS_GCP = True
 except ImportError:
     HAS_GCP = False
-
-import pytesseract
 
 # ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -59,7 +55,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-OCR_ENGINE = os.getenv("OCR_ENGINE", "tesseract").lower()
 STORAGE_ENGINE = os.getenv("STORAGE_ENGINE", "supabase").lower()
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 
@@ -90,9 +85,19 @@ TEMP_REPORTS = {}
 supabase: Optional[Client] = None
 if STORAGE_ENGINE == "supabase" and SUPABASE_URL and SUPABASE_KEY:
     try:
-        # Create a custom httpx Client to disable HTTP/2 and prevent ConnectionTerminated errors
-        custom_http_client = httpx.Client(http2=False, timeout=httpx.Timeout(20.0))
-        options = ClientOptions(httpx_client=custom_http_client)
+        import httpx
+        from supabase import ClientOptions
+        
+        # Create a custom httpx client with http2=False to prevent ConnectionTerminated errors
+        httpx_client = httpx.Client(
+            http2=False,
+            timeout=httpx.Timeout(30.0, read=60.0),
+        )
+        options = ClientOptions(
+            httpx_client=httpx_client,
+            postgrest_client_timeout=60.0,
+            storage_client_timeout=60.0,
+        )
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
     except Exception as e:
         print(f"Failed to initialize Supabase: {e}")
@@ -299,20 +304,7 @@ def set_user_inactive(user_id: str):
         conn.commit()
         conn.close()
 
-# ─── OCR & Extraction Logic ────────────────────────────────────────────────
-
-async def run_ocr(file_path: Path) -> str:
-    if OCR_ENGINE == "google_vision" and HAS_GCP:
-        client = vision.ImageAnnotatorClient()
-        with open(file_path, "rb") as image_file:
-            content = image_file.read()
-        image = vision.Image(content=content)
-        response = client.document_text_detection(image=image)
-        if response.error.message: raise Exception(response.error.message)
-        return response.full_text_annotation.text
-    else:
-        image = Image.open(file_path).convert("L")
-        return pytesseract.image_to_string(image, lang="eng")
+# ─── Preprocessing & Extraction Logic ────────────────────────────────────────
 
 def preprocess_image(image_path: Path) -> Path:
     """Enhance image contrast and clarity for OCR using OpenCV."""
@@ -351,15 +343,24 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     base64_image = encode_image(file_path)
 
     # Dynamically build the prompt based on the schema
-    # Exclude columns that are handled by the backend (original_*)
-    extraction_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_")]
-    # Append UI-expected metadata fields with descriptions to instruct the LLM
-    all_keys = extraction_keys + [
+    # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
+    metadata_descriptions = [
+        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the patient, NOT the report or lab. If none is found, use '')",
+        "labreference (The unique primary key or ID for this specific report/test document, e.g., 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Lab No'. Do NOT confuse this with the patient's ID/medid. We need the unique number identifying this specific test sheet. If none is found, use '')",
+        "sample_id (The ID of the lab sample/specimen, e.g., 'Specimen No', 'Sample ID'. If none is found, use '')",
+        "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
+        "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
-        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
-        "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')"
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
     ]
+    
+    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender"]
+    biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
+    
+    all_keys = metadata_descriptions + biomarker_keys
     keys_list = "\n".join([f"- {k}" for k in all_keys])
     
     prompt = f"""
@@ -374,6 +375,20 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     
     Fields to extract (all as strings):
     {keys_list}
+ 
+    CRITICAL WARNING ON IDENTIFIERS:
+    - DO NOT confuse the Patient ID (medid) with the Report ID / Lab Reference (labreference).
+    - 'medid' refers to the patient's MRN / NRIC / Patient ID / Patient Reference No.
+    - 'labreference' refers to the unique identifier for this specific printed report document (Report No, Accession No, Episode No, Lab No, Ref No).
+    If you extract a number as 'medid', check if it is labelled as 'Lab No', 'Report No', or 'Accession No' - if it is, it belongs in 'labreference', NOT 'medid'.
+    If the document has both a Patient ID (MRN) and a Report ID (Accession No), extract MRN into 'medid' and Accession No into 'labreference'.
+
+    CRITICAL WARNING ON TIMESTAMPS:
+    - Medical reports contain multiple times: 'Collected' (collection/drawn time), 'Received' (time sample reached the lab), and 'Reported/Printed' (time report was finalized/printed).
+    - Map the 'Collected' time to the 'time' key. This is the primary time of the report.
+    - Map the 'Reported' or 'Printed' time to the 'reported_time' key.
+    - If the report only has ONE time/timestamp (e.g. only 'Reported' or 'Printed' time), map it to BOTH the 'time' key AND the 'reported_time' key.
+    - If the report has multiple times, ALWAYS prioritize the 'Collected' time for the 'time' key, and the 'Reported/Printed' time for the 'reported_time' key. Never map 'Received' or 'Reported' time to the 'time' key if a 'Collected' time is present.
 
     IMPORTANT MAPPING RULES & EXAMPLES:
     1. Standardize units in keys: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
@@ -442,14 +457,24 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         })
 
     # Dynamically build the prompt based on the schema
-    extraction_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_")]
-    # Append UI-expected metadata fields with descriptions to instruct the LLM
-    all_keys = extraction_keys + [
+    # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
+    metadata_descriptions = [
+        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the patient, NOT the report or lab. If none is found, use '')",
+        "labreference (The unique primary key or ID for this specific report/test document, e.g., 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Lab No'. Do NOT confuse this with the patient's ID/medid. We need the unique number identifying this specific test sheet. If none is found, use '')",
+        "sample_id (The ID of the lab sample/specimen, e.g., 'Specimen No', 'Sample ID'. If none is found, use '')",
+        "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
+        "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
-        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
-        "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')"
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
     ]
+    
+    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender"]
+    biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
+    
+    all_keys = metadata_descriptions + biomarker_keys
     keys_list = "\n".join([f"- {k}" for k in all_keys])
 
     prompt = f"""
@@ -465,6 +490,20 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
 
     Fields to extract (all as strings):
     {keys_list}
+
+    CRITICAL WARNING ON IDENTIFIERS:
+    - DO NOT confuse the Patient ID (medid) with the Report ID / Lab Reference (labreference).
+    - 'medid' refers to the patient's MRN / NRIC / Patient ID / Patient Reference No.
+    - 'labreference' refers to the unique identifier for this specific printed report document (Report No, Accession No, Episode No, Lab No, Ref No).
+    If you extract a number as 'medid', check if it is labelled as 'Lab No', 'Report No', or 'Accession No' - if it is, it belongs in 'labreference', NOT 'medid'.
+    If the document has both a Patient ID (MRN) and a Report ID (Accession No), extract MRN into 'medid' and Accession No into 'labreference'.
+
+    CRITICAL WARNING ON TIMESTAMPS:
+    - Medical reports contain multiple times: 'Collected' (collection/drawn time), 'Received' (time sample reached the lab), and 'Reported/Printed' (time report was finalized/printed).
+    - Map the 'Collected' time to the 'time' key. This is the primary time of the report.
+    - Map the 'Reported' or 'Printed' time to the 'reported_time' key.
+    - If the report only has ONE time/timestamp (e.g. only 'Reported' or 'Printed' time), map it to BOTH the 'time' key AND the 'reported_time' key.
+    - If the report has multiple times, ALWAYS prioritize the 'Collected' time for the 'time' key, and the 'Reported/Printed' time for the 'reported_time' key. Never map 'Received' or 'Reported' time to the 'time' key if a 'Collected' time is present.
 
     IMPORTANT MAPPING RULES & EXAMPLES:
     1. Map common names:
@@ -525,7 +564,7 @@ STAGING_SCHEMA_KEYS = [
     "abs_eosinophils", "abs_basophils", "platelet_count_x10_3_ul", "mpv_fl", "platelet_rdw_pct", 
     "pct_pct", "p_lcr_pct", "img_pct", "imm_pct", "iml_pct", "lic_pct", "total_cholesterol_mg_dl", 
     "hdl_mg_dl", "ldl_mg_dl", "vldl_mg_dl", "triglycerides_mg_dl", "non_hdl_mg_dl", 
-    "total_hdl_ratio", "ldl_hdl_ratio", "hdl_ldl_ratio", "bilirubin_total_mg_dl", 
+    "total_hdl_ratio", "ldl_hdl_ratio", "bilirubin_total_mg_dl", 
     "bilirubin_direct_mg_dl", "bilirubin_indirect_mg_dl", "alp_u_l", "alt_sgpt_u_l", 
     "ast_sgot_u_l", "ggt_u_l", "protein_total_g_dl", "albumin_g_dl", "globulin_g_dl", 
     "a_g_ratio", "creatinine_mg_dl", "urea_mg_dl", "bun_mg_dl", "bun_creatinine_ratio", 
@@ -598,7 +637,6 @@ SCHEMA_TYPES = {
     "non_hdl_mg_dl": "BIGINT",
     "total_hdl_ratio": "DOUBLE PRECISION",
     "ldl_hdl_ratio": "DOUBLE PRECISION",
-    "hdl_ldl_ratio": "DOUBLE PRECISION",
     "bilirubin_total_mg_dl": "DOUBLE PRECISION",
     "bilirubin_direct_mg_dl": "DOUBLE PRECISION",
     "bilirubin_indirect_mg_dl": "DOUBLE PRECISION",
@@ -652,13 +690,13 @@ def validate_and_cast_value(k: str, v: any):
         match = re.search(r'(-?\d*\.?\d+)', s)
         if match:
             return int(round(float(match.group(1))))
-        raise ValueError(f"Invalid INT64 format: {s}")
+        return None
         
     elif typ == "DOUBLE PRECISION":
         match = re.search(r'(-?\d*\.?\d+)', s)
         if match:
             return float(match.group(1))
-        raise ValueError(f"Invalid FLOAT64 format: {s}")
+        return None
         
     elif typ == "DATE":
         # Robustly strip time suffix like " 10:00:00 AM" or " 10:00 AM" or " 10:00:00" or "T10:00:00"
@@ -666,6 +704,21 @@ def validate_and_cast_value(k: str, v: any):
         # Clean spaces around separators like / or - or .
         s_date = re.sub(r'\s*([/\-.])\s*', r'\1', s_date)
         
+        # Resolve English month names to numeric representations to prevent locale dependencies
+        months = {
+            "january": "01", "february": "02", "march": "03", "april": "04",
+            "june": "06", "july": "07", "august": "08",
+            "september": "09", "october": "10", "november": "11", "december": "12",
+            "jan": "01", "feb": "02", "mar": "03", "apr": "04",
+            "may": "05", "jun": "06", "jul": "07", "aug": "08",
+            "sep": "09", "oct": "10", "nov": "11", "dec": "12"
+        }
+        lower_s = s_date.lower()
+        for name, num in months.items():
+            if re.search(r'\b' + name + r'\b', lower_s):
+                s_date = re.sub(r'\b' + name + r'\b', num, lower_s)
+                break
+
         if re.match(r'^\d{4}-\d{2}-\d{2}$', s_date): return s_date
         
         formats = [
@@ -677,12 +730,32 @@ def validate_and_cast_value(k: str, v: any):
             "%d-%b-%Y", "%b-%d-%Y", "%Y-%b-%d",
             "%d.%b.%Y", "%b.%d.%Y", "%Y.%b.%d",
             "%d-%B-%Y", "%B-%d-%Y", "%Y-%B-%d",
-            "%d.%B.%Y", "%B.%d.%Y", "%Y.%B.%d"
+            "%d.%B.%Y", "%B.%d.%Y", "%Y.%B.%d",
+            
+            # 2-digit years
+            "%d/%m/%y", "%m/%d/%y", "%y/%m/%d",
+            "%d-%m-%y", "%m-%d-%y", "%y-%m-%d",
+            "%d.%m.%y", "%m.%d.%y", "%y.%m.%d",
+            "%d %b %y", "%d %B %y", "%b %d, %y", "%B %d, %y",
+            "%b %d %y", "%B %d %y",
+            "%d-%b-%y", "%b-%d-%y", "%y-%b-%d",
+            "%d.%b.%y", "%b.%d.%y", "%y.%b.%d",
+            "%d-%B-%y", "%B-%d-%y", "%y-%B-%d",
+            "%d.%B.%y", "%B.%d.%y", "%y.%B.%d"
         ]
         from datetime import datetime
         for fmt in formats:
             try:
                 dt = datetime.strptime(s_date, fmt)
+                year = dt.year
+                # Apply 100-year rolling window if we parsed a 2-digit year format
+                if "%y" in fmt:
+                    two_digit = year % 100
+                    current_year = datetime.now().year
+                    current_century = (current_year // 100) * 100
+                    cutoff = (current_year + 20) % 100
+                    year = two_digit + (current_century if two_digit <= cutoff else current_century - 100)
+                    dt = dt.replace(year=year)
                 return dt.strftime("%Y-%m-%d")
             except ValueError:
                 pass
@@ -736,6 +809,30 @@ def split_value_and_unit(s: str):
             
     return s, ""
 
+def backend_normalize_time(time_str: str) -> str:
+    if not time_str: return ""
+    time_str = str(time_str).strip()
+    # Handle 3 or 4 digits without colon (e.g. 1430 -> 14:30, 930 -> 09:30)
+    if re.match(r'^\d{3,4}$', time_str):
+        if len(time_str) == 3:
+            time_str = f"0{time_str[0]}:{time_str[1:]}"
+        else:
+            time_str = f"{time_str[:2]}:{time_str[2:]}"
+            
+    match = re.search(r'(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?', time_str, re.IGNORECASE)
+    if match:
+        h = int(match.group(1))
+        m = int(match.group(2))
+        sec = int(match.group(3)) if match.group(3) else 0
+        ampm = match.group(4)
+        if ampm:
+            if ampm.upper() == "PM" and h < 12:
+                h += 12
+            elif ampm.upper() == "AM" and h == 12:
+                h = 0
+        return f"{h:02d}:{m:02d}:{sec:02d}"
+    return time_str
+
 def normalize_structured_data(data: dict) -> dict:
     """Ensure all required keys exist and return a structure friendly to the Flutter UI."""
     # Robustly handle different possible input keys for collected and time
@@ -749,6 +846,16 @@ def normalize_structured_data(data: dict) -> dict:
             time_val = time_match.group(1).strip()
             # Strip the time from collected_val
             collected_val = re.sub(r'\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?.*$', '', collected_val, flags=re.IGNORECASE).strip()
+
+    # Clean time_val to only keep the time part, stripping any date if present, and normalize to 24h
+    if time_val:
+        time_match = re.search(r'(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)', time_val, re.IGNORECASE)
+        if time_match:
+            time_val = backend_normalize_time(time_match.group(1))
+        elif re.match(r'^\s*\d{3,4}\s*$', time_val):
+            time_val = backend_normalize_time(time_val)
+        else:
+            time_val = ""
 
     # 1. Standardize the flat data
     flat = {}
@@ -767,11 +874,21 @@ def normalize_structured_data(data: dict) -> dict:
         elif key == "medid":
             flat[key] = clean_id(raw_medid)
         elif key == "labreference":
-            flat[key] = clean_id(raw_labref)
+            # Preserve special characters like dashes/slashes for report IDs
+            flat[key] = str(raw_labref).strip().upper() if raw_labref else ""
         elif key == "collected":
             flat[key] = collected_val
         elif key == "time":
             flat[key] = time_val
+        elif key == "gender":
+            val = data.get("gender", "")
+            g = str(val).strip().lower() if val else ""
+            if g in ("m", "male", "boy", "man"):
+                flat[key] = "Male"
+            elif g in ("f", "female", "girl", "woman"):
+                flat[key] = "Female"
+            else:
+                flat[key] = str(val).strip().title() if val else ""
         else:
             val = data.get(key, "")
             flat[key] = str(val) if val is not None else ""
@@ -785,12 +902,23 @@ def normalize_structured_data(data: dict) -> dict:
 
     # 3. Map to UI Format (for the Flutter app)
     results = []
-    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
+    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others", "gender"]
     for key, value in flat.items():
         if key in metadata_keys or not value: continue
         
-        parts = key.split('_')
-        name = " ".join(parts[:-1]).title() if len(parts) > 1 else key.title()
+        # Determine how many trailing segments form the unit suffix
+        # so we only use the non-unit segments for the display name
+        unit_suffix_patterns = [
+            '_g_dl', '_mg_dl', '_mil_ul', '_pct', '_fl', '_pg',
+            '_ul', '_uiu_ml', '_mmol_l', '_mg_l', '_ug_dl',
+            '_ng_dl', '_u_l', '_x10_3_ul', '_ml_min_173m2',
+        ]
+        name_part = key
+        for suffix in unit_suffix_patterns:
+            if key.endswith(suffix):
+                name_part = key[:-len(suffix)]
+                break
+        name = name_part.replace('_', ' ').title()
         # Parse value and extracted unit from LLM string using our robust parser
         clean_val, extracted_unit = split_value_and_unit(str(value))
 
@@ -817,7 +945,7 @@ def normalize_structured_data(data: dict) -> dict:
         "date": flat["collected"],
         "results": results,
         "notes": flat["others"],
-        "gender": str(data.get("gender", "")).strip(),
+        "gender": flat["gender"],
         "test_name": str(data.get("test_name", "")).strip(),
         "doctor_name": str(data.get("doctor_name", "")).strip(),
         "hospital_name": str(data.get("hospital_name", "")).strip()
@@ -892,6 +1020,10 @@ async def update_report_in_db(report_id: str, update_dict: dict):
         merged = {**existing["structured_data"], **new_structured}
     else:
         merged = new_structured
+
+    # Normalize time if present
+    if "time" in merged and merged["time"]:
+        merged["time"] = backend_normalize_time(merged["time"])
 
     if STORAGE_ENGINE == "supabase" and supabase:
         supabase.table("reports").update({"structured_data": merged}).eq("id", report_id).execute()
@@ -1157,7 +1289,7 @@ async def root():
     return {
         "status": "ok", 
         "version": "3.0.0",
-        "ocr_engine": OCR_ENGINE, 
+        "ocr_engine": "openai_vision", 
         "storage": STORAGE_ENGINE,
         "llm_model": OPENAI_MODEL,
         "gcp_support": HAS_GCP
@@ -1868,6 +2000,9 @@ async def update_report(report_id: str, updated_data: dict):
     # User Entry Validation Mode: warning user if format not right
     incoming_results = updated_data.get("structured_data", {}).get("results", [])
     incoming_struct = updated_data.get("structured_data", {})
+    
+    print(f"DEBUG: PUT /api/reports/{report_id} incoming keys: {list(incoming_struct.keys())}")
+    print(f"DEBUG: date={incoming_struct.get('date')}, time={incoming_struct.get('time')}, gender={incoming_struct.get('gender')}")
 
     for item in incoming_results:
         k = item.get("key")
@@ -1876,22 +2011,59 @@ async def update_report(report_id: str, updated_data: dict):
             try:
                 validate_and_cast_value(k, v)
             except ValueError as e:
+                print(f"VALIDATION ERROR: key={k}, value={v}, type={SCHEMA_TYPES[k]}, error={e}")
                 raise HTTPException(status_code=400, detail=f"Warning: The format for '{k}' is incorrect. Expected {SCHEMA_TYPES[k]}. Error: {str(e)}")
 
-    if "date" in incoming_struct:
+    if "date" in incoming_struct and incoming_struct["date"]:
         try:
             validate_and_cast_value("collected", incoming_struct["date"])
         except ValueError as e:
+            print(f"VALIDATION ERROR: date={incoming_struct['date']}, error={e}")
             raise HTTPException(status_code=400, detail=f"Warning: The format for 'date' is incorrect. Expected DATE. Error: {str(e)}")
 
     if "time" in incoming_struct and incoming_struct["time"]:
         try:
             validate_and_cast_value("time", incoming_struct["time"])
         except ValueError as e:
+            print(f"VALIDATION ERROR: time={incoming_struct['time']}, error={e}")
             raise HTTPException(status_code=400, detail=f"Warning: The format for 'time' is incorrect. Expected TIME (HH:MM or HH:MM:SS). Error: {str(e)}")
 
     await update_report_in_db(report_id, updated_data)
     return {"status": "updated"}
+
+@app.post("/api/reports/manual")
+async def create_manual_report(current_user: dict = Depends(get_current_user)):
+    """Create a blank report for manual entry (no OCR/LLM). User fills it via VerifyScreen."""
+    report_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
+    
+    # Build empty structured data using normalize
+    structured_data = normalize_structured_data({})
+    
+    report_metadata = {
+        "id": report_id,
+        "user_id": current_user["id"],
+        "filename": "manual_entry",
+        "upload_time": now,
+        "status": "completed",
+        "file_path": None,
+        "raw_text": "Manual entry — no OCR",
+        "structured_data": structured_data,
+        "user_verified": 0
+    }
+    
+    # Store in TEMP_REPORTS (will be persisted on send)
+    TEMP_REPORTS[report_id] = report_metadata
+    
+    return {
+        "id": report_id,
+        "filename": "manual_entry",
+        "upload_time": now,
+        "status": "completed",
+        "structured_data": structured_data,
+        "user_verified": False,
+        "raw_text": "Manual entry — no OCR"
+    }
 
 @app.post("/api/reports/{report_id}/send")
 async def send_report(report_id: str):

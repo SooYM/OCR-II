@@ -40,7 +40,7 @@ class BiomarkerDictionary {
     ],
     'Lipid Profile': [
       'total_cholesterol_mg_dl', 'hdl_mg_dl', 'ldl_mg_dl', 'vldl_mg_dl', 'triglycerides_mg_dl', 
-      'non_hdl_mg_dl', 'total_hdl_ratio', 'ldl_hdl_ratio', 'hdl_ldl_ratio'
+      'non_hdl_mg_dl', 'total_hdl_ratio', 'ldl_hdl_ratio'
     ],
     'Liver Function': [
       'bilirubin_total_mg_dl', 'bilirubin_direct_mg_dl', 'bilirubin_indirect_mg_dl', 'alp_u_l', 
@@ -602,16 +602,6 @@ class BiomarkerDictionary {
       aliases: [],
       description: 'The ratio of LDL to HDL cholesterol.',
     ),
-    BiomarkerEntry(
-      key: 'hdl_ldl_ratio',
-      standardName: 'HDL/LDL Ratio',
-      unit: '',
-      referenceRange: '> 0.3',
-      referenceRangeSI: '> 0.3',
-      aliases: [],
-      description: 'The ratio of HDL to LDL cholesterol.',
-    ),
-
     // ─── Liver Function ───────────────────────────────────
     BiomarkerEntry(
       key: 'bilirubin_total_mg_dl',

@@ -9,7 +9,10 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 - **📊 Comparative Trend Analysis** — Overlay multiple biomarkers (e.g., LDL vs HDL) on a single interactive line chart with synchronized tooltips.
 - **📋 Collapsible Profile Groups** — Analytics table organized into 14+ standardized medical profiles (Lipid, Liver, CBC, etc.) with interactive expand/collapse functionality.
 - **📸 Multi-Page Capture** — Photograph or pick multiple pages; the AI merges them into one unified record.
-- **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o) reads images directly for high-accuracy extraction.
+- **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o-mini) reads images directly for high-accuracy extraction.
+- **➕ Manual Logging** — Add report entries manually using a dedicated "+" button directly within the dashboard.
+- **🔍 Document Reference Tracking** — Surface unique report identifiers (Accession No, Report No) as `Ref:` keys on history cards and check screens.
+- **🕒 24h Time Normalization** — Automatically formats extraction and manual inputs into standard 24h `HH:MM:SS` format.
 - **🔍 Full-screen Chart Expansion** — Tap any graph to expand into a detailed, full-screen trend analysis view with persistent legends.
 - **🧠 AI Health Analysis** — Get personalized insights with rich text formatting and the ability to ask custom follow-up questions.
 - **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy.
@@ -82,8 +85,8 @@ flutter run
 ## 📱 Usage Flow
 
 1. **Auth** — Sign up or log in to your secure personalized account.
-2. **Scan** — Capture blood report pages. The AI automatically merges multi-page documents.
-3. **Verify** — Confirm the extracted values and enter the collection date.
+2. **Scan or Add** — Capture blood report pages for AI auto-merging, or tap the "+" icon to log data manually.
+3. **Verify** — Confirm/correct the extracted values and check the collection date/reference code.
 4. **Dashboard** — Filter by date range and analyze trends using individual or comparative charts.
 5. **Table** — Expand specific medical profiles in the analytics table to view detailed biomarker history.
 6. **AI Analysis** — Generate detailed summaries or ask specific questions about your results.
@@ -95,9 +98,18 @@ flutter run
 | `POST` | `/api/auth/register` | User registration |
 | `POST` | `/api/auth/login` | JWT Authentication |
 | `POST` | `/api/upload-multi` | Process multi-page reports via AI Vision |
+| `POST` | `/api/reports/manual` | Initialize a blank manual entry report |
 | `GET` | `/api/reports/my` | Retrieve user-specific report history |
 | `DELETE` | `/api/reports/{id}` | Securely delete a report |
 | `POST` | `/api/reports/analyze` | Generate rich-text AI health insights |
+
+## 📷 OCR Scan & Capture Guidelines
+
+For high-accuracy data extraction, please ensure you follow these capture guidelines:
+
+* **Document Orientation (Critical)**: Always capture or upload images **right-side up**. If a document is uploaded upside down ($180^\circ$ rotated), the characters will be extracted upside down (resulting in garbled text) and the parsing engine will fail to map the values, falling back to a raw text block in the Notes field.
+* **Lighting**: Capture under uniform, bright lighting to avoid heavy shadows and glares.
+* **Flatness**: Keep the document as flat as possible. Wrinkles and bends can distort text lines and cause incorrect biomarker matching.
 
 ## 🛠️ Tech Stack
 

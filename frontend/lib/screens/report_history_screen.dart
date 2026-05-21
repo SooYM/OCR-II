@@ -18,6 +18,7 @@ class ReportHistoryScreen extends StatefulWidget {
 class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
   List<MedicalReport>? _reports;
   bool _isLoading = true;
+  bool _isCreatingManual = false;
   String? _error;
 
   @override
@@ -117,6 +118,32 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     }
   }
 
+  Future<void> _createManualReport() async {
+    setState(() => _isCreatingManual = true);
+    try {
+      final report = await ApiService.createManualReport();
+      if (mounted) {
+        setState(() => _isCreatingManual = false);
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => VerifyScreen(report: report)),
+        );
+        // Refresh the list when returning from VerifyScreen
+        _loadReports();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isCreatingManual = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            content: Text('Failed to create report: $e'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -157,6 +184,27 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                       ],
                     ),
                   ),
+                  GestureDetector(
+                    onTap: _isCreatingManual ? null : _createManualReport,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: _isCreatingManual
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            )
+                          : Icon(Icons.add_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: _loadReports,
                     child: Container(
@@ -261,6 +309,9 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     final testName = report.structuredData?.testName;
     final resultCount = report.structuredData?.results.length ?? 0;
 
+    final labRef = report.structuredData?.labreference;
+    final hasLabRef = labRef != null && labRef.trim().isNotEmpty;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -284,10 +335,10 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Scan Date as Title
+                // Title: Lab Reference if available, otherwise Scan date
                 Expanded(
                   child: Text(
-                    'Scan: ${_formatDate(report.uploadTime)}',
+                    hasLabRef ? 'Ref: $labRef' : 'Scan: ${_formatDate(report.uploadTime)}',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
                     overflow: TextOverflow.ellipsis,
                   ),

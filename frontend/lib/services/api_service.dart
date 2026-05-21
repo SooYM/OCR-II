@@ -130,6 +130,24 @@ class ApiService {
     }
   }
 
+  // ─── Manual Report (No OCR) ────────────────────────────────────────────────
+
+  /// Create a blank report for manual entry (no OCR/LLM).
+  /// Returns a MedicalReport with empty structured data.
+  static Future<MedicalReport> createManualReport() async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/api/reports/manual'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      return MedicalReport.fromJson(jsonDecode(response.body));
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
   // ─── Update Report ─────────────────────────────────────────────────────────
 
   /// Update structured data for a report (tester corrections).

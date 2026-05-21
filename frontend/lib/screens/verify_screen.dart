@@ -57,6 +57,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
       _data.patientName = AuthService.currentUser!['name'] as String?;
     }
 
+    // Filter out gender from results (it belongs in patient info, not test results)
+    _data.results.removeWhere((r) => r.key == 'gender');
+
     // Auto-normalize results against the standard dictionary
     _normalizeResults();
     
@@ -90,6 +93,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
         _matchedEntries[i] = match;
         // Set key if missing
         result.key ??= match.key;
+        // Always update display name to standard dictionary name
+        result.testItem = match.standardName;
 
         // Always set unit from dictionary (clears wrong OCR units for qualitative items like urine glucose/bilirubin)
         if (match.allowedUnits.isNotEmpty) {
@@ -430,6 +435,17 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         icon: Icons.science_outlined,
                         onChanged: (v) {
                           _data.testName = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Lab Reference',
+                        value: _data.labreference ?? '',
+                        icon: Icons.tag_outlined,
+                        hintText: 'e.g., LAB-2024-00123',
+                        onChanged: (v) {
+                          _data.labreference = v;
                           _hasChanges = true;
                         },
                       ),
