@@ -124,33 +124,99 @@ For high-accuracy data extraction, please ensure you follow these capture guidel
 
 ## 📖 Data Dictionary & Standardized Units
 
-MedScan standardizes all extracted medical data into the following profiles and units to ensure consistent trend tracking across different laboratories.
+MedScan standardizes all extracted medical data into the following 14 profiles and units to ensure consistent trend tracking across different laboratories.
 
-| Category | Parameter | Unit | Description |
-|----------|-----------|------|-------------|
-| **Hematology (CBC)** | Hemoglobin | g/dL | Oxygen-carrying protein in red blood cells |
-| | RBC Count | mil/µL | Total number of red blood cells |
-| | WBC Count | cells/µL | Total white blood cell count (Leukocytes) |
-| | Platelet Count | x10³/µL | Cells responsible for blood clotting |
-| | Hematocrit | % | Proportion of blood volume occupied by RBCs |
-| | MCV / MCH / MCHC | fL / pg / g/dL | Red blood cell indices |
-| **Lipid Profile** | Total Cholesterol | mg/dL | Combined measure of all cholesterol |
-| | HDL Cholesterol | mg/dL | "Good" cholesterol (High-Density Lipoprotein) |
-| | LDL Cholesterol | mg/dL | "Bad" cholesterol (Low-Density Lipoprotein) |
-| | Triglycerides | mg/dL | Type of fat (lipid) found in the blood |
-| **Renal (Kidney)** | Creatinine | mg/dL | Waste product used to measure kidney function |
-| | Urea / BUN | mg/dL | Measures amount of nitrogen in blood from urea |
-| | eGFR | mL/min/1.73m² | Estimated Glomerular Filtration Rate |
-| | Uric Acid | mg/dL | Waste product of purine metabolism |
-| **Liver Function** | ALT (SGPT) | U/L | Enzyme found primarily in the liver |
-| | AST (SGOT) | U/L | Enzyme found in liver and heart |
-| | ALP / GGT | U/L | Enzymes related to bile ducts and bone |
-| | Bilirubin (Total/Dir) | mg/dL | Yellow pigment from RBC breakdown |
-| | Albumin / Globulin | g/dL | Blood proteins produced by liver |
-| **Diabetes** | HbA1c | % | Average blood sugar levels over 3 months |
-| | Fasting Glucose | mg/dL | Blood sugar after fasting period |
-| **Electrolytes** | Sodium / Potassium | mmol/L | Essential minerals for cell function |
-| | Calcium / Phosphorus | mg/dL | Key minerals for bone health |
-| **Urine Analysis** | Specific Gravity | - | Concentration of particles in urine |
-| | pH | - | Acidity/alkalinity of urine |
-| | Protein / Glucose | - | Presence of these in urine (qualitative) |
+| Profile / Category | Parameter | Standard Unit | Description |
+|--------------------|-----------|---------------|-------------|
+| **Urine** | Urine Colour | - | The visual color of the urine sample. |
+|  | Appearance | - | The clarity or turbidity of the urine. |
+|  | Specific Gravity | - | Measures the concentration of particles in the urine. |
+|  | pH | - | Measures the acidity or alkalinity of the urine. |
+|  | Proteins | `mg/dL` | Detects the presence of protein in the urine. |
+|  | Glucose (Urine) | - | Detects the presence of sugar in the urine. |
+|  | Bilirubin (Urine) | - | Detects processed bilirubin in the urine. |
+|  | Ketones | - | Detects ketones, a byproduct of fat breakdown. |
+|  | Blood (Urine) | - | Detects the presence of blood or hemoglobin in the urine. |
+|  | Urobilinogen | `EU/dL` | A byproduct of bilirubin breakdown found in urine. |
+|  | Nitrites | - | Often indicates the presence of a urinary tract infection (UTI). |
+|  | WBC / Pus Cells | `/HPF` | Presence of white blood cells in urine, indicating infection or inflammation. |
+|  | RBC (Urine) | `/HPF` | Presence of red blood cells in urine. |
+|  | Epithelial Cells | `/HPF` | Cells that line the urinary tract. |
+|  | Casts | `/LPF` | Cylindrical structures formed in the kidney tubules. |
+|  | Crystals | - | Solid particles formed from chemicals in the urine. |
+|  | Others | - | Any other elements observed in urine. |
+| **CBC** | Hemoglobin | `g/dL` | The protein in red blood cells that carries oxygen throughout the body. |
+|  | RBC Count | `mil/uL` | The total number of red blood cells in a volume of blood. |
+|  | Hematocrit | `%` | The proportion of blood that consists of red blood cells. |
+|  | MCV | `fL` | The average size of your red blood cells. |
+|  | MCH | `pg` | The average amount of hemoglobin in each red blood cell. |
+|  | MCHC | `g/dL` | The average concentration of hemoglobin in a given volume of red blood cells. |
+|  | RDW-CV | `%` | A measure of the variation in size of red blood cells. |
+|  | RDW-SD | `fL` | The actual measurement of the width of the red blood cell distribution curve. |
+|  | WBC | `cells/uL` | The total number of white blood cells, which help the body fight infections. |
+|  | Neutrophils | `%` | The most common type of white blood cell, primarily responsible for fighting bacterial infections. |
+|  | Lymphocytes | `%` | White blood cells that are key to the immune system, including T cells and B cells. |
+|  | Eosinophils | `%` | White blood cells active during allergic reactions and parasitic infections. |
+|  | Monocytes | `%` | White blood cells that migrate to tissues and become macrophages to consume pathogens. |
+|  | Basophils | `%` | The least common white blood cell, involved in inflammatory and allergic responses. |
+|  | Abs. Neutrophils | `cells/uL` | The actual number of neutrophils present in the blood. |
+|  | Abs. Lymphocytes | `cells/uL` | The actual number of lymphocytes present in the blood. |
+|  | Abs. Monocytes | `cells/uL` | The actual number of monocytes present in the blood. |
+|  | Abs. Eosinophils | `cells/uL` | The actual number of eosinophils present in the blood. |
+|  | Abs. Basophils | `cells/uL` | The actual number of basophils present in the blood. |
+| **Platelet Profile** | Platelet Count | `x10³/uL` | Cells that help the blood clot to stop bleeding. |
+|  | MPV | `fL` | The average size of the platelets in your blood. |
+|  | Platelet RDW | `%` | Measurement of how much platelets vary in size. |
+|  | PCT | `%` | The volume occupied by platelets in the blood. |
+|  | P-LCR | `%` | The percentage of large-sized platelets. |
+|  | IMG | `%` | Immature Granulocyte percentage. |
+|  | IMM | `%` | Immature Monocyte percentage. |
+|  | IML | `%` | Immature Lymphocyte percentage. |
+|  | LIC | `%` | Large Immature Cell percentage. |
+| **Lipid Profile** | Total Cholesterol | `mg/dL` | The total amount of cholesterol found in your blood. |
+|  | HDL Cholesterol | `mg/dL` | Known as 'good' cholesterol; it helps remove other forms of cholesterol from your bloodstream. |
+|  | LDL Cholesterol | `mg/dL` | Known as 'bad' cholesterol; high levels can lead to plaque buildup in arteries. |
+|  | VLDL Cholesterol | `mg/dL` | A type of blood fat that carries triglycerides. |
+|  | Triglycerides | `mg/dL` | A type of fat (lipid) found in your blood, used for energy. |
+|  | Non-HDL Cholesterol | `mg/dL` | Total cholesterol minus HDL; represents all potentially harmful cholesterol. |
+|  | Total/HDL Ratio | - | The ratio of total cholesterol to HDL, used to assess heart disease risk. |
+|  | LDL/HDL Ratio | - | The ratio of LDL to HDL cholesterol. |
+| **Liver Function** | Bilirubin Total | `mg/dL` | A yellow pigment produced during the normal breakdown of red blood cells. |
+|  | Bilirubin Direct | `mg/dL` | Bilirubin that has been processed by the liver and is ready for excretion. |
+|  | Bilirubin Indirect | `mg/dL` | Bilirubin that has not yet been processed by the liver. |
+|  | ALP | `U/L` | An enzyme found in the liver, bones, kidneys, and digestive system. |
+|  | ALT (SGPT) | `U/L` | An enzyme found mostly in the liver; high levels suggest liver damage. |
+|  | AST (SGOT) | `U/L` | An enzyme found in the liver, heart, and muscles. |
+|  | GGT | `U/L` | An enzyme found in the liver and bile ducts; sensitive to alcohol and bile duct issues. |
+|  | Total Protein | `g/dL` | The total amount of albumin and globulin in the blood. |
+|  | Albumin | `g/dL` | A protein made by the liver that keeps fluid from leaking out of blood vessels. |
+|  | Globulin | `g/dL` | A group of proteins in the blood that help the immune system and liver function. |
+|  | A/G Ratio | - | The ratio of albumin to globulin in the blood. |
+| **Kidney Function** | Creatinine | `mg/dL` | A waste product from muscle breakdown, filtered by the kidneys. |
+|  | Urea | `mg/dL` | A waste product formed in the liver when protein is broken down. |
+|  | BUN | `mg/dL` | The amount of nitrogen in your blood that comes from the waste product urea. |
+|  | BUN/Creatinine Ratio | - | The ratio of BUN to creatinine, used to diagnose acute kidney issues. |
+|  | Sodium | `mmol/L` | An electrolyte that helps maintain fluid balance and nerve function. |
+|  | Potassium | `mmol/L` | An electrolyte vital for heart and muscle function. |
+|  | Chloride | `mmol/L` | An electrolyte that helps maintain proper blood volume and pressure. |
+|  | Uric Acid | `mg/dL` | A waste product from the breakdown of purines; high levels can cause gout. |
+|  | eGFR | `mL/min/1.73m²` | A calculation of how well the kidneys are filtering waste from the blood. |
+| **Iron Profile** | Iron | `ug/dL` | A mineral used by the body to make hemoglobin. |
+|  | UIBC | `ug/dL` | The reserve capacity of transferrin to bind iron. |
+|  | TIBC | `ug/dL` | The total capacity of the blood to carry iron. |
+|  | Transferrin Saturation | `%` | The percentage of transferrin that is saturated with iron. |
+| **HbA1c** | HbA1c | `%` | Measures average blood sugar levels over the past 2-3 months. |
+|  | Estimated Avg. Glucose | `mg/dL` | A calculated average of blood glucose based on HbA1c results. |
+|  | HbF | `%` | A form of hemoglobin that is normal in infants but low in adults. |
+| **Urine ACR** | Urine Albumin | `mg/L` | Small amounts of albumin in the urine, an early sign of kidney disease. |
+|  | Urine Creatinine | `mg/dL` | Creatinine measured in a urine sample. |
+|  | Albumin/Creatinine Ratio | - | The ratio of albumin to creatinine in the urine, used to detect kidney damage. |
+| **Calcium & Phos** | Calcium | `mg/dL` | Important for bone health, muscle function, and nerve signaling. |
+|  | Phosphorus | `mg/dL` | A mineral that works with calcium to build bones and teeth. |
+| **Thyroid Profile** | Total T3 | `ng/dL` | One of the two main hormones produced by the thyroid gland. |
+|  | Total T4 | `ug/dL` | The main hormone produced by the thyroid gland. |
+|  | TSH | `uIU/mL` | Hormone from the pituitary gland that tells the thyroid to make T3 and T4. |
+| **Glucose - Fasting** | Fasting Glucose | `mg/dL` | Blood sugar level measured after an 8-12 hour fast. |
+| **Glucose - PP** | Postprandial Glucose | `mg/dL` | Blood sugar level measured 2 hours after a meal. |
+| **Glucose (Diagnopath)** | FBS | `mg/dL` | Fasting Blood Sugar (Diagnostic specific). |
+|  | PLBS | `mg/dL` | Post Lunch Blood Sugar (Diagnostic specific). |
