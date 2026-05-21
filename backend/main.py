@@ -1195,11 +1195,13 @@ def backend_compare_values(key: str, val1: str, val2: str) -> bool:
 async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str = None):
     """
     Compares the newly parsed data with existing reports for the user.
-    Uses a highly robust multi-attribute validation system:
+    Uses a highly robust multi-attribute validation system based on the intersection
+    of clinical keys (shared keys that are non-empty in both reports):
     1. Cleaned/Normalized Lab Reference Match (handles spaces/dashes).
-    2. Exact Clinical Signature Overlap (>= 85% overlap with >= 5 common non-empty keys, regardless of date).
-    3. Date + Patient ID + Clinical Overlap (Same date and same Patient ID and overlap >= 40%).
-    4. Fuzzy Date Match (+/- 2 days) + Same Patient ID + Clinical Overlap (overlap >= 70%).
+    2. High Clinical Signature Overlap (shared keys count >= 3 and match percentage >= 90%, regardless of date).
+    3. Low contradiction clinical match (shared keys count >= 2 and match percentage == 100%, without date/ID contradiction).
+    4. Same Date + Same Patient ID Match (same date & patient ID, shared keys count >= 1 and match percentage >= 80%).
+    5. Fuzzy Date Match (+/- 2 days) + Same Patient ID Match (shared keys count >= 2 and match percentage >= 80%).
     """
     try:
         if not new_data:
@@ -1251,38 +1253,52 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
                 print(f" -> MATCH FOUND: Normalized Lab Reference ({new_labref})")
                 return True
 
-            # Calculate clinical overlap
+            # Calculate clinical overlap based on INTERSECTION of present keys
             match_count = 0
-            total_keys = 0
+            shared_keys = []
             metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
             
             for key in STAGING_SCHEMA_KEYS:
                 if key in metadata_keys: continue
                 
-                new_val = new_data.get(key, "")
-                old_val = s_data.get(key, "")
+                new_val = str(new_data.get(key, "")).strip()
+                old_val = str(s_data.get(key, "")).strip()
                 
-                if new_val or old_val:
-                    total_keys += 1
+                # Check intersection (both must be non-empty)
+                if new_val and old_val:
+                    shared_keys.append(key)
                     if backend_compare_values(key, new_val, old_val):
                         match_count += 1
             
-            overlap = (match_count / total_keys * 100) if total_keys > 0 else 0
+            num_shared = len(shared_keys)
+            match_percentage = (match_count / num_shared * 100) if num_shared > 0 else 0
             
-            # --- CRITERIA 2: Exact Clinical Signature Overlap (High Overlap, Regardless of Date) ---
-            # If >= 5 clinical parameters are present, and >= 85% match exactly, it's the same report
-            if total_keys >= 5 and overlap >= 85:
-                print(f" -> MATCH FOUND: High Clinical Fingerprint Overlap ({overlap:.1f}%)")
-                return True
+            print(f" -> Comparing to existing report: Date={old_date}, PatientID={old_medid}, LabRef={old_labref}")
+            print(f"    Shared keys count: {num_shared}, Match count: {match_count}, Match percentage: {match_percentage:.1f}%")
 
-            # --- CRITERIA 3: Same Date + Same Patient ID + Moderate Overlap ---
-            if new_date and old_date and new_date == old_date:
-                medid_match = (not new_medid or not old_medid or new_medid == old_medid)
-                if medid_match and overlap >= 40:
-                    print(f" -> MATCH FOUND: Same Date & Patient ID with {overlap:.1f}% clinical match")
+            # --- CRITERIA 2: High Clinical Match (Regardless of Date) ---
+            # If they share >= 3 keys and >= 90% match, it's a duplicate
+            if num_shared >= 3 and match_percentage >= 90:
+                print(f" -> MATCH FOUND: High Clinical Fingerprint Overlap ({match_percentage:.1f}%)")
+                return True
+                
+            # --- CRITERIA 3: Low Contradiction Clinical Match ---
+            # If they share >= 2 keys, match 100%, and dates/IDs don't contradict (either match or one is missing)
+            if num_shared >= 2 and match_percentage == 100:
+                dates_dont_contradict = not new_date or not old_date or new_date == old_date
+                ids_dont_contradict = not new_medid or not old_medid or new_medid == old_medid
+                if dates_dont_contradict and ids_dont_contradict:
+                    print(f" -> MATCH FOUND: 100% clinical match of shared keys ({num_shared} keys) without contradiction")
                     return True
 
-            # --- CRITERIA 4: Fuzzy Date Match (+/- 2 days) + Same Patient ID + High Overlap ---
+            # --- CRITERIA 4: Same Date + Same Patient ID Match ---
+            if new_date and old_date and new_date == old_date:
+                medid_match = (not new_medid or not old_medid or new_medid == old_medid)
+                if medid_match and num_shared >= 1 and match_percentage >= 80:
+                    print(f" -> MATCH FOUND: Same Date & Patient ID with {match_percentage:.1f}% clinical match")
+                    return True
+
+            # --- CRITERIA 5: Fuzzy Date Match (+/- 2 days) + Same Patient ID Match ---
             if new_date and old_date:
                 try:
                     from datetime import datetime
@@ -1291,8 +1307,8 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
                     day_diff = abs((d1 - d2).days)
                     if day_diff <= 2:
                         medid_match = (not new_medid or not old_medid or new_medid == old_medid)
-                        if medid_match and overlap >= 70:
-                            print(f" -> MATCH FOUND: Fuzzy Date Match ({day_diff} days diff) & {overlap:.1f}% clinical match")
+                        if medid_match and num_shared >= 2 and match_percentage >= 80:
+                            print(f" -> MATCH FOUND: Fuzzy Date Match ({day_diff} days diff) & {match_percentage:.1f}% clinical match")
                             return True
                 except Exception as ex:
                     pass
