@@ -9,7 +9,7 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 - **📊 Comparative Trend Analysis** — Overlay multiple biomarkers (e.g., LDL vs HDL) on a single interactive line chart with synchronized tooltips.
 - **📋 Collapsible Profile Groups** — Analytics table organized into 14+ standardized medical profiles (Lipid, Liver, CBC, etc.) with interactive expand/collapse functionality.
 - **📸 Multi-Page Capture** — Photograph or pick multiple pages; the AI merges them into one unified record.
-- **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o-mini) reads images directly for high-accuracy extraction.
+- **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o) reads images directly for high-accuracy extraction.
 - **➕ Manual Logging** — Add report entries manually using a dedicated "+" button directly within the dashboard.
 - **🔍 Document Reference Tracking** — Surface unique report identifiers (Accession No, Report No) as `Ref:` keys on history cards and check screens.
 - **🚫 Smart Duplicate Detection** — Prevents duplicate uploads using a multi-attribute checking system that compares normalized/cleaned Lab Reference numbers, Lab Numbers/Sample IDs, and clinical signature overlaps.
@@ -54,11 +54,12 @@ To prevent database clutter and redundant chart data points, MedScan implements 
 ### 4. 🕒 24h Time Normalization
 Time values extracted from reports or entered manually are parsed and formatted into standard 24h `HH:MM:SS` format. If a report specifies a collection time and reported/printed time, both are isolated. If only one time is specified, the system maps it to both fields to prevent data gaps.
 
-### 5. 🗃️ Database Layout & Swapped Fields
-To resolve terminology overlaps, the database schema aligns as follows:
+### 5. 🗃️ Database Layout, Swapped Fields, & Isolated Notes
+To resolve terminology overlaps and separate clinical findings from user notes, the database schema and extraction models align as follows:
 - **`report_reference`** (formerly `sample_id`): Represents the unique printed report reference document identifier (e.g. Accession No., Episode No.).
 - **`labreference`** (formerly `lab_reference`): Represents the unique physical lab sample specimen container ID (e.g. Lab No., Specimen ID).
 - **`original_labreference`**: Retains the raw, unmodified report reference string from the OCR engine for data verification.
+- **General Notes vs. Clinical `others`**: Previously, the `others` clinical biomarker under the Urine profile was conflated with general report notes. General report-level comments and remarks are now isolated into an independent `notes` field (stored in the main `reports` database table JSON payload and exposed directly to the AI chat and dashboard), whereas the `others` field remains strictly a clinical biomarker under the Urinalysis profile.
 Existing records have been fully migrated by swapping column values and updating key constraints to maintain historical consistency.
 
 ### 6. 🔐 Secure User Authentication & Isolation
