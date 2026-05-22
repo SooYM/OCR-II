@@ -373,10 +373,11 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
-        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
+        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab"]
+    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -533,10 +534,11 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
-        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
+        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab"]
+    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -989,7 +991,7 @@ def normalize_structured_data(data: dict) -> dict:
 
     # 3. Map to UI Format (for the Flutter app)
     results = []
-    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "others", "gender", "lab"]
+    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
     for key, value in flat.items():
         if key in metadata_keys or not value: continue
         
@@ -1021,7 +1023,7 @@ def normalize_structured_data(data: dict) -> dict:
         "patient_id": flat["medid"],
         "date": flat["collected"],
         "results": results,
-        "notes": flat["others"],
+        "notes": str(data.get("notes") or "").strip(),
         "gender": flat["gender"],
         "test_name": str(data.get("test_name", "")).strip(),
         "doctor_name": str(data.get("doctor_name", "")).strip(),
@@ -1452,7 +1454,7 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
             # Calculate clinical overlap based on INTERSECTION of present keys
             match_count = 0
             shared_keys = []
-            metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "others"]
+            metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time"]
             
             for key in STAGING_SCHEMA_KEYS:
                 if key in metadata_keys: continue
