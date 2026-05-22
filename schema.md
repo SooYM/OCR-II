@@ -7,7 +7,7 @@ CREATE TABLE staging_medical_records (
     original_medid TEXT NOT NULL,
     labreference TEXT,
     original_labreference TEXT NOT NULL,
-    sample_id TEXT,
+    report_reference TEXT,
     lab TEXT,
     collected DATE,
     time TIME,

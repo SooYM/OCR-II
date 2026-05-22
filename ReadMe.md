@@ -15,10 +15,60 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 - **🚫 Smart Duplicate Detection** — Prevents duplicate uploads using a multi-attribute checking system that compares normalized/cleaned Lab Reference numbers, Lab Numbers/Sample IDs, and clinical signature overlaps.
 - **🕒 24h Time Normalization** — Automatically formats extraction and manual inputs into standard 24h `HH:MM:SS` format.
 - **🔍 Full-screen Chart Expansion** — Tap any graph to expand into a detailed, full-screen trend analysis view with persistent legends.
+- **✨ AI Health Summary** — Layman-friendly, empathetic dashboard summary automatically highlights out-of-range biomarkers, physiochemical connections, and features direct redirect linking to the AI Chat assistant.
 - **🧠 AI Health Analysis** — Get personalized insights with rich text formatting and the ability to ask custom follow-up questions.
 - **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy.
 - **🔐 Secure User Authentication** — JWT-based login and signup system for personalized data isolation and ownership validation.
 - **🎨 Premium UI/UX** — Glassmorphism design, smooth animations, and optimized layouts for all screen sizes.
+
+## ⚙️ Core Pipelines & Engine Mechanics
+
+### 1. ✂️ Content-Aware Image Splitting
+To solve the standard issue of OpenAI Vision missing or misaligning small text lines on high-density medical reports, MedScan integrates a content-aware image splitting engine (`splitter.py`):
+- **Horizontal Projection Profile**: Binarizes the image using Otsu's thresholding, inversion, and horizontal summation of dark pixels (text elements) along each row.
+- **Whitespace Gap Detection**: Identifies contiguous vertical bands of empty whitespace separating text lines.
+- **Midpoint Alignment**: Searches the middle 70% of the image to find the whitespace gap center closest to the physical midpoint, ensuring no line of text is sliced horizontally.
+- **Safety Overlap Margin**: Splits the image into top and bottom halves with an automatic 3% vertical overlap on each side, guaranteeing that boundary characters are completely visible in at least one segment.
+
+### 2. 🪄 Image Preprocessing & Contrast Enhancement
+Prior to analysis, scanned images are processed to remove environmental factors (uneven lighting, shadows, creases):
+- **Illumination Correction**: Extracts the background map via dilation followed by a large median blur (21x21 kernel), then divides the original color channels by this map. This normalizes lighting and converts the background to clean white.
+- **Dynamic Contrast Range**: Normalizes the final image dynamic range to maximize readability.
+- **Unsharp Masking**: Applies a sharpening filter kernel to enhance edge definitions, making fine character segments stand out.
+- **High-Quality Upscaling**: Proportionally resizes any split section or small image with `INTER_CUBIC` interpolation to a minimum height of 800px if it falls below the threshold.
+
+### 3. 🚫 Smart Duplicate Prevention Engine
+To prevent database clutter and redundant chart data points, MedScan implements a multi-criteria duplicate checking algorithm (`check_duplicate_report`). Rather than a basic raw comparison, the engine analyzes reports **value-by-value** at the biomarker level:
+- **Biomarker Intersection**: The check only compares biomarkers (by name/key) that are present in both the new report and the existing report (non-empty intersection).
+- **Unit Standardization**: The engine dynamically standardizes clinical units before comparing values (e.g., converting RBC/WBC, platelet counts, absolute cell counts, and eGFR to a common unit to avoid false mismatches).
+- **2% Numeric Tolerance**: If the standardized values are numeric, they match if the difference is within **2%** (accounting for rounding/precision differences).
+- **Qualitative Comparison**: Non-numeric/qualitative biomarkers fallback to a trimmed, case-insensitive string match.
+- **Multi-Criteria Validation**:
+  - **Criteria 1 (Exact Reference Match)**: Matches normalized, alphanumeric-only `report_reference` (e.g. Accession/Report Number).
+  - **Criteria 1B (Exact Lab Number Match)**: Matches normalized, alphanumeric-only `labreference` (e.g. Lab Specimen Number).
+  - **Criteria 2 (High Clinical Fingerprint Overlap)**: Matches reports sharing $\ge 3$ biomarker keys with $\ge 90\%$ identical clinical values, regardless of date.
+  - **Criteria 3 (Low Contradiction Clinical Match)**: Matches reports sharing $\ge 2$ biomarker keys with $100\%$ identical values, provided dates and patient IDs do not explicitly contradict.
+  - **Criteria 4 (Same Date & Patient ID Match)**: Matches reports with identical dates, patient IDs, and $\ge 80\%$ clinical overlap.
+  - **Criteria 5 (Fuzzy Date Match)**: Matches reports with dates within $\pm 2$ days, identical patient IDs, and $\ge 80\%$ clinical overlap.
+
+### 4. 🕒 24h Time Normalization
+Time values extracted from reports or entered manually are parsed and formatted into standard 24h `HH:MM:SS` format. If a report specifies a collection time and reported/printed time, both are isolated. If only one time is specified, the system maps it to both fields to prevent data gaps.
+
+### 5. 🗃️ Database Layout & Swapped Fields
+To resolve terminology overlaps, the database schema aligns as follows:
+- **`report_reference`** (formerly `sample_id`): Represents the unique printed report reference document identifier (e.g. Accession No., Episode No.).
+- **`labreference`** (formerly `lab_reference`): Represents the unique physical lab sample specimen container ID (e.g. Lab No., Specimen ID).
+- **`original_labreference`**: Retains the raw, unmodified report reference string from the OCR engine for data verification.
+Existing records have been fully migrated by swapping column values and updating key constraints to maintain historical consistency.
+
+### 6. 🔐 Secure User Authentication & Isolation
+MedScan features JWT-based authentication using PyJWT and bcrypt. Every database query filters records using the user ID parsed from the verified authorization headers, ensuring complete data privacy and security.
+
+### 7. 🤖 AI Health Summary & Physiological Correlation Engine
+MedScan integrates an automated clinical summary generator that delivers immediate, layman-friendly insights whenever the user refreshes or loads their trend dashboard:
+- **Empathetic Layman Translation**: Avoids dry clinical tables by translating out-of-range indicators into simple, readable wellness terms.
+- **Physiological Correlations**: Uses OpenAI LLM structures to trace biological dependencies between multiple metrics (e.g., lipid profile cholesterol ratios correlated with glycemic indicators).
+- **Smooth Deep-Dive Transition**: Embedded link allows the user to immediately transition to the AI Chat view, auto-preserving their current dashboard context.
 
 ## 🏗️ Architecture
 

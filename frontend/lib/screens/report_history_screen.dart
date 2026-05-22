@@ -309,8 +309,8 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
     final testName = report.structuredData?.testName;
     final resultCount = report.structuredData?.results.length ?? 0;
 
-    final labRef = report.structuredData?.labreference;
-    final hasLabRef = labRef != null && labRef.trim().isNotEmpty;
+    final reportRef = report.structuredData?.reportReference;
+    final hasReportRef = reportRef != null && reportRef.trim().isNotEmpty;
 
     return GestureDetector(
       onTap: () {
@@ -335,10 +335,10 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Title: Lab Reference if available, otherwise Scan date
+                // Title: Report Reference if available, otherwise Scan date
                 Expanded(
                   child: Text(
-                    hasLabRef ? 'Ref: $labRef' : 'Scan: ${_formatDate(report.uploadTime)}',
+                    hasReportRef ? 'Ref: $reportRef' : 'Scan: ${_formatDate(report.uploadTime)}',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
                     overflow: TextOverflow.ellipsis,
                   ),

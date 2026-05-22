@@ -68,7 +68,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
 JWT_SECRET = os.getenv("JWT_SECRET", "medscan_default_secret")
 JWT_ALGORITHM = "HS256"
@@ -365,8 +365,8 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
     metadata_descriptions = [
         "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
-        "labreference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in sample_id. If none is found, use '')",
-        "sample_id (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in labreference. If none is found, use '')",
+        "labreference (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in report_reference. If none is found, use '')",
+        "report_reference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in labreference. If none is found, use '')",
         "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
         "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
@@ -376,7 +376,7 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender", "lab"]
+    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -403,17 +403,17 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     Fields to extract (all as strings):
     {keys_list}
  
-    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND sample_id:
+    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND report_reference:
     There are THREE separate identifier fields. Read the label on the report carefully before assigning:
     
     1. 'medid' = PATIENT identifier. Labels: 'Patient ID', 'MRN', 'NRIC', 'Passport No', 'Patient Ref'.
-    2. 'labreference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
-       This is the ID of the PRINTED REPORT DOCUMENT. It is NOT the lab sample number.
-    3. 'sample_id' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
+    2. 'labreference' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
        This is the ID of the PHYSICAL SAMPLE (blood tube, urine cup). It is NOT the report reference.
+    3. 'report_reference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
+       This is the ID of the PRINTED REPORT DOCUMENT. It is NOT the lab sample number.
     
-    DECISION RULE: If the label says 'Lab No' or 'Lab Number' or 'Specimen' → it is sample_id, NOT labreference.
-    If the label says 'Report No' or 'Accession No' or 'Reference No' or 'Episode No' → it is labreference, NOT sample_id.
+    DECISION RULE: If the label says 'Lab No' or 'Lab Number' or 'Specimen' → it is labreference, NOT report_reference.
+    If the label says 'Report No' or 'Accession No' or 'Reference No' or 'Episode No' → it is report_reference, NOT labreference.
     If the document has both, extract each into its correct field. If only one identifier exists beyond medid, determine if it identifies the report or the sample based on its label.
 
     CRITICAL WARNING ON TIMESTAMPS:
@@ -525,8 +525,8 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
     # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
     metadata_descriptions = [
         "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
-        "labreference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in sample_id. If none is found, use '')",
-        "sample_id (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in labreference. If none is found, use '')",
+        "labreference (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in report_reference. If none is found, use '')",
+        "report_reference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in labreference. If none is found, use '')",
         "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
         "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
@@ -536,7 +536,7 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender", "lab"]
+    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -557,17 +557,17 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
     Fields to extract (all as strings):
     {keys_list}
 
-    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND sample_id:
+    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND report_reference:
     There are THREE separate identifier fields. Read the label on the report carefully before assigning:
     
     1. 'medid' = PATIENT identifier. Labels: 'Patient ID', 'MRN', 'NRIC', 'Passport No', 'Patient Ref'.
-    2. 'labreference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
-       This is the ID of the PRINTED REPORT DOCUMENT. It is NOT the lab sample number.
-    3. 'sample_id' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
+    2. 'labreference' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
        This is the ID of the PHYSICAL SAMPLE (blood tube, urine cup). It is NOT the report reference.
+    3. 'report_reference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
+       This is the ID of the PRINTED REPORT DOCUMENT. It is NOT the lab sample number.
     
-    DECISION RULE: If the label says 'Lab No' or 'Lab Number' or 'Specimen' → it is sample_id, NOT labreference.
-    If the label says 'Report No' or 'Accession No' or 'Reference No' or 'Episode No' → it is labreference, NOT sample_id.
+    DECISION RULE: If the label says 'Lab No' or 'Lab Number' or 'Specimen' → it is labreference, NOT report_reference.
+    If the label says 'Report No' or 'Accession No' or 'Reference No' or 'Episode No' → it is report_reference, NOT labreference.
     If the document has both, extract each into its correct field. If only one identifier exists beyond medid, determine if it identifies the report or the sample based on its label.
 
     CRITICAL WARNING ON TIMESTAMPS:
@@ -633,7 +633,7 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
 
 # List of exact columns in staging_medical_records table
 STAGING_SCHEMA_KEYS = [
-    "medid", "original_medid", "labreference", "original_labreference", "sample_id", "lab", "collected", "time", "reported_time", 
+    "medid", "original_medid", "labreference", "original_labreference", "report_reference", "lab", "collected", "time", "reported_time", 
     "gender",
     "urine_colour", "appearance", "specific_gravity", "ph", "proteins", "glucose", 
     "bilirubin", "ketones", "blood", "urobilinogen", "nitrites", "wbc_pus_cells_hpf", 
@@ -659,7 +659,7 @@ STAGING_SCHEMA_KEYS = [
 SCHEMA_TYPES = {
     "medid": "BIGINT",
     "labreference": "TEXT",
-    "sample_id": "TEXT",
+    "report_reference": "TEXT",
     "lab": "TEXT",
     "collected": "DATE",
     "time": "TIME",
@@ -943,7 +943,7 @@ def normalize_structured_data(data: dict) -> dict:
     raw_medid = data.get("medid", data.get("patient_id", ""))
     raw_labref = data.get("labreference", "")
     raw_lab = data.get("lab", data.get("hospital_name", ""))
-    raw_sample_id = data.get("sample_id", "")
+    raw_report_ref = data.get("report_reference", data.get("sample_id", ""))
     
     def clean_id(val):
         if not val: return ""
@@ -953,7 +953,7 @@ def normalize_structured_data(data: dict) -> dict:
         if key == "original_medid":
             flat[key] = str(raw_medid) if raw_medid is not None else ""
         elif key == "original_labreference":
-            flat[key] = str(raw_labref) if raw_labref is not None else ""
+            flat[key] = str(raw_report_ref) if raw_report_ref is not None else ""
         elif key == "medid":
             flat[key] = clean_id(raw_medid)
         elif key == "labreference":
@@ -961,8 +961,8 @@ def normalize_structured_data(data: dict) -> dict:
             flat[key] = str(raw_labref).strip().upper() if raw_labref else ""
         elif key == "lab":
             flat[key] = str(raw_lab).strip()
-        elif key == "sample_id":
-            flat[key] = str(raw_sample_id).strip()
+        elif key == "report_reference":
+            flat[key] = str(raw_report_ref).strip()
         elif key == "collected":
             flat[key] = collected_val
         elif key == "time":
@@ -989,7 +989,7 @@ def normalize_structured_data(data: dict) -> dict:
 
     # 3. Map to UI Format (for the Flutter app)
     results = []
-    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others", "gender", "lab"]
+    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "others", "gender", "lab"]
     for key, value in flat.items():
         if key in metadata_keys or not value: continue
         
@@ -1036,7 +1036,7 @@ def normalize_structured_data(data: dict) -> dict:
         "test_name": str(data.get("test_name", "")).strip(),
         "doctor_name": str(data.get("doctor_name", "")).strip(),
         "hospital_name": flat.get("lab", "").strip(),
-        "sample_id": flat.get("sample_id", "").strip()
+        "report_reference": flat.get("report_reference", "").strip()
     }
 
 def get_standard_unit_for_key(key: str) -> str:
@@ -1252,7 +1252,7 @@ async def mark_report_sent(report_id: str):
                         performed_numeric_extraction = True
                         metadata_keys = {
                             "medid", "original_medid", "labreference", "original_labreference", 
-                            "sample_id", "collected", "time", "reported_time", "gender", "report_id"
+                            "report_reference", "collected", "time", "reported_time", "gender", "report_id"
                         }
                         for k, v in list(sanitized_data.items()):
                             if k in metadata_keys or v is None:
@@ -1425,9 +1425,9 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
         new_date = backend_normalize_date(new_data.get("collected", ""))
         new_medid = str(new_data.get("medid", "")).strip().upper()
         new_labref = clean_ref(new_data.get("labreference", ""))
-        new_sample_id = clean_ref(new_data.get("sample_id", ""))
+        new_report_ref = clean_ref(new_data.get("report_reference", new_data.get("sample_id", "")))
         
-        print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, CleanedLabRef={new_labref}, CleanedSampleID={new_sample_id}")
+        print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, CleanedLabNumber={new_labref}, CleanedReportRef={new_report_ref}")
         
         # Fetch all reports for this user
         if STORAGE_ENGINE == "supabase" and supabase:
@@ -1457,23 +1457,12 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
             old_date = backend_normalize_date(s_data.get("collected", ""))
             old_medid = str(s_data.get("medid", "")).strip().upper()
             old_labref = clean_ref(s_data.get("labreference", ""))
-            old_sample_id = clean_ref(s_data.get("sample_id", ""))
-
-            # --- CRITERIA 1: Exact Cleaned Lab Reference Match ---
-            # Handles dashes, slashes, and spaces in references (e.g. B165-AAF4 vs B165AAF4)
-            if new_labref and old_labref and new_labref == old_labref:
-                print(f" -> MATCH FOUND: Normalized Lab Reference ({new_labref})")
-                return True
-
-            # --- CRITERIA 1B: Exact Cleaned Sample ID (Lab Number) Match ---
-            if new_sample_id and old_sample_id and new_sample_id == old_sample_id:
-                print(f" -> MATCH FOUND: Normalized Sample ID ({new_sample_id})")
-                return True
+            old_report_ref = clean_ref(s_data.get("report_reference", s_data.get("sample_id", "")))
 
             # Calculate clinical overlap based on INTERSECTION of present keys
             match_count = 0
             shared_keys = []
-            metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others"]
+            metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "others"]
             
             for key in STAGING_SCHEMA_KEYS:
                 if key in metadata_keys: continue
@@ -1488,16 +1477,28 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
                         match_count += 1
             
             num_shared = len(shared_keys)
-            match_percentage = (match_count / num_shared * 100) if num_shared > 0 else 0
+            match_percentage = (match_count / num_shared * 100) if num_shared > 0 else 0.0
             
             print(f" -> Comparing to existing report: Date={old_date}, PatientID={old_medid}, LabRef={old_labref}")
             print(f"    Shared keys count: {num_shared}, Match count: {match_count}, Match percentage: {match_percentage:.1f}%")
+
+            is_dup_current = False
+
+            # --- CRITERIA 1: Exact Cleaned Report Reference Match ---
+            if new_report_ref and old_report_ref and new_report_ref == old_report_ref:
+                print(f" -> MATCH FOUND: Normalized Report Reference ({new_report_ref})")
+                is_dup_current = True
+
+            # --- CRITERIA 1B: Exact Cleaned Lab Number Match ---
+            if new_labref and old_labref and new_labref == old_labref:
+                print(f" -> MATCH FOUND: Normalized Lab Number ({new_labref})")
+                is_dup_current = True
 
             # --- CRITERIA 2: High Clinical Match (Regardless of Date) ---
             # If they share >= 3 keys and >= 90% match, it's a duplicate
             if num_shared >= 3 and match_percentage >= 90:
                 print(f" -> MATCH FOUND: High Clinical Fingerprint Overlap ({match_percentage:.1f}%)")
-                return True
+                is_dup_current = True
                 
             # --- CRITERIA 3: Low Contradiction Clinical Match ---
             # If they share >= 2 keys, match 100%, and dates/IDs don't contradict (either match or one is missing)
@@ -1506,14 +1507,14 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
                 ids_dont_contradict = not new_medid or not old_medid or new_medid == old_medid
                 if dates_dont_contradict and ids_dont_contradict:
                     print(f" -> MATCH FOUND: 100% clinical match of shared keys ({num_shared} keys) without contradiction")
-                    return True
+                    is_dup_current = True
 
             # --- CRITERIA 4: Same Date + Same Patient ID Match ---
             if new_date and old_date and new_date == old_date:
                 medid_match = (not new_medid or not old_medid or new_medid == old_medid)
                 if medid_match and num_shared >= 1 and match_percentage >= 80:
                     print(f" -> MATCH FOUND: Same Date & Patient ID with {match_percentage:.1f}% clinical match")
-                    return True
+                    is_dup_current = True
 
             # --- CRITERIA 5: Fuzzy Date Match (+/- 2 days) + Same Patient ID Match ---
             if new_date and old_date:
@@ -1526,9 +1527,12 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
                         medid_match = (not new_medid or not old_medid or new_medid == old_medid)
                         if medid_match and num_shared >= 2 and match_percentage >= 80:
                             print(f" -> MATCH FOUND: Fuzzy Date Match ({day_diff} days diff) & {match_percentage:.1f}% clinical match")
-                            return True
+                            is_dup_current = True
                 except Exception as ex:
                     pass
+
+            if is_dup_current:
+                return True
 
         print(" -> NO DUPLICATE FOUND")
         return False
@@ -1795,6 +1799,128 @@ async def analyze_health_trends(
         return {"analysis": analysis_text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Clinical analysis engine error: {e}")
+
+@app.get("/api/reports/health-summary")
+async def get_health_summary(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("staging_medical_records").select("*, reports!inner(*)").eq("reports.user_id", user_id).execute()
+        staged_records = response.data or []
+        
+        reports = []
+        for row in staged_records:
+            r = row["reports"]
+            r["structured_data"] = {
+                "patient_id": row.get("medid"),
+                "date": row.get("collected"),
+                "results": [{"key": k, "value": v} for k, v in row.items() if k not in ["staging_record_id", "report_id", "reports"] and v is not None]
+            }
+            reports.append(r)
+            
+        reports.sort(key=lambda x: x.get("upload_time", ""), reverse=False)
+
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT s.*, r.upload_time, r.status, r.filename 
+            FROM staging_medical_records s
+            JOIN reports r ON s.report_id = r.id
+            WHERE r.user_id = ? ORDER BY r.upload_time ASC
+        ''', (user_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        reports = []
+        for row in rows:
+            d = dict(row)
+            r = {
+                "upload_time": d.pop("upload_time"),
+                "status": d.pop("status"),
+                "filename": d.pop("filename"),
+                "structured_data": {
+                    "patient_id": d.get("medid"),
+                    "date": d.get("collected"),
+                    "results": [{"key": k, "value": v} for k, v in d.items() if k not in ["staging_record_id", "report_id"] and v is not None]
+                }
+            }
+            reports.append(r)
+
+    valid_reports = [r for r in reports if r.get("status") in ["completed", "sent"] and r.get("structured_data") and r["structured_data"].get("results")]
+    
+    if not valid_reports:
+        return {"summary": "Please upload some medical reports to see your AI health summary here."}
+
+    def parse_dt(date_str: str, fallback_str: str) -> datetime:
+        if not date_str:
+            return datetime.fromisoformat(fallback_str)
+        formats = [
+            "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y",
+            "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d",
+            "%Y-%m-%d", "%d-%m-%Y"
+        ]
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str.strip(), fmt)
+            except ValueError:
+                pass
+        try:
+            return datetime.fromisoformat(date_str.strip())
+        except ValueError:
+            pass
+        return datetime.fromisoformat(fallback_str)
+
+    valid_reports.sort(key=lambda x: parse_dt(x.get("structured_data", {}).get("date"), x["upload_time"]))
+
+    data_summary = []
+    for r in valid_reports:
+        date_str = r.get("structured_data", {}).get("date") or r["upload_time"][:10]
+        results_list = r["structured_data"]["results"]
+        items = []
+        for res in results_list:
+            k = res.get('key', '')
+            v = res.get('value')
+            if v is not None and str(v).strip() not in ['', '-']:
+                items.append(f"{k}: {v}")
+        if items:
+            data_summary.append(f"Date: {date_str}\n" + "\n".join(items))
+
+    if not data_summary:
+        return {"summary": "Please upload some medical reports with biomarker values to see your AI health summary here."}
+
+    compiled_data = "\n\n".join(data_summary)
+
+    prompt = f"""
+    You are an empathetic, warm, and highly professional clinical AI assistant. Your task is to provide a highly concise, information-dense, layman-friendly health summary for a patient based on their medical report history.
+
+    PATIENT MEDICAL HISTORY DATA:
+    {compiled_data}
+
+    YOUR TASKS:
+    1. SUMMARY: Provide a single direct sentence summarizing the overall health trajectory based on the latest data.
+    2. ABNORMAL BIOMARKERS & PHYSIOLOGICAL CORRELATIONS: Compactly identify biomarkers that are out of standard clinical reference ranges, stating their exact values. Explain in a single simple sentence how these out-of-range metrics physiologically connect (e.g. how lipid and glucose issues relate to metabolic energy).
+    3. ACTIONABLE STEPS: Suggest exactly 2 simple, high-impact, and supportive lifestyle/dietary adjustments.
+
+    CONSTRAINTS:
+    - Tone/Language: Empathetic, supportive, and in simple layman terms. Use plain English; define any necessary medical terms instantly.
+    - Style: Start directly with the analysis. STRICTLY avoid introductory sentences (like "Based on your reports...") or polite final remarks (like "Consult your doctor..."). 
+    - Formatting: Clean markdown. Use **bolding** for biomarker names and values/units. Use concise bullet points for scannability.
+    - Length: Word count MUST be between 100 to 175 words. Do not exceed this limit; it must fit compactly on a mobile dashboard screen while preserving all key clinical data points.
+    - Do not include any HTML tags.
+    """
+
+    try:
+        response = llm_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": "You are a warm, supportive, and expert clinical AI assistant summarizing patient lab reports in simple layman terms."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        summary_text = response.choices[0].message.content.strip()
+        return {"summary": summary_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Summary generation error: {e}")
 
 @app.post("/api/chat/sessions")
 async def create_chat_session(request: CreateSessionRequest, current_user: dict = Depends(get_current_user)):
@@ -2524,7 +2650,7 @@ async def send_report(report_id: str):
     return {"status": "sent", "message": "Report verified and submitted successfully"}
 
 @app.delete("/api/reports/{report_id}")
-async def delete_report(report_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_report_endpoint(report_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a report."""
     user_id = current_user["id"]
     report = await get_report_by_id(report_id)
@@ -2533,18 +2659,6 @@ async def delete_report(report_id: str, current_user: dict = Depends(get_current
     if report.get("user_id") and report.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
         
-    if STORAGE_ENGINE == "supabase" and supabase:
-        # Delete from staging_medical_records first (child table)
-        try:
-            supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
-        except Exception as e:
-            print(f"[DELETE STAGING] Warning: {e}")
-        # Then delete from reports
-        supabase.table("reports").delete().eq("id", report_id).execute()
-    else:
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
-        conn.commit()
-        conn.close()
+    await delete_report(report_id)
     return {"status": "deleted", "message": "Report deleted successfully"}
 

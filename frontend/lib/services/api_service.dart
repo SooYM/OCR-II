@@ -247,6 +247,22 @@ class ApiService {
 
   // ─── Health Analysis ──────────────────────────────────────────────────────
 
+  /// Fetch layman AI health summary of the user's latest reports.
+  static Future<String> fetchHealthSummary() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/api/reports/health-summary'),
+      headers: _headers,
+    ).timeout(const Duration(seconds: 45));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['summary'] as String? ?? 'No summary returned.';
+    } else {
+      final detail = _parseError(response);
+      throw ApiException(detail, response.statusCode);
+    }
+  }
+
   /// Fetch AI analysis of health trends using LLM, optionally with a specific user query.
   static Future<String> analyzeHealthTrends({String? query, String? startDate, String? endDate}) async {
     final Map<String, String> params = {};

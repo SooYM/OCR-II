@@ -34,6 +34,9 @@ class _MainScreenState extends State<MainScreen> {
   List<MedicalReport> _reports = [];
   bool _isLoadingDashboard = true;
   String? _dashboardError;
+  String? _healthSummary;
+  bool _isLoadingSummary = false;
+  String? _summaryError;
   
   // Multi-Attribute Chart state
   final Set<String> _selectedMultiAttributes = {};
@@ -69,10 +72,15 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _isLoadingDashboard = true;
       _dashboardError = null;
+      _isLoadingSummary = true;
+      _summaryError = null;
     });
 
+    final fetchReportsFuture = ApiService.fetchMyReports();
+    final fetchSummaryFuture = ApiService.fetchHealthSummary();
+
     try {
-      final reports = await ApiService.fetchMyReports();
+      final reports = await fetchReportsFuture;
       if (mounted) {
         setState(() {
           _reports = reports;
@@ -84,6 +92,23 @@ class _MainScreenState extends State<MainScreen> {
         setState(() {
           _isLoadingDashboard = false;
           _dashboardError = e.toString();
+        });
+      }
+    }
+
+    try {
+      final summary = await fetchSummaryFuture;
+      if (mounted) {
+        setState(() {
+          _healthSummary = summary;
+          _isLoadingSummary = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingSummary = false;
+          _summaryError = e.toString();
         });
       }
     }
@@ -897,12 +922,225 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildHealthSummarySection() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ShaderMask(
+                shaderCallback: (bounds) => AppTheme.primaryGradient(context).createShader(bounds),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'AI Health Summary',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.accentGradient(context),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'AI ASSISTED',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GlassCard(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_isLoadingSummary) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24.0),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Analyzing biomarkers & generating summary...',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else if (_summaryError != null) ...[
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: AppTheme.error),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Failed to generate health summary.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, size: 20),
+                        onPressed: () async {
+                          setState(() {
+                            _isLoadingSummary = true;
+                            _summaryError = null;
+                          });
+                          try {
+                            final summary = await ApiService.fetchHealthSummary();
+                            if (mounted) {
+                              setState(() {
+                                _healthSummary = summary;
+                                _isLoadingSummary = false;
+                              });
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              setState(() {
+                                _summaryError = e.toString();
+                                _isLoadingSummary = false;
+                              });
+                            }
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ] else if (_healthSummary != null) ...[
+                  MarkdownBody(
+                    data: _healthSummary!,
+                    styleSheet: MarkdownStyleSheet(
+                      p: TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.85),
+                      ),
+                      strong: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      listBullet: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _currentIndex = 2;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(100),
+                      child: Ink(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          gradient: AppTheme.primaryGradient(context),
+                          borderRadius: BorderRadius.circular(100),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 15),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'wanted to know more? Chat with ai',
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  Text(
+                    'No summary available. Pull to refresh or upload a report.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDashboardContent() {
+    if (_reports.isEmpty) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.analytics_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+          const SizedBox(height: 16),
+          const Text('No Data Available', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          const Text('Scan a medical report to see your analytics.', style: TextStyle(fontSize: 14)),
+        ],
+      );
+    }
+
     // Filter reports based on the selected date range
     final filteredReports = _reports.where((r) {
       if (_selectedDateRange == null) return true;
       final date = _parseDate(r.structuredData?.date, r.uploadTime);
-      // Include boundary dates
       return (date.isAfter(_selectedDateRange!.start) || date.isAtSameMomentAs(_selectedDateRange!.start)) && 
              (date.isBefore(_selectedDateRange!.end) || date.isAtSameMomentAs(_selectedDateRange!.end));
     }).toList();
@@ -913,36 +1151,6 @@ class _MainScreenState extends State<MainScreen> {
         r.structuredData != null && 
         r.structuredData!.results.isNotEmpty
     ).toList()..sort((a, b) => _parseDate(a.structuredData?.date, a.uploadTime).compareTo(_parseDate(b.structuredData?.date, b.uploadTime)));
-
-    if (validReports.isEmpty) {
-      return Column(
-        children: [
-          if (_selectedDateRange != null) _buildFilterActiveIndicator(),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.analytics_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
-                  const SizedBox(height: 16),
-                  Text(_selectedDateRange != null ? 'No Data in this Range' : 'No Data Available', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Text(_selectedDateRange != null ? 'Try selecting a wider date range.' : 'Scan a medical report to see your analytics.', style: const TextStyle(fontSize: 14)),
-                  if (_selectedDateRange != null) ...[
-                    const SizedBox(height: 24),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _selectedDateRange = null),
-                      icon: const Icon(Icons.filter_list_off_rounded),
-                      label: const Text('Clear Date Filter'),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
 
     // Map of test keys to display names
     final Map<String, String> testKeyToName = {};
@@ -977,21 +1185,47 @@ class _MainScreenState extends State<MainScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // AI Health Summary Section at the top
+          _buildHealthSummarySection(),
+          
           if (_selectedDateRange != null) _buildFilterActiveIndicator(),
           
-          // Multi-Attribute Comparison Section
-          _buildMultiAttributeHeader(),
-          if (_isMultiAttributeExpanded) ...[
-            _buildAttributeSelector(multiAttributeKeys, testKeyToName),
-            const SizedBox(height: 12),
-            _buildMultiAttributeChart(validReports, testKeyToName),
+          if (validReports.isEmpty) ...[
+            const SizedBox(height: 40),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.date_range_rounded, size: 48, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+                  const SizedBox(height: 16),
+                  const Text('No Data in this Range', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  const Text('Try selecting a wider date range.', style: TextStyle(fontSize: 14)),
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _selectedDateRange = null),
+                    icon: const Icon(Icons.filter_list_off_rounded),
+                    label: const Text('Clear Date Filter'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 100),
+          ] else ...[
+            // Multi-Attribute Comparison Section
+            _buildMultiAttributeHeader(),
+            if (_isMultiAttributeExpanded) ...[
+              _buildAttributeSelector(multiAttributeKeys, testKeyToName),
+              const SizedBox(height: 12),
+              _buildMultiAttributeChart(validReports, testKeyToName),
+            ],
+            const SizedBox(height: 40),
+            
+            _buildCategorizedGraphs(validReports, uniqueTestKeys, testKeyToName),
+            const SizedBox(height: 32),
+            _buildRecentResultsTable(validReports, uniqueTestKeys, testKeyToName),
+            const SizedBox(height: 100), // padding for bottom nav
           ],
-          const SizedBox(height: 40),
-          
-          _buildCategorizedGraphs(validReports, uniqueTestKeys, testKeyToName),
-          const SizedBox(height: 32),
-          _buildRecentResultsTable(validReports, uniqueTestKeys, testKeyToName),
-          const SizedBox(height: 100), // padding for bottom nav
         ],
       ),
     );

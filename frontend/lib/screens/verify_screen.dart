@@ -440,23 +440,23 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       ),
                       const Divider(),
                       _buildField(
-                        label: 'Lab Reference',
-                        value: _data.labreference ?? '',
+                        label: 'Report Reference',
+                        value: _data.reportReference ?? '',
                         icon: Icons.tag_outlined,
                         hintText: 'e.g., LAB-2024-00123',
                         onChanged: (v) {
-                          _data.labreference = v;
+                          _data.reportReference = v;
                           _hasChanges = true;
                         },
                       ),
                       const Divider(),
                       _buildField(
-                        label: 'Lab Number / Sample ID',
-                        value: _data.sampleId ?? '',
+                        label: 'Lab Number',
+                        value: _data.labreference ?? '',
                         icon: Icons.numbers_outlined,
                         hintText: 'e.g., 140222',
                         onChanged: (v) {
-                          _data.sampleId = v;
+                          _data.labreference = v;
                           _hasChanges = true;
                         },
                       ),
