@@ -451,6 +451,17 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       ),
                       const Divider(),
                       _buildField(
+                        label: 'Lab Number / Sample ID',
+                        value: _data.sampleId ?? '',
+                        icon: Icons.numbers_outlined,
+                        hintText: 'e.g., 140222',
+                        onChanged: (v) {
+                          _data.sampleId = v;
+                          _hasChanges = true;
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
                         label: 'Doctor',
                         value: _data.doctorName ?? '',
                         icon: Icons.medical_information_outlined,

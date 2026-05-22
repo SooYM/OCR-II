@@ -31,6 +31,8 @@ from supabase import create_client, Client
 
 from unit_converter import convert_unit
 from services.scanner.pipeline import DocumentScanner
+from services.scanner.splitter import split_image_at_gap
+from services.scanner.enhancer import upscale_if_small
 
 # Google Cloud Dependencies
 try:
@@ -332,9 +334,21 @@ def preprocess_image(image_path: Path) -> Path:
         print(f"Image preprocessing failed: {e}")
         return image_path
 
-def encode_image(image_path: Path) -> str:
+def encode_image(image_path: Path, do_upscale: bool = True) -> str:
     # Apply preprocessing before encoding
     processed_path = preprocess_image(image_path)
+    
+    # Optionally upscale small images (e.g. split halves) for better Vision API accuracy
+    if do_upscale:
+        try:
+            img = cv2.imread(str(processed_path))
+            if img is not None:
+                upscaled = upscale_if_small(img, min_height=800)
+                if upscaled is not img:  # Was upscaled
+                    cv2.imwrite(str(processed_path), upscaled)
+        except Exception as e:
+            print(f"[ENCODE] Upscale check failed (non-fatal): {e}")
+    
     with open(processed_path, "rb") as image_file:
         b64 = base64.b64encode(image_file.read()).decode('utf-8')
     # Cleanup temp file
@@ -343,15 +357,16 @@ def encode_image(image_path: Path) -> str:
     return b64
 
 async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
-    """Uses OpenAI Vision to parse an image directly into structured JSON."""
-    base64_image = encode_image(file_path)
+    """Uses OpenAI Vision to parse an image directly into structured JSON by splitting it into halves using content-aware row-gap detection."""
+    split_paths = split_image_at_gap(file_path)
+    image_blocks = []
 
     # Dynamically build the prompt based on the schema
     # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
     metadata_descriptions = [
-        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the patient, NOT the report or lab. If none is found, use '')",
-        "labreference (The unique primary key or ID for this specific report/test document, e.g., 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Lab No'. Do NOT confuse this with the patient's ID/medid. We need the unique number identifying this specific test sheet. If none is found, use '')",
-        "sample_id (The ID of the lab sample/specimen, e.g., 'Specimen No', 'Sample ID'. If none is found, use '')",
+        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
+        "labreference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in sample_id. If none is found, use '')",
+        "sample_id (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in labreference. If none is found, use '')",
         "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
         "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
@@ -361,15 +376,23 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender"]
+    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender", "lab"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
     keys_list = "\n".join([f"- {k}" for k in all_keys])
     
+    num_sections = len(split_paths)
+    split_info = f"""You are given {num_sections} image section(s) of a SINGLE medical report page.
+    The page has been split into top and bottom halves for better readability.
+    There may be a small overlap between the sections — if the same test row appears in both halves, extract it ONCE only (deduplicate).
+    Extract data from ALL sections and merge them into ONE unified JSON result.""" if num_sections > 1 else "You are given a single medical report image."
+
     prompt = f"""
+    {split_info}
+
     You are an expert medical data extraction assistant.
-    Extract medical data directly from the image and return it as a JSON object.
+    Extract medical data directly from the image(s) and return it as a JSON object.
     Ensure you extract ALL test items accurately and do not miss any rows.
     
     The output MUST exactly match the following JSON keys. 
@@ -380,12 +403,18 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     Fields to extract (all as strings):
     {keys_list}
  
-    CRITICAL WARNING ON IDENTIFIERS:
-    - DO NOT confuse the Patient ID (medid) with the Report ID / Lab Reference (labreference).
-    - 'medid' refers to the patient's MRN / NRIC / Patient ID / Patient Reference No.
-    - 'labreference' refers to the unique identifier for this specific printed report document (Report No, Accession No, Episode No, Lab No, Ref No).
-    If you extract a number as 'medid', check if it is labelled as 'Lab No', 'Report No', or 'Accession No' - if it is, it belongs in 'labreference', NOT 'medid'.
-    If the document has both a Patient ID (MRN) and a Report ID (Accession No), extract MRN into 'medid' and Accession No into 'labreference'.
+    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND sample_id:
+    There are THREE separate identifier fields. Read the label on the report carefully before assigning:
+    
+    1. 'medid' = PATIENT identifier. Labels: 'Patient ID', 'MRN', 'NRIC', 'Passport No', 'Patient Ref'.
+    2. 'labreference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
+       This is the ID of the PRINTED REPORT DOCUMENT. It is NOT the lab sample number.
+    3. 'sample_id' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
+       This is the ID of the PHYSICAL SAMPLE (blood tube, urine cup). It is NOT the report reference.
+    
+    DECISION RULE: If the label says 'Lab No' or 'Lab Number' or 'Specimen' → it is sample_id, NOT labreference.
+    If the label says 'Report No' or 'Accession No' or 'Reference No' or 'Episode No' → it is labreference, NOT sample_id.
+    If the document has both, extract each into its correct field. If only one identifier exists beyond medid, determine if it identifies the report or the sample based on its label.
 
     CRITICAL WARNING ON TIMESTAMPS:
     - Medical reports contain multiple times: 'Collected' (collection/drawn time), 'Received' (time sample reached the lab), and 'Reported/Printed' (time report was finalized/printed).
@@ -421,6 +450,16 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     """
     
     try:
+        # Encode each split image
+        for sp in split_paths:
+            b64 = encode_image(sp)
+            image_blocks.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{b64}"
+                }
+            })
+
         response = llm_client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
@@ -429,12 +468,7 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
+                        *image_blocks
                     ]
                 }
             ],
@@ -448,24 +482,51 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     except Exception as e:
         print(f"LLM Parsing failed: {e}")
         return normalize_structured_data({})
+    finally:
+        # Cleanup temp split files
+        for sp in split_paths:
+            if sp != file_path and sp.exists():
+                try:
+                    sp.unlink()
+                except Exception as ex:
+                    print(f"Failed to delete temp split file {sp}: {ex}")
 
 async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[str, Any]:
-    """Uses OpenAI Vision to parse MULTIPLE page images into a single structured JSON."""
-    # Build image content blocks for all pages
+    """Uses OpenAI Vision to parse MULTIPLE page images into a single structured JSON.
+    Each page is split into halves using content-aware row-gap detection for better accuracy."""
+    # Build image content blocks for all pages, splitting each page into halves
     image_blocks = []
+    all_split_paths = []  # Track split files for cleanup
+    total_sections = 0
+    
     for i, fp in enumerate(file_paths):
-        b64 = encode_image(fp)
-        image_blocks.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
-        })
+        # Split each page into halves using content-aware gap detection
+        page_splits = split_image_at_gap(fp)
+        all_split_paths.extend([sp for sp in page_splits if sp != fp])
+        
+        for j, sp in enumerate(page_splits):
+            section_label = f"Page {i+1}"
+            if len(page_splits) > 1:
+                section_label += f" ({'top half' if j == 0 else 'bottom half'})"
+            
+            b64 = encode_image(sp)
+            # Add a text label before each image so the LLM knows which section it is
+            image_blocks.append({
+                "type": "text",
+                "text": f"--- {section_label} ---"
+            })
+            image_blocks.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+            })
+            total_sections += 1
 
     # Dynamically build the prompt based on the schema
     # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
     metadata_descriptions = [
-        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the patient, NOT the report or lab. If none is found, use '')",
-        "labreference (The unique primary key or ID for this specific report/test document, e.g., 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Lab No'. Do NOT confuse this with the patient's ID/medid. We need the unique number identifying this specific test sheet. If none is found, use '')",
-        "sample_id (The ID of the lab sample/specimen, e.g., 'Specimen No', 'Sample ID'. If none is found, use '')",
+        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
+        "labreference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in sample_id. If none is found, use '')",
+        "sample_id (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in labreference. If none is found, use '')",
         "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
         "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
@@ -475,17 +536,18 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender"]
+    metadata_keys_to_exclude = ["medid", "labreference", "sample_id", "collected", "time", "reported_time", "gender", "lab"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
     keys_list = "\n".join([f"- {k}" for k in all_keys])
 
     prompt = f"""
-    You are given {len(file_paths)} page(s) of a SINGLE medical blood report.
-    Extract ALL medical data from ALL pages and merge them into ONE JSON object.
-    Do NOT separate results by page — combine everything into a unified record.
-    Ensure you extract ALL test items accurately and do not miss any rows from any page.
+    You are given {len(file_paths)} page(s) of a SINGLE medical blood report, split into {total_sections} image section(s) for improved readability.
+    Each page has been split into top and bottom halves. There may be a small overlap between halves of the same page — if the same test row appears in both halves, extract it ONCE only (deduplicate).
+    Extract ALL medical data from ALL sections and merge them into ONE JSON object.
+    Do NOT separate results by page or section — combine everything into a unified record.
+    Ensure you extract ALL test items accurately and do not miss any rows from any section.
 
     The output MUST exactly match the following JSON keys.
     If a value is missing in the report, use an empty string "".
@@ -495,12 +557,18 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
     Fields to extract (all as strings):
     {keys_list}
 
-    CRITICAL WARNING ON IDENTIFIERS:
-    - DO NOT confuse the Patient ID (medid) with the Report ID / Lab Reference (labreference).
-    - 'medid' refers to the patient's MRN / NRIC / Patient ID / Patient Reference No.
-    - 'labreference' refers to the unique identifier for this specific printed report document (Report No, Accession No, Episode No, Lab No, Ref No).
-    If you extract a number as 'medid', check if it is labelled as 'Lab No', 'Report No', or 'Accession No' - if it is, it belongs in 'labreference', NOT 'medid'.
-    If the document has both a Patient ID (MRN) and a Report ID (Accession No), extract MRN into 'medid' and Accession No into 'labreference'.
+    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND sample_id:
+    There are THREE separate identifier fields. Read the label on the report carefully before assigning:
+    
+    1. 'medid' = PATIENT identifier. Labels: 'Patient ID', 'MRN', 'NRIC', 'Passport No', 'Patient Ref'.
+    2. 'labreference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
+       This is the ID of the PRINTED REPORT DOCUMENT. It is NOT the lab sample number.
+    3. 'sample_id' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
+       This is the ID of the PHYSICAL SAMPLE (blood tube, urine cup). It is NOT the report reference.
+    
+    DECISION RULE: If the label says 'Lab No' or 'Lab Number' or 'Specimen' → it is sample_id, NOT labreference.
+    If the label says 'Report No' or 'Accession No' or 'Reference No' or 'Episode No' → it is labreference, NOT sample_id.
+    If the document has both, extract each into its correct field. If only one identifier exists beyond medid, determine if it identifies the report or the sample based on its label.
 
     CRITICAL WARNING ON TIMESTAMPS:
     - Medical reports contain multiple times: 'Collected' (collection/drawn time), 'Received' (time sample reached the lab), and 'Reported/Printed' (time report was finalized/printed).
@@ -514,7 +582,7 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
        - 'WBC' -> 'wbc_cells_ul'
        - 'RBC' -> 'rbc_count_mil_ul'
        - 'HGB' -> 'hemoglobin_g_dl'
-    2. Patient info (medid, labreference, dates) should appear once — take from whichever page has it.
+    2. Patient info (medid, labreference, dates) should appear once — take from whichever section has it.
     3. Do NOT convert units yourself. Extract the EXACT unit written on the report (e.g., if the report lists "µkat/L" or "ukat/L", do NOT convert it to "U/L"; extract it exactly as "µkat/L" or "ukat/L" inside the string alongside the value).
     4. RESULT VS REFERENCE RANGE ACCURACY:
        - DO NOT confuse the patient's actual "Result/Value" column with the "Reference Range/Normal Range" column.
@@ -541,23 +609,31 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         response = llm_client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": "You are an expert medical data extraction assistant. You receive multi-page reports. Return JSON only."},
+                {"role": "system", "content": "You are an expert medical data extraction assistant. You receive multi-page reports split into sections for better readability. Deduplicate overlapping data. Return JSON only."},
                 {"role": "user", "content": content_parts}
             ],
             response_format={"type": "json_object"}
         )
         content = response.choices[0].message.content
-        print(f"--- EXTRACTED JSON FROM OPENAI VISION (MULTI-PAGE: {len(file_paths)} pages) ---\n{content}\n-----------------------------------------")
+        print(f"--- EXTRACTED JSON FROM OPENAI VISION (MULTI-PAGE: {len(file_paths)} pages, {total_sections} sections) ---\n{content}\n-----------------------------------------")
 
         extracted_data = json.loads(content)
         return normalize_structured_data(extracted_data)
     except Exception as e:
         print(f"Multi-page LLM Parsing failed: {e}")
         return normalize_structured_data({})
+    finally:
+        # Cleanup temp split files from multi-page splitting
+        for sp in all_split_paths:
+            if sp.exists():
+                try:
+                    sp.unlink()
+                except Exception as ex:
+                    print(f"Failed to delete temp split file {sp}: {ex}")
 
 # List of exact columns in staging_medical_records table
 STAGING_SCHEMA_KEYS = [
-    "medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", 
+    "medid", "original_medid", "labreference", "original_labreference", "sample_id", "lab", "collected", "time", "reported_time", 
     "gender",
     "urine_colour", "appearance", "specific_gravity", "ph", "proteins", "glucose", 
     "bilirubin", "ketones", "blood", "urobilinogen", "nitrites", "wbc_pus_cells_hpf", 
@@ -583,7 +659,8 @@ STAGING_SCHEMA_KEYS = [
 SCHEMA_TYPES = {
     "medid": "BIGINT",
     "labreference": "TEXT",
-    "sample_id": "BIGINT",
+    "sample_id": "TEXT",
+    "lab": "TEXT",
     "collected": "DATE",
     "time": "TIME",
     "reported_time": "TIME",
@@ -865,6 +942,8 @@ def normalize_structured_data(data: dict) -> dict:
     flat = {}
     raw_medid = data.get("medid", data.get("patient_id", ""))
     raw_labref = data.get("labreference", "")
+    raw_lab = data.get("lab", data.get("hospital_name", ""))
+    raw_sample_id = data.get("sample_id", "")
     
     def clean_id(val):
         if not val: return ""
@@ -880,6 +959,10 @@ def normalize_structured_data(data: dict) -> dict:
         elif key == "labreference":
             # Preserve special characters like dashes/slashes for report IDs
             flat[key] = str(raw_labref).strip().upper() if raw_labref else ""
+        elif key == "lab":
+            flat[key] = str(raw_lab).strip()
+        elif key == "sample_id":
+            flat[key] = str(raw_sample_id).strip()
         elif key == "collected":
             flat[key] = collected_val
         elif key == "time":
@@ -906,7 +989,7 @@ def normalize_structured_data(data: dict) -> dict:
 
     # 3. Map to UI Format (for the Flutter app)
     results = []
-    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others", "gender"]
+    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "sample_id", "collected", "time", "reported_time", "others", "gender", "lab"]
     for key, value in flat.items():
         if key in metadata_keys or not value: continue
         
@@ -952,7 +1035,8 @@ def normalize_structured_data(data: dict) -> dict:
         "gender": flat["gender"],
         "test_name": str(data.get("test_name", "")).strip(),
         "doctor_name": str(data.get("doctor_name", "")).strip(),
-        "hospital_name": str(data.get("hospital_name", "")).strip()
+        "hospital_name": flat.get("lab", "").strip(),
+        "sample_id": flat.get("sample_id", "").strip()
     }
 
 def get_standard_unit_for_key(key: str) -> str:
@@ -1101,36 +1185,93 @@ async def mark_report_sent(report_id: str):
                 # Delete existing staging record for this report (if any), then insert fresh
                 # This avoids dependency on a UNIQUE constraint for upsert
                 supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
-                supabase.table("staging_medical_records").insert(sanitized_data).execute()
-                print(f"DEBUG: Insert to staging_medical_records successful for report: {report_id}")
-            except Exception as e:
-                print(f"DEBUG: First insert attempt failed: {e}")
-                # Retry with aggressive numeric extraction for any remaining string values
-                # This handles the case where DB columns are NUMERIC but SCHEMA_TYPES says TEXT
-                # (e.g., epithelial_cells_hpf = "2-4" → DB expects numeric, not string)
-                for k, v in sanitized_data.items():
-                    if k == "report_id" or v is None:
-                        continue
-                    if isinstance(v, str):
-                        # Try to extract a number from strings that look like ranges/qualitative
-                        match = re.search(r'(-?\d*\.?\d+)', str(v))
-                        if match:
-                            try:
-                                sanitized_data[k] = float(match.group(1))
-                            except (ValueError, TypeError):
-                                sanitized_data[k] = None
-                        else:
-                            # Pure text value (e.g., "TNTC", "Negative") — keep as-is for TEXT columns
-                            # If the DB column is NUMERIC, this will still fail but that's a schema issue
-                            pass
+            except Exception as del_err:
+                print(f"DEBUG: Delete before insert failed (might be okay if record didn't exist): {del_err}")
+
+            # Insertion loop that handles:
+            # 1. Missing columns (PGRST204) - by deleting the missing column from payload
+            # 2. Type mismatch (22P02, 22007, etc.) - by parsing Postgres error, mapping to key, and casting/nullifying
+            # 3. Type mismatch (numeric cast failure) - by aggressively converting string ranges to floats for non-metadata fields
+            max_attempts = 15
+            performed_numeric_extraction = False
+            for attempt in range(max_attempts):
                 try:
-                    supabase.table("staging_medical_records").delete().eq("report_id", report_id).execute()
                     supabase.table("staging_medical_records").insert(sanitized_data).execute()
-                    print(f"DEBUG: Retry insert successful (with numeric extraction) for report: {report_id}")
-                except Exception as e2:
-                    print(f"DEBUG: Critical failure in staging insert (retry): {e2}")
-                    print(f"DEBUG: Problematic data keys with values: {[(k, v) for k, v in sanitized_data.items() if v is not None and isinstance(v, str)]}")
-                    raise Exception(f"Failed to write to staging_medical_records: {e2}")
+                    print(f"DEBUG: Insert to staging_medical_records successful for report: {report_id} on attempt {attempt + 1}")
+                    break
+                except Exception as e:
+                    err_msg = str(e)
+                    print(f"DEBUG: Insert attempt {attempt + 1} failed: {err_msg}")
+                    
+                    # 1. Check for PostgREST missing column error (PGRST204)
+                    missing_col_match = re.search(r"Could not find the '([^']+)' column", err_msg)
+                    if missing_col_match:
+                        missing_col = missing_col_match.group(1)
+                        print(f"WARNING: Column '{missing_col}' does not exist in database. Removing from payload and retrying.")
+                        if missing_col in sanitized_data:
+                            del sanitized_data[missing_col]
+                        if attempt < max_attempts - 1:
+                            continue
+
+                    # 2. Check for type syntax/cast error (e.g., 'invalid input syntax for type bigint: "SAMHEAL1"')
+                    syntax_err_match = re.search(r'invalid input syntax for type ([^:]+): "([^"]+)"', err_msg)
+                    if syntax_err_match:
+                        expected_type = syntax_err_match.group(1).lower()
+                        bad_value = syntax_err_match.group(2)
+                        
+                        bad_key = None
+                        for k, v in sanitized_data.items():
+                            if str(v) == bad_value:
+                                bad_key = k
+                                break
+                        
+                        if bad_key:
+                            print(f"WARNING: Type mismatch for key '{bad_key}'. Database expected '{expected_type}' but got value '{bad_value}'.")
+                            recovered = False
+                            if "int" in expected_type or expected_type == "bigint":
+                                num_match = re.search(r'(\d+)', bad_value)
+                                if num_match:
+                                    try:
+                                        sanitized_data[bad_key] = int(num_match.group(1))
+                                        print(f"  -> Recovered: cast '{bad_value}' to integer {sanitized_data[bad_key]}")
+                                        recovered = True
+                                    except Exception:
+                                        pass
+                            
+                            if not recovered:
+                                print(f"  -> Falling back: Setting key '{bad_key}' to None.")
+                                sanitized_data[bad_key] = None
+                                
+                            if attempt < max_attempts - 1:
+                                continue
+                    
+                    # 3. If it's a generic type mismatch, try aggressive numeric extraction once on biomarker fields
+                    has_strings = any(isinstance(v, str) for k, v in sanitized_data.items() if k != "report_id")
+                    if has_strings and not performed_numeric_extraction:
+                        print("WARNING: Insert failed. Performing aggressive numeric extraction for string values and retrying.")
+                        performed_numeric_extraction = True
+                        metadata_keys = {
+                            "medid", "original_medid", "labreference", "original_labreference", 
+                            "sample_id", "collected", "time", "reported_time", "gender", "report_id"
+                        }
+                        for k, v in list(sanitized_data.items()):
+                            if k in metadata_keys or v is None:
+                                continue
+                            if isinstance(v, str):
+                                # Try to extract a number from strings that look like ranges/qualitative
+                                match = re.search(r'(-?\d*\.?\d+)', str(v))
+                                if match:
+                                    try:
+                                        sanitized_data[k] = float(match.group(1))
+                                    except (ValueError, TypeError):
+                                        sanitized_data[k] = None
+                        if attempt < max_attempts - 1:
+                            continue
+                    
+                    # If we can't recover or we've run out of attempts, raise the exception
+                    print(f"DEBUG: Critical failure in staging insert on attempt {attempt + 1}: {e}")
+                    print(f"DEBUG: Problematic data: {sanitized_data}")
+                    raise Exception(f"Failed to write to staging_medical_records: {e}")
     else:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
@@ -1284,8 +1425,9 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
         new_date = backend_normalize_date(new_data.get("collected", ""))
         new_medid = str(new_data.get("medid", "")).strip().upper()
         new_labref = clean_ref(new_data.get("labreference", ""))
+        new_sample_id = clean_ref(new_data.get("sample_id", ""))
         
-        print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, CleanedLabRef={new_labref}")
+        print(f"\n[DUPLICATE CHECK] New Report: Date={new_date}, PatientID={new_medid}, CleanedLabRef={new_labref}, CleanedSampleID={new_sample_id}")
         
         # Fetch all reports for this user
         if STORAGE_ENGINE == "supabase" and supabase:
@@ -1315,11 +1457,17 @@ async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str =
             old_date = backend_normalize_date(s_data.get("collected", ""))
             old_medid = str(s_data.get("medid", "")).strip().upper()
             old_labref = clean_ref(s_data.get("labreference", ""))
+            old_sample_id = clean_ref(s_data.get("sample_id", ""))
 
             # --- CRITERIA 1: Exact Cleaned Lab Reference Match ---
             # Handles dashes, slashes, and spaces in references (e.g. B165-AAF4 vs B165AAF4)
             if new_labref and old_labref and new_labref == old_labref:
                 print(f" -> MATCH FOUND: Normalized Lab Reference ({new_labref})")
+                return True
+
+            # --- CRITERIA 1B: Exact Cleaned Sample ID (Lab Number) Match ---
+            if new_sample_id and old_sample_id and new_sample_id == old_sample_id:
+                print(f" -> MATCH FOUND: Normalized Sample ID ({new_sample_id})")
                 return True
 
             # Calculate clinical overlap based on INTERSECTION of present keys

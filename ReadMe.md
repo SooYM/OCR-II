@@ -12,6 +12,7 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 - **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o-mini) reads images directly for high-accuracy extraction.
 - **➕ Manual Logging** — Add report entries manually using a dedicated "+" button directly within the dashboard.
 - **🔍 Document Reference Tracking** — Surface unique report identifiers (Accession No, Report No) as `Ref:` keys on history cards and check screens.
+- **🚫 Smart Duplicate Detection** — Prevents duplicate uploads using a multi-attribute checking system that compares normalized/cleaned Lab Reference numbers, Lab Numbers/Sample IDs, and clinical signature overlaps.
 - **🕒 24h Time Normalization** — Automatically formats extraction and manual inputs into standard 24h `HH:MM:SS` format.
 - **🔍 Full-screen Chart Expansion** — Tap any graph to expand into a detailed, full-screen trend analysis view with persistent legends.
 - **🧠 AI Health Analysis** — Get personalized insights with rich text formatting and the ability to ask custom follow-up questions.

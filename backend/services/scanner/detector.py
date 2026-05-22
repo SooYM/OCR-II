@@ -52,7 +52,15 @@ def detect_document_corners(image):
     # Sort contours by area, keeping only the largest ones
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
     
+    resized_h, resized_w = image_resized.shape[:2]
+    resized_area = resized_h * resized_w
+    min_area_ratio = 0.15  # At least 15% of the image area
+    
     for c in cnts:
+        area = cv2.contourArea(c)
+        if area < resized_area * min_area_ratio:
+            continue
+            
         # Approximate the contour
         peri = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)

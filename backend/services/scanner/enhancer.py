@@ -59,3 +59,29 @@ def enhance_bw(image):
     
     # Convert back to BGR so it has the same channel count
     return cv2.cvtColor(denoised, cv2.COLOR_GRAY2BGR)
+
+def upscale_if_small(image, min_height=800):
+    """
+    Upscales an image if its height is below min_height.
+    This is useful for split halves that may be too small for the Vision API
+    to read clearly. Uses INTER_CUBIC for high-quality upscaling.
+    
+    Args:
+        image: Input BGR image (numpy array).
+        min_height: Minimum acceptable height in pixels. Images shorter than
+                   this will be upscaled proportionally.
+    
+    Returns:
+        The original image if tall enough, or the upscaled image.
+    """
+    h, w = image.shape[:2]
+    if h >= min_height:
+        return image
+    
+    scale = min_height / h
+    new_w = int(w * scale)
+    new_h = min_height
+    
+    upscaled = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+    print(f"[ENHANCER] Upscaled image from {w}x{h} to {new_w}x{new_h} (scale={scale:.2f}x)")
+    return upscaled

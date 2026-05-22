@@ -8,6 +8,8 @@ import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
 import '../models/report_model.dart';
 import 'verify_screen.dart';
+import 'camera_capture_screen.dart';
+import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 
 /// Screen 1: Capture or pick medical report images (supports multi-page).
 /// After processing, navigates to VerifyScreen with extracted data.
@@ -51,9 +53,41 @@ class _CaptureScreenState extends State<CaptureScreen>
           setState(() => _selectedImages.addAll(images));
         }
       } else {
-        final XFile? image = await _picker.pickImage(source: source, imageQuality: 90);
-        if (image != null) {
-          setState(() => _selectedImages.add(image));
+        if (Platform.isAndroid || Platform.isIOS) {
+          try {
+            final List<String>? images = await CunningDocumentScanner.getPictures(
+              noOfPages: 5,
+              isGalleryImportAllowed: true,
+              iosScannerOptions: IosScannerOptions(
+                imageFormat: IosImageFormat.jpg,
+                jpgCompressionQuality: 0.9,
+              ),
+            );
+            if (images != null && images.isNotEmpty) {
+              setState(() {
+                _selectedImages.addAll(images.map((path) => XFile(path)));
+              });
+            }
+          } catch (e) {
+            debugPrint('Document scanner failed: $e. Falling back to camera viewfinder.');
+            if (mounted) {
+              final XFile? image = await Navigator.push<XFile>(
+                context,
+                MaterialPageRoute(builder: (context) => const CameraCaptureScreen()),
+              );
+              if (image != null) {
+                setState(() => _selectedImages.add(image));
+              }
+            }
+          }
+        } else {
+          final XFile? image = await Navigator.push<XFile>(
+            context,
+            MaterialPageRoute(builder: (context) => const CameraCaptureScreen()),
+          );
+          if (image != null) {
+            setState(() => _selectedImages.add(image));
+          }
         }
       }
     } catch (e) {
