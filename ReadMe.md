@@ -17,7 +17,7 @@ A premium, full-stack healthcare dashboard and medical report digitizer. MedScan
 - **🔍 Full-screen Chart Expansion** — Tap any graph to expand into a detailed, full-screen trend analysis view with persistent legends.
 - **✨ AI Health Summary** — Layman-friendly, empathetic dashboard summary automatically highlights out-of-range biomarkers, physiochemical connections, and features direct redirect linking to the AI Chat assistant.
 - **🧠 AI Health Analysis** — Get personalized insights with rich text formatting and the ability to ask custom follow-up questions.
-- **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy.
+- **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy. Dynamically pre-populates all 92 dictionary-supported biomarkers as empty/editable entries when not extracted by OCR and handles exponent/Unicode-aware unit normalization to prevent dropdown casing crashes.
 - **🔐 Secure User Authentication** — JWT-based login and signup system for personalized data isolation and ownership validation.
 - **🎨 Premium UI/UX** — Glassmorphism design, smooth animations, and optimized layouts for all screen sizes.
 

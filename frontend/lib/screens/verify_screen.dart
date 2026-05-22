@@ -60,7 +60,15 @@ class _VerifyScreenState extends State<VerifyScreen> {
     // Filter out gender from results (it belongs in patient info, not test results)
     _data.results.removeWhere((r) => r.key == 'gender');
 
-    // Auto-normalize results against the standard dictionary
+    // 1. Initial normalization to resolve keys of OCR-extracted results
+    _normalizeResults();
+
+    // 2. Pre-populate all missing standard biomarkers
+    _prepopulateMissingBiomarkers();
+
+    // 3. Re-run normalization to ensure all results (including pre-populated) are indexed and matched
+    _matchedIndices.clear();
+    _matchedEntries.clear();
     _normalizeResults();
     
     // Normalize date format if possible
@@ -110,8 +118,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
 
         // Set reference range if empty, respecting the extracted unit and patient gender
         if (result.referenceRange == null || result.referenceRange!.isEmpty) {
-          final normUnit = result.unit?.toLowerCase().replaceAll(' ', '');
-          final normStdUnit = match.unit.toLowerCase().replaceAll(' ', '');
+          final normUnit = result.unit != null ? _normalizeUnitString(result.unit!) : null;
+          final normStdUnit = _normalizeUnitString(match.unit);
           
           String? baseRange;
           if (normUnit != null && normUnit != normStdUnit && match.referenceRangeSI != null && match.referenceRangeSI!.isNotEmpty && match.referenceRangeSI != 'N/A') {
@@ -135,8 +143,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
         final result = _data.results[i];
         final match = _matchedEntries[i];
         if (match != null) {
-          final normUnit = result.unit?.toLowerCase().replaceAll(' ', '');
-          final normStdUnit = match.unit.toLowerCase().replaceAll(' ', '');
+          final normUnit = result.unit != null ? _normalizeUnitString(result.unit!) : null;
+          final normStdUnit = _normalizeUnitString(match.unit);
           
           String? baseRange;
           if (normUnit != null && normUnit != normStdUnit && match.referenceRangeSI != null && match.referenceRangeSI!.isNotEmpty && match.referenceRangeSI != 'N/A') {
@@ -153,16 +161,79 @@ class _VerifyScreenState extends State<VerifyScreen> {
     });
   }
 
-  /// Match an OCR-extracted unit string to the correct casing from allowedUnits.
+  /// Normalizes space, casing, greek letters, superscripts, carets, and leading prefixes for robust unit comparison.
+  String _normalizeUnitString(String unit) {
+    String normalized = unit.toLowerCase().replaceAll(' ', '');
+    
+    // Unify greek micro characters (unicode U+00B5 'µ' and U+03BC 'μ') to 'u'
+    normalized = normalized.replaceAll('µ', 'u').replaceAll('μ', 'u');
+    
+    // Translate superscripts (e.g., '³' to '3', '⁹' to '9', '¹²' to '12')
+    normalized = normalized
+        .replaceAll('¹', '1')
+        .replaceAll('²', '2')
+        .replaceAll('³', '3')
+        .replaceAll('⁴', '4')
+        .replaceAll('⁵', '5')
+        .replaceAll('⁶', '6')
+        .replaceAll('⁷', '7')
+        .replaceAll('⁸', '8')
+        .replaceAll('⁹', '9')
+        .replaceAll('⁰', '0');
+        
+    // Standardize multiplication/caret symbols
+    normalized = normalized
+        .replaceAll('×', 'x')
+        .replaceAll('*', 'x')
+        .replaceAll('^', ''); // remove caret completely so 10^3 becomes 103
+
+    // Also strip any leading 'x' or '*' from 'x103' or 'x10^3' so 'x103/ul' becomes '103/ul'
+    if (normalized.startsWith('x10')) {
+      normalized = normalized.substring(1);
+    }
+    
+    return normalized;
+  }
+
+  /// Match an OCR-extracted unit string to the correct casing from allowedUnits using robust normalization.
   /// Returns the correctly-cased unit if found, null otherwise.
   String? _matchUnitCasing(String ocrUnit, List<String> allowedUnits) {
-    final lower = ocrUnit.toLowerCase().replaceAll(' ', '');
+    final normOcr = _normalizeUnitString(ocrUnit);
     for (final allowed in allowedUnits) {
-      if (allowed.toLowerCase().replaceAll(' ', '') == lower) {
+      if (_normalizeUnitString(allowed) == normOcr) {
         return allowed;
       }
     }
     return null;
+  }
+
+  /// Pre-populate the report with all standard biomarkers from the dictionary as empty fields if not extracted.
+  void _prepopulateMissingBiomarkers() {
+    // Collect keys of biomarkers already present
+    final Set<String> existingKeys = _data.results
+        .map((r) => r.key)
+        .where((k) => k != null && k.isNotEmpty)
+        .cast<String>()
+        .toSet();
+
+    // To prevent matching purely on key when key is null, also match by name case-insensitively
+    final Set<String> existingNames = _data.results
+        .map((r) => r.testItem.toLowerCase().trim())
+        .toSet();
+
+    for (final entry in BiomarkerDictionary.entries) {
+      final nameLower = entry.standardName.toLowerCase().trim();
+      if (!existingKeys.contains(entry.key) && !existingNames.contains(nameLower)) {
+        _data.results.add(
+          TestResult(
+            testItem: entry.standardName,
+            value: '',
+            unit: entry.unit,
+            key: entry.key,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handleSend() async {
@@ -1119,12 +1190,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
   Widget _buildUnitDropdown({required String label, required String value, required String? biomarkerValue, required List<String> allowedUnits, required Function(String?) onChanged}) {
     List<String> units = List.from(allowedUnits);
 
-    // Case-insensitive: match current value to an item in allowedUnits
+    // Case-insensitive and exponent-insensitive: match current value to an item in allowedUnits using robust normalization
     String effectiveValue = value;
     if (effectiveValue.isNotEmpty) {
-      final lowerValue = effectiveValue.toLowerCase();
+      final normalizedValue = _normalizeUnitString(effectiveValue);
       final match = units.cast<String?>().firstWhere(
-        (u) => u!.toLowerCase() == lowerValue,
+        (u) => _normalizeUnitString(u!) == normalizedValue,
         orElse: () => null,
       );
       if (match != null) {

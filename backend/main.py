@@ -1009,17 +1009,7 @@ def normalize_structured_data(data: dict) -> dict:
         # Parse value and extracted unit from LLM string using our robust parser
         clean_val, extracted_unit = split_value_and_unit(str(value))
 
-        std_unit = ""
-        if key.endswith('_g_dl'): std_unit = "g/dL"
-        elif key.endswith('_mg_dl'): std_unit = "mg/dL"
-        elif key.endswith('_mil_ul'): std_unit = "mil/uL"
-        elif key.endswith('_pct'): std_unit = "%"
-        elif key.endswith('_fl'): std_unit = "fL"
-        elif key.endswith('_pg'): std_unit = "pg"
-        elif key.endswith('_ul'): std_unit = "uL"
-        elif key.endswith('_uiu_ml'): std_unit = "uIU/mL"
-        elif key.endswith('_mmol_l'): std_unit = "mmol/L"
-        
+        std_unit = get_standard_unit_for_key(key)
         final_unit = extracted_unit if extracted_unit else std_unit
         
         # Include 'key' so we can map it back on update
