@@ -126,6 +126,63 @@ cp .env.template .env # Configure your API keys and Database URL
 python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+### 🗄️ Database Setup (Supabase PostgreSQL)
+
+If you are using Supabase as your storage backend (`STORAGE_ENGINE=supabase` in `.env`), run the setup SQL scripts in the **Supabase SQL Editor** (Dashboard > SQL Editor) to provision the database schema:
+
+#### 1. Core Tables & RLS Policies Setup
+Run the script below (available in [supabase_auth_setup.sql](file:///Users/sooyauming/Desktop/Intern/OCR%20II/backend/supabase_auth_setup.sql)) to create the `users` authentication table, add foreign key relationships to `reports`, and set up Row Level Security (RLS) policies:
+
+```sql
+-- Create users table for app-level authentication
+CREATE TABLE IF NOT EXISTS users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email         TEXT UNIQUE NOT NULL,
+    name          TEXT NOT NULL,
+    gender        TEXT, -- Normalize to "Male" or "Female"
+    password_hash TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'active',
+    health_summary TEXT, -- Cached AI health summary
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Index for fast email lookups during login
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+
+-- Link reports table to users
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'reports' AND column_name = 'user_id'
+    ) THEN
+        ALTER TABLE reports ADD COLUMN user_id UUID REFERENCES users(id);
+    END IF;
+END $$;
+
+-- Index for fetching reports by user
+CREATE INDEX IF NOT EXISTS idx_reports_user_id ON reports (user_id);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+
+-- Allow service role / API anon key full access (server-side auth bypass)
+CREATE POLICY "Allow all access to users" ON users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to reports" ON reports FOR ALL USING (true) WITH CHECK (true);
+```
+
+#### 2. Adding Gender Column (Existing Databases)
+If you already had a database instance running, make sure to add the `gender` column using [add_gender_column.sql](file:///Users/sooyauming/Desktop/Intern/OCR%20II/backend/add_gender_column.sql):
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
+```
+
+#### 3. Local SQLite Storage Engine
+If you are running the backend in local mode (`STORAGE_ENGINE=sqlite`), the database file (`medical_reports.db`) and schema modifications (including the `gender` column auto-migration) will be provisioned and configured **automatically** on startup.
+
+
 ### Frontend Setup
 
 ```bash
