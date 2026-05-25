@@ -23,3 +23,18 @@ uploads/
 
 # OS
 .DS_Store
+
+# Temporary, Scratch and Test Files
+test_*.py
+test_*.dart
+scratch/
+untitled folder/
+fix_dict.py
+update_converter.py
+update_units.py
+dict_keys.txt
+unit_keys.txt
+supabase_filter_people.sql
+backend/populate_patricia_records.py
+backend/refresh_health_summaries.py
+

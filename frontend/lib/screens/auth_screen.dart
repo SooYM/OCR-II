@@ -19,6 +19,7 @@ class _AuthScreenState extends State<AuthScreen>
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _error;
+  String _selectedGender = 'Male';
 
   final _emailCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -66,7 +67,7 @@ class _AuthScreenState extends State<AuthScreen>
       if (_isLogin) {
         await AuthService.login(email, password);
       } else {
-        await AuthService.register(email, name, password);
+        await AuthService.register(email, name, password, _selectedGender);
       }
       if (mounted) {
         Navigator.pushReplacement(
@@ -246,6 +247,8 @@ class _AuthScreenState extends State<AuthScreen>
                             label: 'Full Name',
                             icon: Icons.person_outline,
                           ),
+                          const SizedBox(height: 14),
+                          _buildGenderDropdown(),
                         ],
 
                         const SizedBox(height: 14),
@@ -387,6 +390,29 @@ class _AuthScreenState extends State<AuthScreen>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGenderDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedGender,
+      dropdownColor: Theme.of(context).colorScheme.surface,
+      style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 15),
+      decoration: const InputDecoration(
+        labelText: 'Gender',
+        prefixIcon: Icon(Icons.wc_outlined, size: 20),
+      ),
+      items: const [
+        DropdownMenuItem(value: 'Male', child: Text('Male')),
+        DropdownMenuItem(value: 'Female', child: Text('Female')),
+      ],
+      onChanged: (val) {
+        if (val != null) {
+          setState(() {
+            _selectedGender = val;
+          });
+        }
+      },
     );
   }
 }

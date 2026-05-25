@@ -124,7 +124,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
       final report = await ApiService.createManualReport();
       if (mounted) {
         setState(() => _isCreatingManual = false);
-        final result = await Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => VerifyScreen(report: report)),
         );
@@ -305,19 +305,21 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
   }
 
   Widget _buildReportCard(MedicalReport report) {
-    final patientName = report.structuredData?.patientName;
     final testName = report.structuredData?.testName;
-    final resultCount = report.structuredData?.results.length ?? 0;
+    final resultCount = report.structuredData?.results
+            .where((r) => r.value.trim().isNotEmpty)
+            .length ?? 0;
 
     final reportRef = report.structuredData?.reportReference;
     final hasReportRef = reportRef != null && reportRef.trim().isNotEmpty;
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => VerifyScreen(report: report)),
         );
+        _loadReports();
       },
       child: GlassCard(
         padding: const EdgeInsets.all(16),

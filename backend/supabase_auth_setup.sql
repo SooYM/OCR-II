@@ -133,3 +133,7 @@ ALTER TABLE staging_medical_records ALTER COLUMN plbs_mg_dl TYPE NUMERIC USING N
 
 -- Create composite index
 CREATE INDEX IF NOT EXISTS idx_staging_medid_collected ON staging_medical_records (medid, collected);
+
+-- 5. Add health_summary column to users table for caching AI health summary
+ALTER TABLE users ADD COLUMN IF NOT EXISTS health_summary TEXT;
+

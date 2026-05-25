@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, List as TypingList
 import cv2
 import numpy as np
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -116,6 +116,7 @@ class RegisterRequest(BaseModel):
     email: str
     name: str
     password: str
+    gender: str
 
 class LoginRequest(BaseModel):
     email: str
@@ -183,6 +184,7 @@ def init_local_db():
             name TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
+            gender TEXT,
             created_at TEXT NOT NULL
         )
     """)
@@ -204,6 +206,27 @@ def init_local_db():
         cursor.execute("ALTER TABLE reports ADD COLUMN user_id TEXT")
     except sqlite3.OperationalError:
         pass  # Column already exists
+
+    # Migration: add health_summary column to users if missing
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN health_summary TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Migration: add gender column to users if missing
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN gender TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS health_summary_cache (
+            user_id TEXT PRIMARY KEY,
+            summary TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -259,7 +282,7 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
         conn.close()
         return dict(row) if row else None
 
-def create_user(email: str, name: str, password: str) -> dict:
+def create_user(email: str, name: str, password: str, gender: str) -> dict:
     user_id = str(uuid.uuid4())
     pw_hash = hash_password(password)
     now = datetime.now().isoformat()
@@ -268,6 +291,7 @@ def create_user(email: str, name: str, password: str) -> dict:
         "email": email.lower().strip(),
         "name": name.strip(),
         "password_hash": pw_hash,
+        "gender": gender.strip(),
         "created_at": now,
     }
     if STORAGE_ENGINE == "supabase" and supabase:
@@ -275,19 +299,26 @@ def create_user(email: str, name: str, password: str) -> dict:
     else:
         conn = sqlite3.connect(str(DB_PATH))
         conn.execute(
-            "INSERT INTO users (id, email, name, password_hash, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', now)
+            "INSERT INTO users (id, email, name, password_hash, status, gender, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', gender.strip(), now)
         )
         conn.commit()
         conn.close()
-    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "created_at": now}
+    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "gender": user_data["gender"], "created_at": now}
 
-def update_user_profile(user_id: str, name: str, email: str):
+def update_user_profile(user_id: str, name: str, email: str, gender: Optional[str] = None):
+    update_data = {"name": name, "email": email}
+    if gender:
+        update_data["gender"] = gender
+
     if STORAGE_ENGINE == "supabase" and supabase:
-        supabase.table("users").update({"name": name, "email": email}).eq("id", user_id).execute()
+        supabase.table("users").update(update_data).eq("id", user_id).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
-        conn.execute("UPDATE users SET name = ?, email = ? WHERE id = ?", (name, email, user_id))
+        if gender:
+            conn.execute("UPDATE users SET name = ?, email = ?, gender = ? WHERE id = ?", (name, email, gender, user_id))
+        else:
+            conn.execute("UPDATE users SET name = ?, email = ? WHERE id = ?", (name, email, user_id))
         conn.commit()
         conn.close()
 
@@ -364,6 +395,7 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     # Dynamically build the prompt based on the schema
     # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
     metadata_descriptions = [
+        "patient_name (The full name of the patient as written on the report. If none is found, use '')",
         "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
         "labreference (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in report_reference. If none is found, use '')",
         "report_reference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in labreference. If none is found, use '')",
@@ -377,7 +409,7 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -525,6 +557,7 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
     # Dynamically build the prompt based on the schema
     # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
     metadata_descriptions = [
+        "patient_name (The full name of the patient as written on the report. If none is found, use '')",
         "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
         "labreference (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in report_reference. If none is found, use '')",
         "report_reference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in labreference. If none is found, use '')",
@@ -538,7 +571,7 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -1020,6 +1053,7 @@ def normalize_structured_data(data: dict) -> dict:
     # Return a combined object that Flutter can parse
     return {
         **flat, 
+        "patient_name": str(data.get("patient_name", "")).strip(),
         "patient_id": flat["medid"],
         "date": flat["collected"],
         "results": results,
@@ -1394,6 +1428,44 @@ def backend_compare_values(key: str, val1: str, val2: str) -> bool:
     s2 = str(v2_clean).strip().lower()
     return s1 == s2
 
+def check_name_match(user_name: str, patient_name: str) -> bool:
+    if not user_name or not patient_name:
+        return False
+    
+    def tokenize(name: str) -> set:
+        n = name.lower()
+        titles = {"mr", "mrs", "ms", "miss", "dr", "mdm", "bin", "binte", "bte", "al", "ap", "anak", "dato", "datuk", "sri", "sir", "madam"}
+        words = re.findall(r'\b[a-z]{2,}\b', n)
+        return {w for w in words if w not in titles}
+
+    user_tokens = tokenize(user_name)
+    patient_tokens = tokenize(patient_name)
+    
+    if not user_tokens:
+        user_tokens = {w for w in re.findall(r'\w+', user_name.lower()) if len(w) > 0}
+    if not patient_tokens:
+        patient_tokens = {w for w in re.findall(r'\w+', patient_name.lower()) if len(w) > 0}
+        
+    if not user_tokens or not patient_tokens:
+        return False
+        
+    intersection = user_tokens.intersection(patient_tokens)
+    return len(intersection) > 0
+
+def check_gender_match(user_gender: str, patient_gender: str) -> bool:
+    if not user_gender or not patient_gender:
+        return True
+    ug = user_gender.strip().lower()
+    pg = patient_gender.strip().lower()
+    is_user_male = ug.startswith('m') and not ug.startswith('f')
+    is_user_female = ug.startswith('f')
+    is_patient_male = pg.startswith('m') and not pg.startswith('f')
+    is_patient_female = pg.startswith('f')
+    
+    if (is_user_male or is_user_female) and (is_patient_male or is_patient_female):
+        return (is_user_male and is_patient_male) or (is_user_female and is_patient_female)
+    return ug == pg
+
 async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str = None):
     """
     Compares the newly parsed data with existing reports for the user.
@@ -1551,15 +1623,15 @@ async def root():
 
 @app.post("/api/auth/register")
 async def register(req: RegisterRequest):
-    if not req.email or not req.password or not req.name:
-        raise HTTPException(status_code=400, detail="Email, name, and password are required")
+    if not req.email or not req.password or not req.name or not req.gender:
+        raise HTTPException(status_code=400, detail="Email, name, password, and gender are required")
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if get_user_by_email(req.email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    user = create_user(req.email, req.name, req.password)
+    user = create_user(req.email, req.name, req.password, req.gender)
     token = create_jwt(user["id"], user["email"])
-    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"]}}
+    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"], "gender": user["gender"]}}
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest):
@@ -1569,21 +1641,32 @@ async def login(req: LoginRequest):
     if user.get("status") == "inactive":
         raise HTTPException(status_code=403, detail="Account is inactive. Please contact support.")
     token = create_jwt(user["id"], user["email"])
-    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"]}}
+    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"], "gender": user.get("gender")}}
 
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    return {"id": current_user["id"], "email": current_user["email"], "name": current_user["name"]}
+    return {"id": current_user["id"], "email": current_user["email"], "name": current_user["name"], "gender": current_user.get("gender")}
 
 @app.put("/api/auth/profile")
 async def update_profile(updated_data: dict, current_user: dict = Depends(get_current_user)):
     name = updated_data.get("name")
     email = updated_data.get("email")
+    gender = updated_data.get("gender")
     if not name or not email:
         raise HTTPException(status_code=400, detail="Name and email are required")
     
-    update_user_profile(current_user["id"], name, email)
-    return {"status": "success", "user": {"id": current_user["id"], "email": email, "name": name}}
+    update_user_profile(current_user["id"], name, email, gender)
+    # Fetch updated user to get accurate fields
+    user = get_user_by_id(current_user["id"])
+    return {
+        "status": "success", 
+        "user": {
+            "id": current_user["id"], 
+            "email": email, 
+            "name": name, 
+            "gender": user.get("gender") if user else gender
+        }
+    }
 
 @app.post("/api/auth/deactivate")
 async def deactivate_account(current_user: dict = Depends(get_current_user)):
@@ -1734,7 +1817,7 @@ async def analyze_health_trends(
     for r in valid_reports:
         date_str = r.get("structured_data", {}).get("date") or r["upload_time"][:10]
         results_list = r["structured_data"]["results"]
-        items = [f"{res.get('test_item', '')}: {res.get('value', '')} {res.get('unit', '')}".strip() for res in results_list if res.get('value') and res.get('value') != '-']
+        items = [line for res in results_list if (line := _format_result_line(res))]
         if items:
             data_summary.append(f"Examination Date: {date_str}\n" + "\n".join(items))
 
@@ -1792,9 +1875,136 @@ async def analyze_health_trends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Clinical analysis engine error: {e}")
 
-@app.get("/api/reports/health-summary")
-async def get_health_summary(current_user: dict = Depends(get_current_user)):
-    user_id = current_user["id"]
+def is_placeholder_health_summary(summary: Optional[str]) -> bool:
+    """True when cache holds an empty-state message, not a real LLM summary."""
+    if not summary or not str(summary).strip():
+        return True
+    lower = str(summary).lower()
+    return (
+        "please upload" in lower
+        or "insufficient clinical" in lower
+        or "no diagnostic biomarkers" in lower
+    )
+
+
+def user_has_staged_reports(user_id: str) -> bool:
+    """Whether the user has at least one staged lab record linked to their reports."""
+    if STORAGE_ENGINE == "supabase" and supabase:
+        try:
+            res = (
+                supabase.table("staging_medical_records")
+                .select("staging_record_id, reports!inner(user_id)")
+                .eq("reports.user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            return bool(res.data)
+        except Exception as e:
+            print(f"[CACHE] Staged records check failed: {e}")
+            return False
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT 1 FROM staging_medical_records s
+            JOIN reports r ON s.report_id = r.id
+            WHERE r.user_id = ? LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row is not None
+    except Exception as e:
+        print(f"[CACHE] Staged records check failed: {e}")
+        return False
+
+
+def _supabase_health_summary_available() -> bool:
+    """True if users.health_summary column exists (optional migration)."""
+    if STORAGE_ENGINE != "supabase" or not supabase:
+        return False
+    try:
+        supabase.table("users").select("health_summary").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
+def invalidate_health_summary_cache(user_id: str):
+    """Clear cached summary so the next request regenerates from current data."""
+    if _supabase_health_summary_available():
+        try:
+            supabase.table("users").update({"health_summary": None}).eq("id", user_id).execute()
+        except Exception as e:
+            print(f"[CACHE] Supabase health_summary clear failed: {e}")
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM health_summary_cache WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[CACHE ERROR] Failed to clear health_summary cache: {e}")
+
+
+def get_cached_health_summary(user_id: str) -> Optional[str]:
+    if _supabase_health_summary_available():
+        try:
+            res = supabase.table("users").select("health_summary").eq("id", user_id).execute()
+            if res.data and res.data[0].get("health_summary"):
+                return res.data[0]["health_summary"]
+        except Exception as e:
+            print(f"[CACHE] Supabase health_summary fetch failed: {e}")
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("SELECT summary FROM health_summary_cache WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row[0]
+    except Exception as e:
+        print(f"[CACHE ERROR] Failed to fetch health_summary from local SQLite cache: {e}")
+    return None
+
+
+def update_cached_health_summary(user_id: str, summary: Optional[str]):
+    if _supabase_health_summary_available():
+        try:
+            supabase.table("users").update({"health_summary": summary}).eq("id", user_id).execute()
+        except Exception as e:
+            print(f"[CACHE] Supabase health_summary update failed: {e}")
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM health_summary_cache WHERE user_id = ?", (user_id,))
+        if summary is not None:
+            updated_at = datetime.now().isoformat()
+            cursor.execute(
+                "INSERT INTO health_summary_cache (user_id, summary, updated_at) VALUES (?, ?, ?)",
+                (user_id, summary, updated_at),
+            )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[CACHE ERROR] Failed to update health_summary in local SQLite cache: {e}")
+
+
+def _format_result_line(res: dict) -> Optional[str]:
+    """Build a single biomarker line from staging or structured_data result dict."""
+    v = res.get("value")
+    if v is None or str(v).strip() in ("", "-"):
+        return None
+    label = (res.get("test_item") or res.get("key") or "").strip()
+    unit = (res.get("unit") or "").strip()
+    if label:
+        return f"{label}: {v} {unit}".strip()
+    return str(v).strip()
+
+async def generate_and_cache_health_summary(user_id: str) -> str:
+    """Generates the health summary using LLM and updates the cache."""
     if STORAGE_ENGINE == "supabase" and supabase:
         response = supabase.table("staging_medical_records").select("*, reports!inner(*)").eq("reports.user_id", user_id).execute()
         staged_records = response.data or []
@@ -1841,7 +2051,9 @@ async def get_health_summary(current_user: dict = Depends(get_current_user)):
     valid_reports = [r for r in reports if r.get("status") in ["completed", "sent"] and r.get("structured_data") and r["structured_data"].get("results")]
     
     if not valid_reports:
-        return {"summary": "Please upload some medical reports to see your AI health summary here."}
+        summary_text = "Please upload some medical reports to see your AI health summary here."
+        update_cached_health_summary(user_id, summary_text)
+        return summary_text
 
     def parse_dt(date_str: str, fallback_str: str) -> datetime:
         if not date_str:
@@ -1870,15 +2082,16 @@ async def get_health_summary(current_user: dict = Depends(get_current_user)):
         results_list = r["structured_data"]["results"]
         items = []
         for res in results_list:
-            k = res.get('key', '')
-            v = res.get('value')
-            if v is not None and str(v).strip() not in ['', '-']:
-                items.append(f"{k}: {v}")
+            line = _format_result_line(res)
+            if line:
+                items.append(line)
         if items:
             data_summary.append(f"Date: {date_str}\n" + "\n".join(items))
 
     if not data_summary:
-        return {"summary": "Please upload some medical reports with biomarker values to see your AI health summary here."}
+        summary_text = "Please upload some medical reports with biomarker values to see your AI health summary here."
+        update_cached_health_summary(user_id, summary_text)
+        return summary_text
 
     compiled_data = "\n\n".join(data_summary)
 
@@ -1901,24 +2114,47 @@ async def get_health_summary(current_user: dict = Depends(get_current_user)):
     - Do not include any HTML tags.
     """
 
+    response = llm_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a warm, supportive, and expert clinical AI assistant summarizing patient lab reports in simple layman terms."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    summary_text = response.choices[0].message.content.strip()
+    update_cached_health_summary(user_id, summary_text)
+    return summary_text
+
+@app.get("/api/reports/health-summary")
+async def get_health_summary(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    cached_summary = get_cached_health_summary(user_id)
+    # Regenerate when cache still says "upload reports" but CSV/import data exists
+    if cached_summary and not (
+        is_placeholder_health_summary(cached_summary) and user_has_staged_reports(user_id)
+    ):
+        return {"summary": cached_summary}
+
     try:
-        response = llm_client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a warm, supportive, and expert clinical AI assistant summarizing patient lab reports in simple layman terms."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        summary_text = response.choices[0].message.content.strip()
+        summary_text = await generate_and_cache_health_summary(user_id)
         return {"summary": summary_text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summary generation error: {e}")
+
 
 @app.post("/api/chat/sessions")
 async def create_chat_session(request: CreateSessionRequest, current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     session_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
+    
+    summary = get_cached_health_summary(user_id)
+    if not summary:
+        try:
+            summary = await generate_and_cache_health_summary(user_id)
+        except Exception:
+            summary = "Hello! I'm your AI Clinical Consultant."
+
     if STORAGE_ENGINE == "supabase" and supabase:
         supabase.table("chat_sessions").insert({
             "id": session_id,
@@ -1926,11 +2162,28 @@ async def create_chat_session(request: CreateSessionRequest, current_user: dict 
             "created_at": created_at,
             "title": request.title
         }).execute()
+        
+        # Save summary as first assistant message
+        msg_id = str(uuid.uuid4())
+        supabase.table("chat_messages").insert({
+            "id": msg_id,
+            "session_id": session_id,
+            "role": "assistant",
+            "content": summary,
+            "timestamp": created_at
+        }).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
         conn.execute(
             "INSERT INTO chat_sessions (id, user_id, created_at, title) VALUES (?, ?, ?, ?)",
             (session_id, user_id, created_at, request.title)
+        )
+        
+        # Save summary as first assistant message
+        msg_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO chat_messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+            (msg_id, session_id, "assistant", summary, created_at)
         )
         conn.commit()
         conn.close()
@@ -2053,7 +2306,7 @@ async def analyze_health_trends_stream(
     for r in valid_reports:
         date_str = r.get("structured_data", {}).get("date") or r["upload_time"][:10]
         results_list = r["structured_data"]["results"]
-        items = [f"{res.get('test_item', '')}: {res.get('value', '')} {res.get('unit', '')}".strip() for res in results_list if res.get('value') and res.get('value') != '-']
+        items = [line for res in results_list if (line := _format_result_line(res))]
         if items:
             data_summary.append(f"Examination Date: {date_str}\n" + "\n".join(items))
 
@@ -2209,6 +2462,46 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
         structured_data = await parse_medical_report_llm(file_path)
         raw_text = f"Extracted via OpenAI Vision API (1 page)"
 
+        # --- NAME VALIDATION ---
+        user_name = current_user.get("name", "")
+        patient_name = structured_data.get("patient_name", "")
+        if patient_name and not check_name_match(user_name, patient_name):
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                except Exception:
+                    pass
+            return {
+                "id": report_id,
+                "filename": file.filename,
+                "upload_time": report_metadata["upload_time"],
+                "status": "name_mismatch",
+                "is_name_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
+        # --- GENDER VALIDATION ---
+        user_gender = current_user.get("gender", "")
+        patient_gender = structured_data.get("gender", "")
+        if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                except Exception:
+                    pass
+            return {
+                "id": report_id,
+                "filename": file.filename,
+                "upload_time": report_metadata["upload_time"],
+                "status": "gender_mismatch",
+                "is_gender_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
         # --- DUPLICATE CHECK ---
         is_duplicate = False
         try:
@@ -2299,6 +2592,48 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
             structured_data = await parse_medical_report_multi_llm(saved_paths)
 
         raw_text = f"Extracted via OpenAI Vision API ({len(saved_paths)} page(s))"
+
+        # --- NAME VALIDATION ---
+        user_name = current_user.get("name", "")
+        patient_name = structured_data.get("patient_name", "")
+        if patient_name and not check_name_match(user_name, patient_name):
+            for sp in saved_paths:
+                if sp.exists():
+                    try:
+                        sp.unlink()
+                    except Exception:
+                        pass
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "name_mismatch",
+                "is_name_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
+        # --- GENDER VALIDATION ---
+        user_gender = current_user.get("gender", "")
+        patient_gender = structured_data.get("gender", "")
+        if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+            for sp in saved_paths:
+                if sp.exists():
+                    try:
+                        sp.unlink()
+                    except Exception:
+                        pass
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "gender_mismatch",
+                "is_gender_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
 
         # --- DUPLICATE CHECK ---
         is_duplicate = False
@@ -2466,6 +2801,36 @@ async def upload_multi_preprocessed(
             
         raw_text = f"Extracted via OpenAI Vision API ({len(paths)} preprocessed page(s))"
         
+        # --- NAME VALIDATION ---
+        user_name = current_user.get("name", "")
+        patient_name = structured_data.get("patient_name", "")
+        if patient_name and not check_name_match(user_name, patient_name):
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "name_mismatch",
+                "is_name_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
+        # --- GENDER VALIDATION ---
+        user_gender = current_user.get("gender", "")
+        patient_gender = structured_data.get("gender", "")
+        if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "gender_mismatch",
+                "is_gender_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
         # --- DUPLICATE CHECK ---
         is_duplicate = False
         try:
@@ -2526,7 +2891,7 @@ async def get_report(report_id: str):
     return report
 
 @app.put("/api/reports/{report_id}")
-async def update_report(report_id: str, updated_data: dict):
+async def update_report(report_id: str, updated_data: dict, background_tasks: BackgroundTasks):
     """Update structured data for a report (tester corrections)."""
     # If this is the first update (e.g. during Send), persist the report from TEMP_REPORTS to the DB
     if report_id in TEMP_REPORTS:
@@ -2571,6 +2936,25 @@ async def update_report(report_id: str, updated_data: dict):
     # Normalize the incoming data to flat structure for the duplicate check
     normalized_incoming = normalize_structured_data(updated_data.get("structured_data", {}))
     
+    # --- NAME VALIDATION ---
+    user = get_user_by_id(report.get("user_id"))
+    user_name = user.get("name", "") if user else ""
+    patient_name = normalized_incoming.get("patient_name", "")
+    if patient_name and not check_name_match(user_name, patient_name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Name Mismatch: The patient name on the report ('{patient_name}') does not match your registered name ('{user_name}')."
+        )
+
+    # --- GENDER VALIDATION ---
+    user_gender = user.get("gender", "") if user else ""
+    patient_gender = normalized_incoming.get("gender", "")
+    if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Gender Mismatch: The patient gender on the report ('{patient_gender}') does not match your registered gender ('{user_gender}')."
+        )
+
     # Run duplicate check
     is_duplicate = False
     try:
@@ -2591,6 +2975,10 @@ async def update_report(report_id: str, updated_data: dict):
         )
 
     await update_report_in_db(report_id, updated_data)
+    
+    if report.get("status") == "sent" and report.get("user_id"):
+        background_tasks.add_task(generate_and_cache_health_summary, report.get("user_id"))
+
     return {"status": "updated"}
 
 @app.post("/api/reports/manual")
@@ -2628,7 +3016,7 @@ async def create_manual_report(current_user: dict = Depends(get_current_user)):
     }
 
 @app.post("/api/reports/{report_id}/send")
-async def send_report(report_id: str):
+async def send_report(report_id: str, background_tasks: BackgroundTasks):
     """Mark report as verified and sent — the final step in the tester flow."""
     # Just in case send_report is called and the report is still in TEMP_REPORTS, persist it now
     if report_id in TEMP_REPORTS:
@@ -2639,10 +3027,15 @@ async def send_report(report_id: str):
     report = await get_report_by_id(report_id)
     if not report: raise HTTPException(status_code=404, detail="Not found")
     await mark_report_sent(report_id)
+    
+    user_id = report.get("user_id")
+    if user_id:
+        background_tasks.add_task(generate_and_cache_health_summary, user_id)
+
     return {"status": "sent", "message": "Report verified and submitted successfully"}
 
 @app.delete("/api/reports/{report_id}")
-async def delete_report_endpoint(report_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_report_endpoint(report_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     """Delete a report."""
     user_id = current_user["id"]
     report = await get_report_by_id(report_id)
@@ -2652,5 +3045,80 @@ async def delete_report_endpoint(report_id: str, current_user: dict = Depends(ge
         raise HTTPException(status_code=403, detail="Forbidden")
         
     await delete_report(report_id)
+    
+    background_tasks.add_task(generate_and_cache_health_summary, user_id)
+    
     return {"status": "deleted", "message": "Report deleted successfully"}
+
+def migrate_existing_users_gender():
+    print("[STARTUP GENDER MIGRATION] Running backfill migration...")
+    try:
+        if STORAGE_ENGINE == "supabase" and supabase:
+            res = supabase.table("users").select("*").execute()
+            users = res.data or []
+            for u in users:
+                cur_gender = u.get("gender")
+                if not cur_gender or str(cur_gender).strip() == "":
+                    # Fetch reports
+                    rep_res = supabase.table("reports").select("structured_data").eq("user_id", u["id"]).execute()
+                    reps = rep_res.data or []
+                    extracted = None
+                    for r in reps:
+                        sd = r.get("structured_data")
+                        if sd:
+                            if isinstance(sd, str):
+                                try:
+                                    sd = json.loads(sd)
+                                except Exception:
+                                    continue
+                            g = sd.get("gender")
+                            if g and str(g).strip().lower() in ("male", "female", "m", "f"):
+                                cg = str(g).strip().lower()
+                                if cg.startswith("m"):
+                                    extracted = "Male"
+                                elif cg.startswith("f"):
+                                    extracted = "Female"
+                                break
+                    if extracted:
+                        print(f"[STARTUP GENDER MIGRATION] Updating Supabase User {u['email']} gender to {extracted}")
+                        supabase.table("users").update({"gender": extracted}).eq("id", u["id"]).execute()
+        else:
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users")
+            users = [dict(row) for row in cursor.fetchall()]
+            for u in users:
+                cur_gender = u.get("gender")
+                if not cur_gender or str(cur_gender).strip() == "":
+                    cursor.execute("SELECT structured_data FROM reports WHERE user_id = ?", (u["id"],))
+                    reps = cursor.fetchall()
+                    extracted = None
+                    for r in reps:
+                        sd_str = r["structured_data"]
+                        if sd_str:
+                            try:
+                                sd = json.loads(sd_str)
+                            except Exception:
+                                continue
+                            g = sd.get("gender")
+                            if g and str(g).strip().lower() in ("male", "female", "m", "f"):
+                                cg = str(g).strip().lower()
+                                if cg.startswith("m"):
+                                    extracted = "Male"
+                                elif cg.startswith("f"):
+                                    extracted = "Female"
+                                break
+                    if extracted:
+                        print(f"[STARTUP GENDER MIGRATION] Updating SQLite User {u['email']} gender to {extracted}")
+                        cursor.execute("UPDATE users SET gender = ? WHERE id = ?", (extracted, u["id"]))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"[STARTUP GENDER MIGRATION ERROR] {e}")
+
+@app.on_event("startup")
+def startup_migration():
+    migrate_existing_users_gender()
+
 

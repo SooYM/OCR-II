@@ -36,13 +36,35 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
     _loadSessions();
   }
 
-  void _initNewChat() {
-    _messages.clear();
-    _currentSessionId = null;
-    _messages.add(ChatMessage(
-      role: 'assistant',
-      content: "Hello! I'm your **AI Clinical Consultant**. I have access to your medical reports and can help you understand your health trends.\n\nYou can ask me things like:\n- *\"How is my cholesterol trending?\"*\n- *\"Are any of my values outside normal range?\"*\n- *\"What should I do about my iron levels?\"*\n\nWhat would you like to know?",
-    ));
+  Future<void> _initNewChat() async {
+    setState(() {
+      _messages.clear();
+      _currentSessionId = null;
+      _isTyping = true;
+    });
+
+    try {
+      final summary = await ApiService.fetchHealthSummary();
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(
+            role: 'assistant',
+            content: summary,
+          ));
+          _isTyping = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(
+            role: 'assistant',
+            content: "Hello! I'm your **AI Clinical Consultant**. I couldn't load your health summary at the moment, but feel free to ask me any questions about your reports!\n\n*Error: $e*",
+          ));
+          _isTyping = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadSessions() async {

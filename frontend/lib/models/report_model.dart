@@ -8,6 +8,8 @@ class MedicalReport {
   final StructuredData? structuredData;
   bool userVerified;
   final bool isDuplicate;
+  final bool isNameMismatch;
+  final bool isGenderMismatch;
 
   MedicalReport({
     required this.id,
@@ -18,6 +20,8 @@ class MedicalReport {
     this.structuredData,
     this.userVerified = false,
     this.isDuplicate = false,
+    this.isNameMismatch = false,
+    this.isGenderMismatch = false,
   });
 
   factory MedicalReport.fromJson(Map<String, dynamic> json) {
@@ -31,6 +35,8 @@ class MedicalReport {
           : null,
       userVerified: json['user_verified'] as bool? ?? false,
       isDuplicate: json['is_duplicate'] as bool? ?? false,
+      isNameMismatch: json['is_name_mismatch'] as bool? ?? false,
+      isGenderMismatch: json['is_gender_mismatch'] as bool? ?? false,
     );
   }
 
@@ -44,6 +50,8 @@ class MedicalReport {
       'structured_data': structuredData?.toJson(),
       'user_verified': userVerified,
       'is_duplicate': isDuplicate,
+      'is_name_mismatch': isNameMismatch,
+      'is_gender_mismatch': isGenderMismatch,
     };
   }
 }

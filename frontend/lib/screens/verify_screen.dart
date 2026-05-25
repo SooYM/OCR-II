@@ -207,6 +207,48 @@ class _VerifyScreenState extends State<VerifyScreen> {
     return null;
   }
 
+  bool _checkNameMatch(String userName, String patientName) {
+    if (userName.isEmpty || patientName.isEmpty) return false;
+    
+    Set<String> tokenize(String name) {
+      final lower = name.toLowerCase();
+      final titles = {
+        'mr', 'mrs', 'ms', 'miss', 'dr', 'mdm', 'bin', 'binte', 'bte', 'al', 'ap', 'anak', 'dato', 'datuk', 'sri', 'sir', 'madam'
+      };
+      final regex = RegExp(r'\b[a-z]{2,}\b');
+      final matches = regex.allMatches(lower).map((m) => m.group(0)!).toSet();
+      return matches.difference(titles);
+    }
+    
+    var userTokens = tokenize(userName);
+    var patientTokens = tokenize(patientName);
+    
+    if (userTokens.isEmpty) {
+      userTokens = RegExp(r'\w+').allMatches(userName.toLowerCase()).map((m) => m.group(0)!).toSet();
+    }
+    if (patientTokens.isEmpty) {
+      patientTokens = RegExp(r'\w+').allMatches(patientName.toLowerCase()).map((m) => m.group(0)!).toSet();
+    }
+    
+    if (userTokens.isEmpty || patientTokens.isEmpty) return false;
+    
+    return userTokens.intersection(patientTokens).isNotEmpty;
+  }
+
+  bool _checkGenderMatch(String userGender, String patientGender) {
+    if (userGender.isEmpty || patientGender.isEmpty) return true;
+    final ug = userGender.trim().toLowerCase();
+    final pg = patientGender.trim().toLowerCase();
+    final isUserMale = ug.startsWith('m') && !ug.startsWith('f');
+    final isUserFemale = ug.startsWith('f');
+    final isPatientMale = pg.startsWith('m') && !pg.startsWith('f');
+    final isPatientFemale = pg.startsWith('f');
+    if ((isUserMale && isPatientMale) || (isUserFemale && isPatientFemale)) {
+      return true;
+    }
+    return false;
+  }
+
   /// Pre-populate the report with all standard biomarkers from the dictionary as empty fields if not extracted.
   void _prepopulateMissingBiomarkers() {
     // Collect keys of biomarkers already present
@@ -275,6 +317,30 @@ class _VerifyScreenState extends State<VerifyScreen> {
         );
         return;
       }
+    }
+
+    // Name validation
+    if (_data.patientName != null &&
+        _data.patientName!.isNotEmpty &&
+        AuthService.currentUser != null &&
+        !_checkNameMatch(
+            AuthService.currentUser!['name'] as String? ?? '',
+            _data.patientName!)) {
+      _showLocalNameMismatchDialog();
+      return;
+    }
+
+    // Gender validation
+    if (_data.gender != null &&
+        _data.gender!.isNotEmpty &&
+        AuthService.currentUser != null &&
+        AuthService.currentUser!['gender'] != null &&
+        (AuthService.currentUser!['gender'] as String).isNotEmpty &&
+        !_checkGenderMatch(
+            AuthService.currentUser!['gender'] as String,
+            _data.gender!)) {
+      _showLocalGenderMismatchDialog();
+      return;
     }
 
     setState(() => _isSending = true);
@@ -362,6 +428,52 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
+  void _showLocalNameMismatchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Name Mismatch'),
+          ],
+        ),
+        content: Text("The patient name ('${_data.patientName}') does not match your registered name (${AuthService.currentUser!['name']}). Reports must belong to the account holder to maintain clinical data consistency."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLocalGenderMismatchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Gender Mismatch'),
+          ],
+        ),
+        content: Text("The patient gender ('${_data.gender}') does not match your registered gender (${AuthService.currentUser!['gender']}). Reports must belong to the account holder to maintain clinical data consistency."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addTestResult() {
     setState(() {
       _data.results.add(TestResult(testItem: '', value: ''));
@@ -435,9 +547,19 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         label: 'Patient Name',
                         value: _data.patientName ?? '',
                         icon: Icons.badge_outlined,
+                        errorText: (_data.patientName != null &&
+                                _data.patientName!.isNotEmpty &&
+                                AuthService.currentUser != null &&
+                                !_checkNameMatch(
+                                    AuthService.currentUser!['name'] as String? ?? '',
+                                    _data.patientName!))
+                            ? 'Name must match your registered name (${AuthService.currentUser!['name']})'
+                            : null,
                         onChanged: (v) {
-                          _data.patientName = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.patientName = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                       const Divider(),
@@ -455,10 +577,22 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         label: 'Gender',
                         value: _data.gender ?? '',
                         icon: Icons.wc_outlined,
+                        errorText: (_data.gender != null &&
+                                _data.gender!.isNotEmpty &&
+                                AuthService.currentUser != null &&
+                                AuthService.currentUser!['gender'] != null &&
+                                (AuthService.currentUser!['gender'] as String).isNotEmpty &&
+                                !_checkGenderMatch(
+                                    AuthService.currentUser!['gender'] as String,
+                                    _data.gender!))
+                            ? 'Gender must match your registered gender (${AuthService.currentUser!['gender']})'
+                            : null,
                         onChanged: (v) {
-                          _data.gender = v;
-                          _hasChanges = true;
-                          _updateReferenceRangesForGender();
+                          setState(() {
+                            _data.gender = v;
+                            _hasChanges = true;
+                            _updateReferenceRangesForGender();
+                          });
                         },
                       ),
                       const Divider(),
@@ -716,54 +850,72 @@ class _VerifyScreenState extends State<VerifyScreen> {
     List<TextInputFormatter>? inputFormatters,
     TextInputType? keyboardType,
     String? hintText,
+    String? errorText,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: TextFormField(
-              initialValue: value,
-              onChanged: onChanged,
-              inputFormatters: inputFormatters,
-              keyboardType: keyboardType,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 15,
-              ),
-              decoration: InputDecoration(
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+          Row(
+            children: [
+              Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 90,
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                fillColor: Colors.transparent,
-                hintText: hintText,
-                hintStyle: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal,
+              ),
+              Expanded(
+                child: TextFormField(
+                  initialValue: value,
+                  onChanged: onChanged,
+                  inputFormatters: inputFormatters,
+                  keyboardType: keyboardType,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 15,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                      ),
+                    ),
+                    fillColor: Colors.transparent,
+                    hintText: hintText,
+                    hintStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                      fontSize: 14,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (errorText != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 118.0, top: 4.0),
+              child: Text(
+                errorText,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

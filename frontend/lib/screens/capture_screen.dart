@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../models/report_model.dart';
 import 'verify_screen.dart';
 import 'camera_capture_screen.dart';
@@ -183,7 +184,11 @@ class _CaptureScreenState extends State<CaptureScreen>
       });
 
       if (mounted) {
-        if (report.isDuplicate) {
+        if (report.isNameMismatch) {
+          _showNameMismatchDialog(report);
+        } else if (report.isGenderMismatch) {
+          _showGenderMismatchDialog(report);
+        } else if (report.isDuplicate) {
           _showDuplicateDialog(report);
         } else {
           Navigator.push(
@@ -200,6 +205,52 @@ class _CaptureScreenState extends State<CaptureScreen>
         );
       }
     }
+  }
+
+  void _showNameMismatchDialog(MedicalReport report) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Name Mismatch'),
+          ],
+        ),
+        content: Text("The patient name on this report ('${report.structuredData?.patientName}') does not match your registered name. Reports must belong to the account holder to maintain clinical data consistency."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showGenderMismatchDialog(MedicalReport report) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Gender Mismatch'),
+          ],
+        ),
+        content: Text("The patient gender on this report ('${report.structuredData?.gender}') does not match your registered gender (${AuthService.currentUser?['gender'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showDuplicateDialog(MedicalReport report) {

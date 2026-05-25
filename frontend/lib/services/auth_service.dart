@@ -38,11 +38,11 @@ class AuthService {
 
   // ─── Register ──────────────────────────────────────────────────────────────
 
-  static Future<Map<String, dynamic>> register(String email, String name, String password) async {
+  static Future<Map<String, dynamic>> register(String email, String name, String password, String gender) async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/register'),
       headers: {'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true'},
-      body: jsonEncode({'email': email, 'name': name, 'password': password}),
+      body: jsonEncode({'email': email, 'name': name, 'password': password, 'gender': gender}),
     ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
