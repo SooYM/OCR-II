@@ -402,7 +402,7 @@ class _MainScreenState extends State<MainScreen> {
     double minY = double.infinity;
     double maxY = double.negativeInfinity;
 
-    final entry = BiomarkerDictionary.getEntryByKey(testKey) ?? BiomarkerDictionary.match(testKey);
+    final entry = BiomarkerDictionary.getEntryByKey(testKey);
     final targetUnit = entry?.unit ?? '';
 
     // Parse ref range for numeric abnormal detection
@@ -547,7 +547,7 @@ class _MainScreenState extends State<MainScreen> {
                       ),
                       leftTitles: AxisTitles(
                         sideTitles: SideTitles(
-                          showTitles: true, reservedSize: 36, interval: isDiscrete ? 1 : yInterval,
+                          showTitles: true, reservedSize: 40, interval: isDiscrete ? 1 : yInterval,
                           getTitlesWidget: (value, meta) {
                             if (value == meta.max || value == meta.min) return const SizedBox();
                             if (isDiscrete) {
@@ -558,9 +558,17 @@ class _MainScreenState extends State<MainScreen> {
                               else if (v == 1) t = 'Tr';
                               else if (v == 5) t = 'Pos';
                               else if (v > 0) t = '${v-1}+';
-                              return Text(t, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 9));
+                              return SideTitleWidget(
+                                axisSide: meta.axisSide,
+                                space: 8,
+                                child: Text(t, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 9)),
+                              );
                             }
-                            return Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10));
+                            return SideTitleWidget(
+                              axisSide: meta.axisSide,
+                              space: 8,
+                              child: Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
+                            );
                           },
                         ),
                       ),
@@ -1172,7 +1180,7 @@ class _MainScreenState extends State<MainScreen> {
         final key = result.key ?? result.testItem;
         if (key != null) {
           if (!testKeyToName.containsKey(key)) {
-            final entry = BiomarkerDictionary.getEntryByKey(key) ?? BiomarkerDictionary.match(key);
+            final entry = BiomarkerDictionary.getEntryByKey(key);
             testKeyToName[key] = entry?.standardName ?? result.testItem;
           }
           if (_parseValue(result.value) != null) {
@@ -1368,9 +1376,13 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
-                        showTitles: true, reservedSize: 44,
+                        showTitles: true, reservedSize: 48,
                         getTitlesWidget: (value, meta) {
-                          return Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w500));
+                          return SideTitleWidget(
+                            axisSide: meta.axisSide,
+                            space: 8,
+                            child: Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w500)),
+                          );
                         },
                       ),
                     ),
@@ -1520,9 +1532,13 @@ class _MainScreenState extends State<MainScreen> {
                               ),
                               leftTitles: AxisTitles(
                                 sideTitles: SideTitles(
-                                  showTitles: true, reservedSize: 48,
+                                  showTitles: true, reservedSize: 52,
                                   getTitlesWidget: (value, meta) {
-                                    return Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11));
+                                    return SideTitleWidget(
+                                      axisSide: meta.axisSide,
+                                      space: 8,
+                                      child: Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11)),
+                                    );
                                   },
                                 ),
                               ),
@@ -2275,7 +2291,7 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
   @override
   void initState() {
     super.initState();
-    _entry = BiomarkerDictionary.getEntryByKey(widget.testKey) ?? BiomarkerDictionary.match(widget.testKey);
+    _entry = BiomarkerDictionary.getEntryByKey(widget.testKey);
     _defaultUnit = _entry?.unit ?? '';
     _availableUnits = _entry != null && _entry!.allowedUnits.isNotEmpty
         ? List<String>.from(_entry!.allowedUnits)
@@ -2552,7 +2568,7 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                   ),
                                   leftTitles: AxisTitles(
                                     sideTitles: SideTitles(
-                                      showTitles: true, reservedSize: 48, interval: isDiscrete ? 1 : yInterval,
+                                      showTitles: true, reservedSize: 52, interval: isDiscrete ? 1 : yInterval,
                                       getTitlesWidget: (value, meta) {
                                         if (value == meta.max || value == meta.min) return const SizedBox();
                                         if (isDiscrete) {
@@ -2563,9 +2579,17 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                           else if (v == 1) t = 'Tr';
                                           else if (v == 5) t = 'Pos';
                                           else if (v > 0) t = '${v-1}+';
-                                          return Text(t, style: const TextStyle(fontSize: 11));
+                                          return SideTitleWidget(
+                                            axisSide: meta.axisSide,
+                                            space: 8,
+                                            child: Text(t, style: const TextStyle(fontSize: 11)),
+                                          );
                                         }
-                                        return Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11));
+                                        return SideTitleWidget(
+                                          axisSide: meta.axisSide,
+                                          space: 8,
+                                          child: Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11)),
+                                        );
                                       },
                                     ),
                                   ),
