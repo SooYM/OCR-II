@@ -117,8 +117,8 @@ class RegisterRequest(BaseModel):
     name: str
     password: str
     gender: str
-    age: int
-    dob: str
+    dob: Optional[str] = ""
+    ic_number: Optional[str] = ""
 
 class LoginRequest(BaseModel):
     email: str
@@ -137,6 +137,10 @@ class AnalyzeRequest(BaseModel):
 
 class CreateSessionRequest(BaseModel):
     title: str
+
+class PreprocessedUploadRequest(BaseModel):
+    filepaths: TypingList[str]
+    filenames: Optional[TypingList[str]] = None
 
 # ─── Auth Helpers ──────────────────────────────────────────────────────────
 
@@ -187,8 +191,8 @@ def init_local_db():
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
             gender TEXT,
-            age INTEGER,
             dob DATE,
+            ic_number TEXT,
             created_at TEXT NOT NULL
         )
     """)
@@ -223,15 +227,21 @@ def init_local_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
-    # Migration: add age column to users if missing
+    # Migration: drop age column from users if present
     try:
-        cursor.execute("ALTER TABLE users ADD COLUMN age INTEGER")
+        cursor.execute("ALTER TABLE users DROP COLUMN age")
     except sqlite3.OperationalError:
-        pass  # Column already exists
+        pass
 
     # Migration: add dob column to users if missing
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN dob DATE")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Migration: add ic_number column to users if missing
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN ic_number TEXT")
     except sqlite3.OperationalError:
         pass  # Column already exists
 
@@ -298,6 +308,25 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
         conn.close()
         return dict(row) if row else None
 
+def get_user_by_ic(ic_number: str) -> Optional[dict]:
+    """Look up a user by their normalised IC number."""
+    ic_clean = str(ic_number).strip()
+    if not ic_clean:
+        return None
+    if STORAGE_ENGINE == "supabase" and supabase:
+        response = supabase.table("users").select("*").eq("ic_number", ic_clean).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        return None
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE ic_number = ?", (ic_clean,))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
 def normalize_dob(dob_str: str) -> str:
     if not dob_str or not str(dob_str).strip():
         raise ValueError("Date of birth is required")
@@ -306,19 +335,28 @@ def normalize_dob(dob_str: str) -> str:
         raise ValueError(f"Invalid date of birth: '{dob_str}'. Please use YYYY-MM-DD or DD/MM/YYYY format.")
     return parsed.isoformat()
 
-def create_user(email: str, name: str, password: str, gender: str, age: int, dob: str) -> dict:
+def normalize_ic(ic_str: Optional[str]) -> str:
+    if not ic_str: return ""
+    import re
+    cleaned = re.sub(r'\D', '', str(ic_str).strip())
+    if len(cleaned) == 12:
+        return f"{cleaned[:6]}-{cleaned[6:8]}-{cleaned[8:]}"
+    return str(ic_str).strip()
+
+def create_user(email: str, name: str, password: str, gender: str, dob: str, ic_number: Optional[str] = "") -> dict:
     user_id = str(uuid.uuid4())
     pw_hash = hash_password(password)
     now = datetime.now().isoformat()
     norm_dob = normalize_dob(dob)
+    norm_ic = normalize_ic(ic_number)
     user_data = {
         "id": user_id,
         "email": email.lower().strip(),
         "name": name.strip(),
         "password_hash": pw_hash,
         "gender": gender.strip(),
-        "age": age,
         "dob": norm_dob,
+        "ic_number": norm_ic,
         "created_at": now,
     }
     if STORAGE_ENGINE == "supabase" and supabase:
@@ -326,21 +364,21 @@ def create_user(email: str, name: str, password: str, gender: str, age: int, dob
     else:
         conn = sqlite3.connect(str(DB_PATH))
         conn.execute(
-            "INSERT INTO users (id, email, name, password_hash, status, gender, age, dob, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', gender.strip(), age, norm_dob, now)
+            "INSERT INTO users (id, email, name, password_hash, status, gender, dob, ic_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', gender.strip(), norm_dob, norm_ic, now)
         )
         conn.commit()
         conn.close()
-    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "gender": user_data["gender"], "age": age, "dob": norm_dob, "created_at": now}
+    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "gender": user_data["gender"], "dob": norm_dob, "ic_number": norm_ic, "created_at": now}
 
-def update_user_profile(user_id: str, name: str, email: str, gender: Optional[str] = None, age: Optional[int] = None, dob: Optional[str] = None):
+def update_user_profile(user_id: str, name: str, email: str, gender: Optional[str] = None, dob: Optional[str] = None, ic_number: Optional[str] = None):
     update_data = {"name": name, "email": email}
     if gender:
         update_data["gender"] = gender
-    if age is not None:
-        update_data["age"] = age
     if dob:
         update_data["dob"] = normalize_dob(dob)
+    if ic_number is not None:
+        update_data["ic_number"] = normalize_ic(ic_number)
 
     if STORAGE_ENGINE == "supabase" and supabase:
         supabase.table("users").update(update_data).eq("id", user_id).execute()
@@ -351,12 +389,12 @@ def update_user_profile(user_id: str, name: str, email: str, gender: Optional[st
         if gender:
             query += ", gender = ?"
             params.append(gender)
-        if age is not None:
-            query += ", age = ?"
-            params.append(age)
         if dob:
             query += ", dob = ?"
             params.append(normalize_dob(dob))
+        if ic_number is not None:
+            query += ", ic_number = ?"
+            params.append(normalize_ic(ic_number))
         query += " WHERE id = ?"
         params.append(user_id)
         conn.execute(query, tuple(params))
@@ -1586,25 +1624,32 @@ def extract_dob_from_ic(ic_str: str):
     return None
 
 def check_age_and_identity_match(
-    user_age: Optional[int],
     user_dob_str: Optional[str],
-    patient_age_str: Optional[str],
     patient_dob_str: Optional[str],
     patient_ic_str: Optional[str],
-    report_date_str: Optional[str]
+    user_ic_str: Optional[str] = None
 ) -> bool:
-    import datetime
-    if not patient_age_str and not patient_dob_str and not patient_ic_str:
+    if not patient_dob_str and not patient_ic_str:
         return True
+
+    # 1. Clean and verify IC Number match if both are present
+    if user_ic_str and patient_ic_str:
+        u_ic_clean = re.sub(r'[^a-zA-Z0-9]', '', str(user_ic_str)).upper()
+        p_ic_clean = re.sub(r'[^a-zA-Z0-9]', '', str(patient_ic_str)).upper()
+        if u_ic_clean and p_ic_clean and u_ic_clean != p_ic_clean:
+            print(f"[IDENTITY MISMATCH] IC Number mismatch: User IC '{user_ic_str}' vs Patient IC '{patient_ic_str}'")
+            return False
 
     u_dob = parse_date_robust(user_dob_str) if user_dob_str else None
     p_dob = parse_date_robust(patient_dob_str) if patient_dob_str else None
     
+    # 2. Verify DOB match
     if u_dob and p_dob:
         if u_dob != p_dob:
             print(f"[IDENTITY MISMATCH] DOB mismatch: User DOB {u_dob} vs Patient DOB {p_dob}")
             return False
             
+    # 3. Verify DOB against patient's IC-extracted DOB
     p_ic_dob = extract_dob_from_ic(patient_ic_str)
     if u_dob and p_ic_dob:
         uyy_last2 = u_dob.year % 100
@@ -1613,31 +1658,6 @@ def check_age_and_identity_match(
         iyy, imm, idd = p_ic_dob
         if uyy_last2 != iyy or umm != imm or udd != idd:
             print(f"[IDENTITY MISMATCH] IC DOB mismatch: User DOB {u_dob} vs Patient IC DOB {iyy:02d}{imm:02d}{idd:02d}")
-            return False
-
-    p_age = None
-    if patient_age_str:
-        m = re.search(r'\b\d+\b', str(patient_age_str))
-        if m:
-            p_age = int(m.group(0))
-
-    rep_date = parse_date_robust(report_date_str) if report_date_str else None
-    calculated_user_age = None
-    
-    if u_dob and rep_date:
-        calculated_user_age = rep_date.year - u_dob.year - ((rep_date.month, rep_date.day) < (u_dob.month, u_dob.day))
-    elif user_age is not None:
-        if rep_date:
-            curr_year = datetime.date.today().year
-            rep_year = rep_date.year
-            elapsed = curr_year - rep_year
-            calculated_user_age = user_age - elapsed
-        else:
-            calculated_user_age = user_age
-
-    if calculated_user_age is not None and p_age is not None:
-        if abs(calculated_user_age - p_age) > 2:
-            print(f"[IDENTITY MISMATCH] Age mismatch: Expected User Age at report {calculated_user_age} vs Patient Age {p_age}")
             return False
 
     return True
@@ -1799,14 +1819,30 @@ async def root():
 
 @app.post("/api/auth/register")
 async def register(req: RegisterRequest):
-    if not req.email or not req.password or not req.name or not req.gender or req.age is None or not req.dob:
-        raise HTTPException(status_code=400, detail="Email, name, password, gender, age, and DOB are required")
+    if not req.email or not req.password or not req.name or not req.gender:
+        raise HTTPException(status_code=400, detail="Email, name, password, and gender are required")
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    # Auto-extract DOB from IC number if not provided
+    dob = req.dob or ""
+    if not dob and req.ic_number:
+        ic_dob = extract_dob_from_ic(req.ic_number)
+        if ic_dob:
+            yy, mm, dd = ic_dob
+            now_year = datetime.now().year
+            century = (now_year // 100) * 100
+            full_year = century + yy
+            if full_year > now_year:
+                full_year -= 100
+            dob = f"{full_year}-{mm:02d}-{dd:02d}"
+    
     if get_user_by_email(req.email):
         raise HTTPException(status_code=409, detail="Email already registered")
+    if req.ic_number and get_user_by_ic(normalize_ic(req.ic_number)):
+        raise HTTPException(status_code=409, detail="IC number already registered to another account")
     try:
-        user = create_user(req.email, req.name, req.password, req.gender, req.age, req.dob)
+        user = create_user(req.email, req.name, req.password, req.gender, dob, req.ic_number)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     token = create_jwt(user["id"], user["email"])
@@ -1817,8 +1853,8 @@ async def register(req: RegisterRequest):
             "email": user["email"],
             "name": user["name"],
             "gender": user["gender"],
-            "age": user["age"],
-            "dob": user["dob"]
+            "dob": user["dob"],
+            "ic_number": user["ic_number"]
         }
     }
 
@@ -1837,8 +1873,8 @@ async def login(req: LoginRequest):
             "email": user["email"],
             "name": user["name"],
             "gender": user.get("gender"),
-            "age": user.get("age"),
-            "dob": user.get("dob")
+            "dob": user.get("dob"),
+            "ic_number": user.get("ic_number")
         }
     }
 
@@ -1849,8 +1885,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "email": current_user["email"],
         "name": current_user["name"],
         "gender": current_user.get("gender"),
-        "age": current_user.get("age"),
-        "dob": current_user.get("dob")
+        "dob": current_user.get("dob"),
+        "ic_number": current_user.get("ic_number")
     }
 
 @app.put("/api/auth/profile")
@@ -1858,13 +1894,13 @@ async def update_profile(updated_data: dict, current_user: dict = Depends(get_cu
     name = updated_data.get("name")
     email = updated_data.get("email")
     gender = updated_data.get("gender")
-    age = updated_data.get("age")
     dob = updated_data.get("dob")
+    ic_number = updated_data.get("ic_number")
     if not name or not email:
         raise HTTPException(status_code=400, detail="Name and email are required")
     
     try:
-        update_user_profile(current_user["id"], name, email, gender, age=age, dob=dob)
+        update_user_profile(current_user["id"], name, email, gender, dob=dob, ic_number=ic_number)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     # Fetch updated user to get accurate fields
@@ -1876,8 +1912,8 @@ async def update_profile(updated_data: dict, current_user: dict = Depends(get_cu
             "email": email, 
             "name": name, 
             "gender": user.get("gender") if user else gender,
-            "age": user.get("age") if user else age,
-            "dob": user.get("dob") if user else dob
+            "dob": user.get("dob") if user else dob,
+            "ic_number": user.get("ic_number") if user else ic_number
         }
     }
 
@@ -2648,7 +2684,7 @@ async def analyze_health_trends_stream(
     return StreamingResponse(token_generator(), media_type="text/event-stream")
 
 @app.post("/api/upload")
-async def upload_report(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+async def upload_report(file: UploadFile = File(...), force: bool = False, current_user: dict = Depends(get_current_user)):
     """Upload an image, run OCR + LLM parsing, return structured data."""
     report_id = str(uuid.uuid4())
     file_ext = Path(file.filename).suffix or ".jpg"
@@ -2675,104 +2711,75 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
         structured_data = await parse_medical_report_llm(file_path)
         raw_text = f"Extracted via OpenAI Vision API (1 page)"
 
-        # --- NAME VALIDATION ---
-        user_name = current_user.get("name", "")
-        patient_name = structured_data.get("patient_name", "")
-        if patient_name and not check_name_match(user_name, patient_name):
-            if file_path.exists():
-                try:
-                    file_path.unlink()
-                except Exception:
-                    pass
-            return {
-                "id": report_id,
-                "filename": file.filename,
-                "upload_time": report_metadata["upload_time"],
-                "status": "name_mismatch",
-                "is_name_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # --- GENDER VALIDATION ---
-        user_gender = current_user.get("gender", "")
-        patient_gender = structured_data.get("gender", "")
-        if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
-            if file_path.exists():
-                try:
-                    file_path.unlink()
-                except Exception:
-                    pass
-            return {
-                "id": report_id,
-                "filename": file.filename,
-                "upload_time": report_metadata["upload_time"],
-                "status": "gender_mismatch",
-                "is_gender_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # --- AGE & IDENTITY VALIDATION ---
-        user_age = current_user.get("age")
+        # Set default values for demographics if missing
         user_dob = current_user.get("dob")
-        patient_age = structured_data.get("age", "")
-        patient_dob = structured_data.get("dob", "")
-        patient_ic = structured_data.get("ic_number", "")
-        report_date = structured_data.get("collected", "")
+        user_ic = current_user.get("ic_number")
 
-        if (user_age is not None or user_dob) and not check_age_and_identity_match(
-            user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
-        ):
-            if file_path.exists():
-                try:
-                    file_path.unlink()
-                except Exception:
-                    pass
-            return {
-                "id": report_id,
-                "filename": file.filename,
-                "upload_time": report_metadata["upload_time"],
-                "status": "age_mismatch",
-                "is_age_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
+        if user_dob and not structured_data.get("dob"):
+            structured_data["dob"] = user_dob
+        if user_ic and not structured_data.get("ic_number"):
+            structured_data["ic_number"] = user_ic
 
-        # --- DUPLICATE CHECK ---
+        is_name_mismatched = False
+        is_gender_mismatched = False
+        is_age_mismatched = False
         is_duplicate = False
-        try:
-            is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
-        except Exception as e:
-            print(f"[DUPLICATE CHECK ERROR] {e}")
 
-        if is_duplicate:
-            # Delete from DB immediately as requested
+        if not force:
+            # --- NAME VALIDATION ---
+            user_name = current_user.get("name", "")
+            patient_name = structured_data.get("patient_name", "")
+            if patient_name and not check_name_match(user_name, patient_name):
+                is_name_mismatched = True
+
+            # --- GENDER VALIDATION ---
+            user_gender = current_user.get("gender", "")
+            patient_gender = structured_data.get("gender", "")
+            if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+                is_gender_mismatched = True
+
+            # --- AGE & IDENTITY VALIDATION ---
+            patient_dob = structured_data.get("dob", "")
+            patient_ic = structured_data.get("ic_number", "")
+
+            if (user_dob or user_ic) and not check_age_and_identity_match(
+                user_dob, patient_dob, patient_ic, user_ic
+            ):
+                is_age_mismatched = True
+
+            # --- DUPLICATE CHECK ---
             try:
-                await delete_report(report_id)
+                is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
             except Exception as e:
-                print(f"[DELETE ERROR] {e}")
+                print(f"[DUPLICATE CHECK ERROR] {e}")
 
-            return {
-                "id": report_id,
-                "filename": file.filename,
-                "upload_time": report_metadata["upload_time"],
-                "status": "duplicate",
-                "is_duplicate": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # Save to TEMP_REPORTS instead of DB
+        # Always save to TEMP_REPORTS so they can proceed if they confirm
         report_metadata["status"] = "completed"
         report_metadata["raw_text"] = raw_text
         report_metadata["structured_data"] = structured_data
         TEMP_REPORTS[report_id] = report_metadata
-        
+
+        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate:
+            status_val = "completed"
+            if is_name_mismatched: status_val = "name_mismatch"
+            elif is_gender_mismatched: status_val = "gender_mismatch"
+            elif is_age_mismatched: status_val = "age_mismatch"
+            elif is_duplicate: status_val = "duplicate"
+            
+            return {
+                "id": report_id,
+                "filename": file.filename,
+                "upload_time": report_metadata["upload_time"],
+                "status": status_val,
+                "is_name_mismatch": is_name_mismatched,
+                "is_gender_mismatch": is_gender_mismatched,
+                "is_age_mismatch": is_age_mismatched,
+                "is_duplicate": is_duplicate,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
         return {
             "id": report_id,
             "filename": file.filename,
@@ -2793,7 +2800,7 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/upload-multi")
-async def upload_multi_report(files: list[UploadFile] = File(...), current_user: dict = Depends(get_current_user)):
+async def upload_multi_report(files: list[UploadFile] = File(...), force: bool = False, current_user: dict = Depends(get_current_user)):
     """Upload multiple page images for a single report. Merges all pages via LLM."""
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -2833,106 +2840,74 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
 
         raw_text = f"Extracted via OpenAI Vision API ({len(saved_paths)} page(s))"
 
-        # --- NAME VALIDATION ---
-        user_name = current_user.get("name", "")
-        patient_name = structured_data.get("patient_name", "")
-        if patient_name and not check_name_match(user_name, patient_name):
-            for sp in saved_paths:
-                if sp.exists():
-                    try:
-                        sp.unlink()
-                    except Exception:
-                        pass
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "name_mismatch",
-                "is_name_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # --- GENDER VALIDATION ---
-        user_gender = current_user.get("gender", "")
-        patient_gender = structured_data.get("gender", "")
-        if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
-            for sp in saved_paths:
-                if sp.exists():
-                    try:
-                        sp.unlink()
-                    except Exception:
-                        pass
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "gender_mismatch",
-                "is_gender_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # --- AGE & IDENTITY VALIDATION ---
-        user_age = current_user.get("age")
+        # Set default values for demographics if missing
         user_dob = current_user.get("dob")
-        patient_age = structured_data.get("age", "")
-        patient_dob = structured_data.get("dob", "")
-        patient_ic = structured_data.get("ic_number", "")
-        report_date = structured_data.get("collected", "")
+        user_ic = current_user.get("ic_number")
 
-        if (user_age is not None or user_dob) and not check_age_and_identity_match(
-            user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
-        ):
-            for sp in saved_paths:
-                if sp.exists():
-                    try:
-                        sp.unlink()
-                    except Exception:
-                        pass
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "age_mismatch",
-                "is_age_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
+        if user_dob and not structured_data.get("dob"):
+            structured_data["dob"] = user_dob
+        if user_ic and not structured_data.get("ic_number"):
+            structured_data["ic_number"] = user_ic
 
-        # --- DUPLICATE CHECK ---
+        is_name_mismatched = False
+        is_gender_mismatched = False
+        is_age_mismatched = False
         is_duplicate = False
-        try:
-            is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
-        except Exception as e:
-            print(f"[DUPLICATE CHECK ERROR] {e}")
 
-        if is_duplicate:
-            # Delete from DB immediately as requested
+        if not force:
+            # --- NAME VALIDATION ---
+            user_name = current_user.get("name", "")
+            patient_name = structured_data.get("patient_name", "")
+            if patient_name and not check_name_match(user_name, patient_name):
+                is_name_mismatched = True
+
+            # --- GENDER VALIDATION ---
+            user_gender = current_user.get("gender", "")
+            patient_gender = structured_data.get("gender", "")
+            if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+                is_gender_mismatched = True
+
+            # --- AGE & IDENTITY VALIDATION ---
+            patient_dob = structured_data.get("dob", "")
+            patient_ic = structured_data.get("ic_number", "")
+
+            if (user_dob or user_ic) and not check_age_and_identity_match(
+                user_dob, patient_dob, patient_ic, user_ic
+            ):
+                is_age_mismatched = True
+
+            # --- DUPLICATE CHECK ---
             try:
-                await delete_report(report_id)
+                is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
             except Exception as e:
-                print(f"[DELETE ERROR] {e}")
+                print(f"[DUPLICATE CHECK ERROR] {e}")
 
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "duplicate",
-                "is_duplicate": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # Save to TEMP_REPORTS instead of DB
+        # Always save to TEMP_REPORTS so they can proceed if they confirm
         report_metadata["status"] = "completed"
         report_metadata["raw_text"] = raw_text
         report_metadata["structured_data"] = structured_data
         TEMP_REPORTS[report_id] = report_metadata
+
+        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate:
+            status_val = "completed"
+            if is_name_mismatched: status_val = "name_mismatch"
+            elif is_gender_mismatched: status_val = "gender_mismatch"
+            elif is_age_mismatched: status_val = "age_mismatch"
+            elif is_duplicate: status_val = "duplicate"
+            
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": status_val,
+                "is_name_mismatch": is_name_mismatched,
+                "is_gender_mismatch": is_gender_mismatched,
+                "is_age_mismatch": is_age_mismatched,
+                "is_duplicate": is_duplicate,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
 
         return {
             "id": report_id,
@@ -3018,13 +2993,10 @@ async def scanner_preprocess(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Scanner preprocessing failed: {str(e)}")
 
-class PreprocessedUploadRequest(BaseModel):
-    filepaths: TypingList[str]
-    filenames: Optional[TypingList[str]] = None
-
 @app.post("/api/upload-multi/preprocessed")
 async def upload_multi_preprocessed(
     request: PreprocessedUploadRequest,
+    force: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -3068,90 +3040,76 @@ async def upload_multi_preprocessed(
             structured_data = await parse_medical_report_multi_llm(paths)
             
         raw_text = f"Extracted via OpenAI Vision API ({len(paths)} preprocessed page(s))"
-        
-        # --- NAME VALIDATION ---
-        user_name = current_user.get("name", "")
-        patient_name = structured_data.get("patient_name", "")
-        if patient_name and not check_name_match(user_name, patient_name):
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "name_mismatch",
-                "is_name_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
 
-        # --- GENDER VALIDATION ---
-        user_gender = current_user.get("gender", "")
-        patient_gender = structured_data.get("gender", "")
-        if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "gender_mismatch",
-                "is_gender_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # --- AGE & IDENTITY VALIDATION ---
-        user_age = current_user.get("age")
+        # Set default values for demographics if missing
         user_dob = current_user.get("dob")
-        patient_age = structured_data.get("age", "")
-        patient_dob = structured_data.get("dob", "")
-        patient_ic = structured_data.get("ic_number", "")
-        report_date = structured_data.get("collected", "")
+        user_ic = current_user.get("ic_number")
 
-        if (user_age is not None or user_dob) and not check_age_and_identity_match(
-            user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
-        ):
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "age_mismatch",
-                "is_age_mismatch": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
+        if user_dob and not structured_data.get("dob"):
+            structured_data["dob"] = user_dob
+        if user_ic and not structured_data.get("ic_number"):
+            structured_data["ic_number"] = user_ic
 
-        # --- DUPLICATE CHECK ---
+        is_name_mismatched = False
+        is_gender_mismatched = False
+        is_age_mismatched = False
         is_duplicate = False
-        try:
-            is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
-        except Exception as e:
-            print(f"[DUPLICATE CHECK ERROR] {e}")
 
-        if is_duplicate:
-            # Delete from DB immediately as requested
+        if not force:
+            # --- NAME VALIDATION ---
+            user_name = current_user.get("name", "")
+            patient_name = structured_data.get("patient_name", "")
+            if patient_name and not check_name_match(user_name, patient_name):
+                is_name_mismatched = True
+
+            # --- GENDER VALIDATION ---
+            user_gender = current_user.get("gender", "")
+            patient_gender = structured_data.get("gender", "")
+            if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+                is_gender_mismatched = True
+
+            # --- AGE & IDENTITY VALIDATION ---
+            patient_dob = structured_data.get("dob", "")
+            patient_ic = structured_data.get("ic_number", "")
+
+            if (user_dob or user_ic) and not check_age_and_identity_match(
+                user_dob, patient_dob, patient_ic, user_ic
+            ):
+                is_age_mismatched = True
+
+            # --- DUPLICATE CHECK ---
             try:
-                await delete_report(report_id)
+                is_duplicate = await check_duplicate_report(current_user["id"], structured_data, exclude_id=report_id)
             except Exception as e:
-                print(f"[DELETE ERROR] {e}")
+                print(f"[DUPLICATE CHECK ERROR] {e}")
 
-            return {
-                "id": report_id,
-                "filename": ", ".join(filenames),
-                "upload_time": report_metadata["upload_time"],
-                "status": "duplicate",
-                "is_duplicate": True,
-                "structured_data": structured_data,
-                "user_verified": False,
-                "raw_text": raw_text
-            }
-
-        # Save to TEMP_REPORTS instead of DB
+        # Always save to TEMP_REPORTS so they can proceed if they confirm
         report_metadata["status"] = "completed"
         report_metadata["raw_text"] = raw_text
         report_metadata["structured_data"] = structured_data
         TEMP_REPORTS[report_id] = report_metadata
-        
+
+        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate:
+            status_val = "completed"
+            if is_name_mismatched: status_val = "name_mismatch"
+            elif is_gender_mismatched: status_val = "gender_mismatch"
+            elif is_age_mismatched: status_val = "age_mismatch"
+            elif is_duplicate: status_val = "duplicate"
+            
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": status_val,
+                "is_name_mismatch": is_name_mismatched,
+                "is_gender_mismatch": is_gender_mismatched,
+                "is_age_mismatch": is_age_mismatched,
+                "is_duplicate": is_duplicate,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
         return {
             "id": report_id,
             "filename": ", ".join(filenames),
@@ -3181,7 +3139,7 @@ async def get_report(report_id: str):
     return report
 
 @app.put("/api/reports/{report_id}")
-async def update_report(report_id: str, updated_data: dict, background_tasks: BackgroundTasks):
+async def update_report(report_id: str, updated_data: dict, background_tasks: BackgroundTasks, force: bool = False):
     """Update structured data for a report (tester corrections)."""
     # If this is the first update (e.g. during Send), persist the report from TEMP_REPORTS to the DB
     if report_id in TEMP_REPORTS:
@@ -3226,63 +3184,63 @@ async def update_report(report_id: str, updated_data: dict, background_tasks: Ba
     # Normalize the incoming data to flat structure for the duplicate check
     normalized_incoming = normalize_structured_data(updated_data.get("structured_data", {}))
     
-    # --- NAME VALIDATION ---
-    user = get_user_by_id(report.get("user_id"))
-    user_name = user.get("name", "") if user else ""
-    patient_name = normalized_incoming.get("patient_name", "")
-    if patient_name and not check_name_match(user_name, patient_name):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Name Mismatch: The patient name on the report ('{patient_name}') does not match your registered name ('{user_name}')."
-        )
+    if not force:
+        # --- NAME VALIDATION ---
+        user = get_user_by_id(report.get("user_id"))
+        user_name = user.get("name", "") if user else ""
+        patient_name = normalized_incoming.get("patient_name", "")
+        if patient_name and not check_name_match(user_name, patient_name):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Name Mismatch: The patient name on the report ('{patient_name}') does not match your registered name ('{user_name}')."
+            )
 
-    # --- GENDER VALIDATION ---
-    user_gender = user.get("gender", "") if user else ""
-    patient_gender = normalized_incoming.get("gender", "")
-    if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Gender Mismatch: The patient gender on the report ('{patient_gender}') does not match your registered gender ('{user_gender}')."
-        )
+        # --- GENDER VALIDATION ---
+        user_gender = user.get("gender", "") if user else ""
+        patient_gender = normalized_incoming.get("gender", "")
+        if user_gender and patient_gender and not check_gender_match(user_gender, patient_gender):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Gender Mismatch: The patient gender on the report ('{patient_gender}') does not match your registered gender ('{user_gender}')."
+            )
 
-    # --- AGE & IDENTITY VALIDATION ---
-    user_age = user.get("age") if user else None
-    user_dob = user.get("dob") if user else None
-    patient_age = normalized_incoming.get("age", "")
-    patient_dob = normalized_incoming.get("dob", "")
-    patient_ic = normalized_incoming.get("ic_number", "")
-    report_date = normalized_incoming.get("collected", "")
+        # --- AGE & IDENTITY VALIDATION ---
+        user_dob = user.get("dob") if user else None
+        user_ic = user.get("ic_number") if user else None
+        patient_dob = normalized_incoming.get("dob", "")
+        patient_ic = normalized_incoming.get("ic_number", "")
 
-    if (user_age is not None or user_dob) and not check_age_and_identity_match(
-        user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Age Mismatch: The patient age, date of birth, or IC number on this report does not match your registered credentials."
-        )
+        if (user_dob or user_ic) and not check_age_and_identity_match(
+            user_dob, patient_dob, patient_ic, user_ic
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Identity Mismatch: The patient Date of Birth or IC number on this report does not match your registered credentials."
+            )
 
-    # Run duplicate check
-    is_duplicate = False
-    try:
-        is_duplicate = await check_duplicate_report(report.get("user_id"), normalized_incoming, exclude_id=report_id)
-    except Exception as e:
-        print(f"[DUPLICATE CHECK ERROR] {e}")
-
-    if is_duplicate:
-        # Delete from DB immediately to maintain data integrity
+        # Run duplicate check
+        is_duplicate = False
         try:
-            await delete_report(report_id)
+            is_duplicate = await check_duplicate_report(report.get("user_id"), normalized_incoming, exclude_id=report_id)
         except Exception as e:
-            print(f"[DELETE DUPLICATE ERROR] {e}")
-            
-        raise HTTPException(
-            status_code=400, 
-            detail="Duplicate Report: A report with the same date/patient ID/clinical values already exists in your records. This duplicate entry has been discarded."
-        )
+            print(f"[DUPLICATE CHECK ERROR] {e}")
+
+        if is_duplicate:
+            # Delete from DB immediately to maintain data integrity
+            try:
+                await delete_report(report_id)
+            except Exception as e:
+                print(f"[DELETE DUPLICATE ERROR] {e}")
+                
+            raise HTTPException(
+                status_code=400, 
+                detail="Duplicate Report: A report with the same date/patient ID/clinical values already exists in your records. This duplicate entry has been discarded."
+            )
 
     await update_report_in_db(report_id, updated_data)
     
     if report.get("status") == "sent" and report.get("user_id"):
+        invalidate_health_summary_cache(report.get("user_id"))
         background_tasks.add_task(generate_and_cache_health_summary, report.get("user_id"))
 
     return {"status": "updated"}
@@ -3336,6 +3294,7 @@ async def send_report(report_id: str, background_tasks: BackgroundTasks):
     
     user_id = report.get("user_id")
     if user_id:
+        invalidate_health_summary_cache(user_id)
         background_tasks.add_task(generate_and_cache_health_summary, user_id)
 
     return {"status": "sent", "message": "Report verified and submitted successfully"}
@@ -3352,6 +3311,7 @@ async def delete_report_endpoint(report_id: str, background_tasks: BackgroundTas
         
     await delete_report(report_id)
     
+    invalidate_health_summary_cache(user_id)
     background_tasks.add_task(generate_and_cache_health_summary, user_id)
     
     return {"status": "deleted", "message": "Report deleted successfully"}
@@ -3423,21 +3383,19 @@ def migrate_existing_users_gender():
     except Exception as e:
         print(f"[STARTUP GENDER MIGRATION ERROR] {e}")
 
-def migrate_existing_users_age_dob():
-    print("[STARTUP AGE/DOB MIGRATION] Running backfill migration...")
+def migrate_existing_users_dob():
+    print("[STARTUP DOB MIGRATION] Running backfill migration...")
     import datetime
     try:
         if STORAGE_ENGINE == "supabase" and supabase:
             res = supabase.table("users").select("*").execute()
             users = res.data or []
             for u in users:
-                cur_age = u.get("age")
                 cur_dob = u.get("dob")
-                if not cur_age or not cur_dob:
+                if not cur_dob:
                     rep_res = supabase.table("reports").select("structured_data").eq("user_id", u["id"]).execute()
                     reps = rep_res.data or []
                     extracted_dob = None
-                    extracted_age = None
                     
                     for r in reps:
                         sd = r.get("structured_data")
@@ -3476,26 +3434,18 @@ def migrate_existing_users_age_dob():
                             if p_age is not None:
                                 if p_rep_date:
                                     birth_year = p_rep_date.year - p_age
-                                    curr_year = datetime.date.today().year
-                                    extracted_age = curr_year - birth_year
                                     if not extracted_dob:
                                         extracted_dob = datetime.date(birth_year, 1, 1)
-                                else:
-                                    extracted_age = p_age
                             
                             if extracted_dob:
-                                today = datetime.date.today()
-                                extracted_age = today.year - extracted_dob.year - ((today.month, today.day) < (extracted_dob.month, extracted_dob.day))
                                 break
                                 
                     update_payload = {}
                     if not cur_dob and extracted_dob:
                         update_payload["dob"] = extracted_dob.isoformat()
-                    if not cur_age and extracted_age:
-                        update_payload["age"] = int(extracted_age)
                         
                     if update_payload:
-                        print(f"[STARTUP AGE/DOB MIGRATION] Updating Supabase User {u['email']}: {update_payload}")
+                        print(f"[STARTUP DOB MIGRATION] Updating Supabase User {u['email']}: {update_payload}")
                         supabase.table("users").update(update_payload).eq("id", u["id"]).execute()
         else:
             conn = sqlite3.connect(str(DB_PATH))
@@ -3504,13 +3454,11 @@ def migrate_existing_users_age_dob():
             cursor.execute("SELECT * FROM users")
             users = [dict(row) for row in cursor.fetchall()]
             for u in users:
-                cur_age = u.get("age")
                 cur_dob = u.get("dob")
-                if not cur_age or not cur_dob:
+                if not cur_dob:
                     cursor.execute("SELECT structured_data FROM reports WHERE user_id = ?", (u["id"],))
                     reps = cursor.fetchall()
                     extracted_dob = None
-                    extracted_age = None
                     
                     for r in reps:
                         sd_str = r["structured_data"]
@@ -3548,16 +3496,10 @@ def migrate_existing_users_age_dob():
                             if p_age is not None:
                                 if p_rep_date:
                                     birth_year = p_rep_date.year - p_age
-                                    curr_year = datetime.date.today().year
-                                    extracted_age = curr_year - birth_year
                                     if not extracted_dob:
                                         extracted_dob = datetime.date(birth_year, 1, 1)
-                                else:
-                                    extracted_age = p_age
                             
                             if extracted_dob:
-                                today = datetime.date.today()
-                                extracted_age = today.year - extracted_dob.year - ((today.month, today.day) < (extracted_dob.month, extracted_dob.day))
                                 break
                                 
                     update_parts = []
@@ -3565,24 +3507,116 @@ def migrate_existing_users_age_dob():
                     if not cur_dob and extracted_dob:
                         update_parts.append("dob = ?")
                         params.append(extracted_dob.isoformat())
-                    if not cur_age and extracted_age:
-                        update_parts.append("age = ?")
-                        params.append(int(extracted_age))
                         
                     if update_parts:
                         params.append(u["id"])
                         sql = f"UPDATE users SET {', '.join(update_parts)} WHERE id = ?"
-                        print(f"[STARTUP AGE/DOB MIGRATION] Updating SQLite User {u['email']}: {sql} with params {params[:-1]}")
+                        print(f"[STARTUP DOB MIGRATION] Updating SQLite User {u['email']}: {sql} with params {params[:-1]}")
                         cursor.execute(sql, tuple(params))
             conn.commit()
             conn.close()
     except Exception as e:
-        print(f"[STARTUP AGE/DOB MIGRATION ERROR] {e}")
+        print(f"[STARTUP DOB MIGRATION ERROR] {e}")
+
+def backfill_existing_reports_demographics():
+    print("[STARTUP REPORTS DEMOGRAPHICS BACKFILL] Running backfill for reports...")
+    try:
+        user_cache = {}
+        
+        def get_user_demographics(user_id):
+            if user_id in user_cache:
+                return user_cache[user_id]
+            dob, ic = None, None
+            if STORAGE_ENGINE == "supabase" and supabase:
+                res = supabase.table("users").select("dob", "ic_number").eq("id", user_id).execute()
+                if res.data:
+                    dob = res.data[0].get("dob")
+                    ic = res.data[0].get("ic_number")
+            else:
+                conn = sqlite3.connect(str(DB_PATH))
+                cursor = conn.cursor()
+                cursor.execute("SELECT dob, ic_number FROM users WHERE id = ?", (user_id,))
+                row = cursor.fetchone()
+                if row:
+                    dob, ic = row[0], row[1]
+                conn.close()
+            user_cache[user_id] = (dob, ic)
+            return dob, ic
+
+        if STORAGE_ENGINE == "supabase" and supabase:
+            res = supabase.table("reports").select("id", "user_id", "structured_data").execute()
+            reports = res.data or []
+            for r in reports:
+                user_id = r.get("user_id")
+                if not user_id:
+                    continue
+                sd = r.get("structured_data")
+                if sd:
+                    if isinstance(sd, str):
+                        try:
+                            sd = json.loads(sd)
+                        except Exception:
+                            continue
+                    
+                    dob_val = sd.get("dob")
+                    ic_val = sd.get("ic_number")
+                    
+                    if not dob_val or not ic_val:
+                        user_dob, user_ic = get_user_demographics(user_id)
+                        updated = False
+                        if not dob_val and user_dob:
+                            sd["dob"] = user_dob
+                            updated = True
+                        if not ic_val and user_ic:
+                            sd["ic_number"] = user_ic
+                            updated = True
+                        
+                        if updated:
+                            print(f"[STARTUP REPORTS DEMOGRAPHICS BACKFILL] Updating Supabase Report {r['id']}")
+                            supabase.table("reports").update({"structured_data": sd}).eq("id", r["id"]).execute()
+        else:
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, user_id, structured_data FROM reports")
+            reports = [dict(row) for row in cursor.fetchall()]
+            for r in reports:
+                user_id = r.get("user_id")
+                if not user_id:
+                    continue
+                sd_str = r.get("structured_data")
+                if sd_str:
+                    try:
+                        sd = json.loads(sd_str)
+                    except Exception:
+                        continue
+                    
+                    dob_val = sd.get("dob")
+                    ic_val = sd.get("ic_number")
+                    
+                    if not dob_val or not ic_val:
+                        user_dob, user_ic = get_user_demographics(user_id)
+                        updated = False
+                        if not dob_val and user_dob:
+                            sd["dob"] = user_dob
+                            updated = True
+                        if not ic_val and user_ic:
+                            sd["ic_number"] = user_ic
+                            updated = True
+                        
+                        if updated:
+                            print(f"[STARTUP REPORTS DEMOGRAPHICS BACKFILL] Updating SQLite Report {r['id']}")
+                            cursor.execute("UPDATE reports SET structured_data = ? WHERE id = ?", (json.dumps(sd), r["id"]))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"[STARTUP REPORTS DEMOGRAPHICS BACKFILL ERROR] {e}")
 
 @app.on_event("startup")
 def startup_migration():
     migrate_existing_users_gender()
-    migrate_existing_users_age_dob()
+    migrate_existing_users_dob()
+    backfill_existing_reports_demographics()
 
 
 

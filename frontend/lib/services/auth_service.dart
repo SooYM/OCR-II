@@ -38,7 +38,7 @@ class AuthService {
 
   // ─── Register ──────────────────────────────────────────────────────────────
 
-  static Future<Map<String, dynamic>> register(String email, String name, String password, String gender, int age, String dob) async {
+  static Future<Map<String, dynamic>> register(String email, String name, String password, String gender, String dob, String icNumber) async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/register'),
       headers: {'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true'},
@@ -47,8 +47,8 @@ class AuthService {
         'name': name,
         'password': password,
         'gender': gender,
-        'age': age,
         'dob': dob,
+        'ic_number': icNumber,
       }),
     ).timeout(const Duration(seconds: 10));
 
@@ -93,6 +93,9 @@ class AuthService {
       if (response.statusCode == 200) {
         final user = jsonDecode(response.body);
         _currentUser = user;
+        // Persist refreshed user data so cached fields (ic_number, dob, etc.) stay current
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_userKey, jsonEncode(user));
         return true;
       }
       await logout();

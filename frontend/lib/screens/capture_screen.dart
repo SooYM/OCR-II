@@ -189,7 +189,7 @@ class _CaptureScreenState extends State<CaptureScreen>
         } else if (report.isGenderMismatch) {
           _showGenderMismatchDialog(report);
         } else if (report.isAgeMismatch) {
-          _showAgeMismatchDialog(report);
+          _showIdentityMismatchDialog(report);
         } else if (report.isDuplicate) {
           _showDuplicateDialog(report);
         } else {
@@ -209,99 +209,97 @@ class _CaptureScreenState extends State<CaptureScreen>
     }
   }
 
-  void _showNameMismatchDialog(MedicalReport report) {
+  void _confirmBypass(MedicalReport report, String title, String justification) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Name Mismatch'),
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            const SizedBox(width: 8),
+            Text(title),
           ],
         ),
-        content: Text("The patient name on this report ('${report.structuredData?.patientName}') does not match your registered name. Reports must belong to the account holder to maintain clinical data consistency."),
+        content: Text("$justification\n\nWould you still like to upload this report?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Show secondary confirmation
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  title: const Text('Are you sure?'),
+                  content: const Text('This report has mismatch flags or duplicate data. Are you absolutely sure you want to proceed?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => VerifyScreen(report: report)),
+                        );
+                      },
+                      child: const Text('Yes, Upload'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            child: const Text('Yes'),
           ),
         ],
       ),
+    );
+  }
+
+  void _showNameMismatchDialog(MedicalReport report) {
+    final patientName = report.structuredData?.patientName ?? 'unknown';
+    final userName = AuthService.currentUser?['name'] ?? 'unknown';
+    _confirmBypass(
+      report,
+      'Name Mismatch',
+      "The patient name on this report ('$patientName') does not match your registered name ('$userName'). Reports must belong to the account holder to maintain clinical data consistency.",
     );
   }
 
   void _showGenderMismatchDialog(MedicalReport report) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Gender Mismatch'),
-          ],
-        ),
-        content: Text("The patient gender on this report ('${report.structuredData?.gender}') does not match your registered gender (${AuthService.currentUser?['gender'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+    final patientGender = report.structuredData?.gender ?? 'unknown';
+    final userGender = AuthService.currentUser?['gender'] ?? 'unknown';
+    _confirmBypass(
+      report,
+      'Gender Mismatch',
+      "The patient gender on this report ('$patientGender') does not match your registered gender ('$userGender'). Reports must belong to the account holder to maintain clinical data consistency.",
     );
   }
 
-  void _showAgeMismatchDialog(MedicalReport report) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Age / DOB Mismatch'),
-          ],
-        ),
-        content: Text("The patient age/DOB/IC on this report does not match your registered age (${AuthService.currentUser?['age'] ?? 'unknown'}) or DOB (${AuthService.currentUser?['dob'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+  void _showIdentityMismatchDialog(MedicalReport report) {
+    final patientDob = report.structuredData?.dob ?? 'unknown';
+    final patientIc = report.structuredData?.icNumber ?? 'unknown';
+    final userDob = AuthService.currentUser?['dob'] ?? 'unknown';
+    final userIc = AuthService.currentUser?['ic_number'] ?? 'unknown';
+    _confirmBypass(
+      report,
+      'Identity Mismatch',
+      "The patient DOB ('$patientDob') or IC ('$patientIc') on this report do not match your registered DOB ('$userDob') or IC ('$userIc'). Reports must belong to the account holder to maintain clinical data consistency.",
     );
   }
 
   void _showDuplicateDialog(MedicalReport report) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Duplicate Report'),
-          ],
-        ),
-        content: const Text('This report has already been scanned. Duplicate reports are not stored to maintain data integrity.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => VerifyScreen(report: report)));
-            },
-            child: const Text('View Existing'),
-          ),
-        ],
-      ),
+    _confirmBypass(
+      report,
+      'Duplicate Report',
+      "This report has identical dates and clinical values to a report already in your history. Duplicate reports are not stored to maintain data integrity.",
     );
   }
 

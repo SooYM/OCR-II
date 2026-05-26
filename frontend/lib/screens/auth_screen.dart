@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
@@ -24,8 +25,10 @@ class _AuthScreenState extends State<AuthScreen>
   final _emailCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  final _ageCtrl = TextEditingController();
+  final _icCtrl = TextEditingController();
   final _dobCtrl = TextEditingController();
+  bool _preferNotToSayIc = false;
+  bool _preferNotToSayDob = false;
   late AnimationController _pulseController;
 
   @override
@@ -42,32 +45,80 @@ class _AuthScreenState extends State<AuthScreen>
     _emailCtrl.dispose();
     _nameCtrl.dispose();
     _passwordCtrl.dispose();
-    _ageCtrl.dispose();
+    _icCtrl.dispose();
     _dobCtrl.dispose();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  /// Extract DOB (YYYY-MM-DD) from Malaysian IC number (YYMMDD-XX-XXXX).
+  String? _extractDobFromIc(String ic) {
+    final cleaned = ic.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.length < 6) return null;
+    final yy = int.tryParse(cleaned.substring(0, 2));
+    final mm = int.tryParse(cleaned.substring(2, 4));
+    final dd = int.tryParse(cleaned.substring(4, 6));
+    if (yy == null || mm == null || dd == null) return null;
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+    final nowYear = DateTime.now().year;
+    final century = (nowYear ~/ 100) * 100;
+    int fullYear = century + yy;
+    if (fullYear > nowYear) fullYear -= 100;
+    return '$fullYear-${mm.toString().padLeft(2, '0')}-${dd.toString().padLeft(2, '0')}';
   }
 
   Future<void> _submit() async {
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text.trim();
     final name = _nameCtrl.text.trim();
-    final ageStr = _ageCtrl.text.trim();
-    final dob = _dobCtrl.text.trim();
+    final icNumber = _preferNotToSayIc ? '' : _icCtrl.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       setState(() => _error = 'Email and password are required');
       return;
     }
-    if (!_isLogin && (name.isEmpty || ageStr.isEmpty || dob.isEmpty)) {
-      setState(() => _error = 'Name, Age, and DOB are required');
+    if (!_isLogin && name.isEmpty) {
+      setState(() => _error = 'Name is required');
       return;
     }
 
-    final age = int.tryParse(ageStr);
-    if (!_isLogin && (age == null || age <= 0)) {
-      setState(() => _error = 'Age must be a valid positive number');
+    // IC validation (only if user didn't skip it)
+    if (!_isLogin && !_preferNotToSayIc && icNumber.isEmpty) {
+      setState(() => _error = 'IC Number is required (or choose "Prefer not to say")');
       return;
+    }
+
+    String dob = '';
+    if (!_isLogin) {
+      if (!_preferNotToSayIc && icNumber.isNotEmpty) {
+        // Auto-extract DOB from IC
+        final extracted = _extractDobFromIc(icNumber);
+        if (extracted == null) {
+          setState(() => _error = 'Invalid IC number. First 6 digits must be YYMMDD.');
+          return;
+        }
+        dob = extracted;
+      } else if (!_preferNotToSayDob) {
+        // Manual DOB entry
+        final manualDob = _dobCtrl.text.trim();
+        if (manualDob.isEmpty) {
+          setState(() => _error = 'Date of Birth is required (or choose "Prefer not to say")');
+          return;
+        }
+        // Validate the format YYYY-MM-DD
+        final dobRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+        if (!dobRegex.hasMatch(manualDob)) {
+          setState(() => _error = 'Invalid DOB format. Please use YYYY-MM-DD.');
+          return;
+        }
+        final parsedDob = DateTime.tryParse(manualDob);
+        if (parsedDob == null || parsedDob.isAfter(DateTime.now())) {
+          setState(() => _error = 'Invalid Date of Birth.');
+          return;
+        }
+        dob = manualDob;
+      }
+      // If both are "prefer not to say", dob stays empty
     }
 
     setState(() {
@@ -79,7 +130,7 @@ class _AuthScreenState extends State<AuthScreen>
       if (_isLogin) {
         await AuthService.login(email, password);
       } else {
-        await AuthService.register(email, name, password, _selectedGender, age!, dob);
+        await AuthService.register(email, name, password, _selectedGender, dob, icNumber);
       }
       if (mounted) {
         Navigator.pushReplacement(
@@ -261,24 +312,125 @@ class _AuthScreenState extends State<AuthScreen>
                           ),
                           const SizedBox(height: 14),
                           _buildGenderDropdown(),
-                          const SizedBox(height: 14),
-                          _buildTextField(
-                            controller: _ageCtrl,
-                            label: 'Age',
-                            icon: Icons.calendar_today_outlined,
-                            keyboardType: TextInputType.number,
+
+                          // IC Number section with disclaimer and toggle
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: Checkbox(
+                                  value: _preferNotToSayIc,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _preferNotToSayIc = val ?? false;
+                                      if (_preferNotToSayIc) _icCtrl.clear();
+                                    });
+                                  },
+                                  activeColor: Theme.of(context).colorScheme.primary,
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _preferNotToSayIc = !_preferNotToSayIc;
+                                      if (_preferNotToSayIc) _icCtrl.clear();
+                                    });
+                                  },
+                                  child: const Text(
+                                    'Prefer not to provide IC number',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 14),
-                          GestureDetector(
-                            onTap: () => _selectDOB(context),
-                            child: AbsorbPointer(
-                              child: _buildTextField(
-                                controller: _dobCtrl,
-                                label: 'Date of Birth',
-                                icon: Icons.cake_outlined,
+                          if (!_preferNotToSayIc) ...[
+                            const SizedBox(height: 10),
+                            _buildTextField(
+                              controller: _icCtrl,
+                              label: 'IC Number',
+                              icon: Icons.badge_outlined,
+                              hintText: 'e.g., 860101-08-1234',
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [IcNumberInputFormatter()],
+                            ),
+                          ],
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, left: 4),
+                            child: Text(
+                              'IC number is only for verification of report ownership. You have the right not to provide it.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
                               ),
                             ),
                           ),
+
+                          // DOB section with toggle (shown when IC is skipped)
+                          if (_preferNotToSayIc) ...[
+                            const SizedBox(height: 18),
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Checkbox(
+                                    value: _preferNotToSayDob,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _preferNotToSayDob = val ?? false;
+                                        if (_preferNotToSayDob) _dobCtrl.clear();
+                                      });
+                                    },
+                                    activeColor: Theme.of(context).colorScheme.primary,
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _preferNotToSayDob = !_preferNotToSayDob;
+                                        if (_preferNotToSayDob) _dobCtrl.clear();
+                                      });
+                                    },
+                                    child: const Text(
+                                      'Prefer not to provide Date of Birth',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (!_preferNotToSayDob) ...[
+                              const SizedBox(height: 10),
+                              _buildTextField(
+                                controller: _dobCtrl,
+                                label: 'Date of Birth',
+                                icon: Icons.cake_outlined,
+                                hintText: 'YYYY-MM-DD',
+                                keyboardType: TextInputType.datetime,
+                              ),
+                            ],
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6, left: 4),
+                              child: Text(
+                                'Date of Birth is used for report age verification. You have the right not to provide it.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
 
                         const SizedBox(height: 14),
@@ -366,16 +518,20 @@ class _AuthScreenState extends State<AuthScreen>
     TextInputType? keyboardType,
     bool obscure = false,
     Widget? suffixIcon,
+    String? hintText,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
+      inputFormatters: inputFormatters,
       style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, size: 20),
         suffixIcon: suffixIcon,
+        hintText: hintText,
       ),
       onSubmitted: (_) => _submit(),
     );
@@ -446,38 +602,44 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
-  Future<void> _selectDOB(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2000, 1, 1),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: Theme.of(context).colorScheme.primary,
-              onPrimary: Colors.white,
-              surface: Theme.of(context).colorScheme.surface,
-              onSurface: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      final formattedDate = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-      setState(() {
-        _dobCtrl.text = formattedDate;
-        
-        final today = DateTime.now();
-        int calculatedAge = today.year - picked.year;
-        if (today.month < picked.month || (today.month == picked.month && today.day < picked.day)) {
-          calculatedAge--;
-        }
-        _ageCtrl.text = calculatedAge.toString();
-      });
+
+}
+
+/// Auto-formats IC input as YYMMDD-XX-XXXX by inserting dashes at positions 6 and 8.
+class IcNumberInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Strip all non-digits
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'\D'), '');
+    // Cap at 12 digits
+    final capped = digitsOnly.length > 12 ? digitsOnly.substring(0, 12) : digitsOnly;
+
+    final buffer = StringBuffer();
+    for (int i = 0; i < capped.length; i++) {
+      if (i == 6 || i == 8) buffer.write('-');
+      buffer.write(capped[i]);
     }
+    final formatted = buffer.toString();
+
+    // Calculate new cursor position
+    int cursorOffset = newValue.selection.baseOffset;
+    int digitsBeforeCursor = newValue.text
+        .substring(0, cursorOffset.clamp(0, newValue.text.length))
+        .replaceAll(RegExp(r'\D'), '')
+        .length;
+    int formattedPos = 0;
+    int digitCount = 0;
+    while (formattedPos < formatted.length && digitCount < digitsBeforeCursor) {
+      if (formatted[formattedPos] != '-') digitCount++;
+      formattedPos++;
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formattedPos),
+    );
   }
 }

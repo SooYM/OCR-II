@@ -28,6 +28,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
   late StructuredData _data;
   bool _isSending = false;
   bool _hasChanges = false;
+  bool _forceSubmit = false;
   final Set<int> _matchedIndices = {};
   final Set<int> _convertedIndices = {};
   final Map<int, BiomarkerEntry> _matchedEntries = {};
@@ -249,84 +250,89 @@ class _VerifyScreenState extends State<VerifyScreen> {
     return false;
   }
 
-  bool _checkAgeMatch() {
+  DateTime? _parseDateRobust(String? str) {
+    if (str == null || str.trim().isEmpty) return null;
+    final clean = str.replaceAll(RegExp(r'\s+'), ' ');
+    try {
+      final reg = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})');
+      final m = reg.firstMatch(clean);
+      if (m != null) {
+        return DateTime(int.parse(m.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!));
+      }
+    } catch (_) {}
+    try {
+      final reg = RegExp(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})');
+      final m = reg.firstMatch(clean);
+      if (m != null) {
+        return DateTime(int.parse(m.group(3)!), int.parse(m.group(2)!), int.parse(m.group(1)!));
+      }
+    } catch (_) {}
+    try {
+      if (clean.length == 6) {
+        final yy = int.tryParse(clean.substring(0, 2));
+        final mm = int.tryParse(clean.substring(2, 4));
+        final dd = int.tryParse(clean.substring(4, 6));
+        if (yy != null && mm != null && dd != null && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+          final nowYear = DateTime.now().year;
+          final currentCentury = (nowYear ~/ 100) * 100;
+          int fullYear = currentCentury + yy;
+          if (fullYear > nowYear) {
+            fullYear -= 100;
+          }
+          return DateTime(fullYear, mm, dd);
+        }
+      }
+    } catch (_) {}
+    return DateTime.tryParse(clean);
+  }
+
+  List<int>? _extractDobFromIc(String? icStr) {
+    if (icStr == null || icStr.isEmpty) return null;
+    final cleaned = icStr.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.length == 12) {
+      final yy = int.tryParse(cleaned.substring(0, 2));
+      final mm = int.tryParse(cleaned.substring(2, 4));
+      final dd = int.tryParse(cleaned.substring(4, 6));
+      if (yy != null && mm != null && dd != null) {
+        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+          return [yy, mm, dd];
+        }
+      }
+    }
+    return null;
+  }
+
+  bool _checkIdentityMatch() {
     if (AuthService.currentUser == null) return true;
-    final userAge = AuthService.currentUser!['age'] as int?;
     final userDobStr = AuthService.currentUser!['dob'] as String?;
-    
-    final patientAgeStr = _data.age;
+    final userIcStr = AuthService.currentUser!['ic_number'] as String?;
+
     final patientDobStr = _data.dob;
     final patientIcStr = _data.icNumber;
-    final reportDateStr = _data.date;
 
-    if ((patientAgeStr == null || patientAgeStr.isEmpty) && 
-        (patientDobStr == null || patientDobStr.isEmpty) && 
-        (patientIcStr == null || patientIcStr.isEmpty)) {
-      return true;
-    }
-
-    DateTime? parseDateRobust(String? str) {
-      if (str == null || str.trim().isEmpty) return null;
-      final clean = str.replaceAll(RegExp(r'\s+'), ' ');
-      try {
-        final reg = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})');
-        final m = reg.firstMatch(clean);
-        if (m != null) {
-          return DateTime(int.parse(m.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!));
-        }
-      } catch (_) {}
-      try {
-        final reg = RegExp(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})');
-        final m = reg.firstMatch(clean);
-        if (m != null) {
-          return DateTime(int.parse(m.group(3)!), int.parse(m.group(2)!), int.parse(m.group(1)!));
-        }
-      } catch (_) {}
-      try {
-        if (clean.length == 6) {
-          final yy = int.tryParse(clean.substring(0, 2));
-          final mm = int.tryParse(clean.substring(2, 4));
-          final dd = int.tryParse(clean.substring(4, 6));
-          if (yy != null && mm != null && dd != null && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-            final nowYear = DateTime.now().year;
-            final currentCentury = (nowYear ~/ 100) * 100;
-            int fullYear = currentCentury + yy;
-            if (fullYear > nowYear) {
-              fullYear -= 100;
-            }
-            return DateTime(fullYear, mm, dd);
-          }
-        }
-      } catch (_) {}
-      return DateTime.tryParse(clean);
-    }
-
-    final uDob = parseDateRobust(userDobStr);
-    final pDob = parseDateRobust(patientDobStr);
-
-    if (uDob != null && pDob != null) {
-      if (uDob.year != pDob.year || uDob.month != pDob.month || uDob.day != pDob.day) {
+    // 1. Clean and verify IC number match
+    if (userIcStr != null && userIcStr.isNotEmpty && patientIcStr != null && patientIcStr.isNotEmpty) {
+      final uIcClean = userIcStr.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+      final pIcClean = patientIcStr.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+      if (uIcClean.isNotEmpty && pIcClean.isNotEmpty && uIcClean != pIcClean) {
+        debugPrint("[IDENTITY MISMATCH] IC Number mismatch: User IC '$userIcStr' vs Patient IC '$patientIcStr'");
         return false;
       }
     }
 
-    List<int>? extractDobFromIc(String? icStr) {
-      if (icStr == null || icStr.isEmpty) return null;
-      final cleaned = icStr.replaceAll(RegExp(r'\D'), '');
-      if (cleaned.length == 12) {
-        final yy = int.tryParse(cleaned.substring(0, 2));
-        final mm = int.tryParse(cleaned.substring(2, 4));
-        final dd = int.tryParse(cleaned.substring(4, 6));
-        if (yy != null && mm != null && dd != null) {
-          if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-            return [yy, mm, dd];
-          }
-        }
+    final uDob = _parseDateRobust(userDobStr);
+    final pDob = _parseDateRobust(patientDobStr);
+
+    // 2. Verify DOB match
+    if (uDob != null && pDob != null) {
+      if (uDob.year != pDob.year || uDob.month != pDob.month || uDob.day != pDob.day) {
+        debugPrint("[IDENTITY MISMATCH] DOB mismatch: User DOB $uDob vs Patient DOB $pDob");
+        return false;
       }
-      return null;
     }
 
-    final pIcDob = extractDobFromIc(patientIcStr);
+    // 3. Verify DOB against patient's IC-extracted DOB
+    final pIcDob = _extractDobFromIc(patientIcStr);
     if (uDob != null && pIcDob != null) {
       final uyyLast2 = uDob.year % 100;
       final umm = uDob.month;
@@ -335,45 +341,15 @@ class _VerifyScreenState extends State<VerifyScreen> {
       final imm = pIcDob[1];
       final idd = pIcDob[2];
       if (uyyLast2 != iyy || umm != imm || udd != idd) {
-        return false;
-      }
-    }
-
-    int? pAge;
-    if (patientAgeStr != null && patientAgeStr.isNotEmpty) {
-      final m = RegExp(r'\d+').firstMatch(patientAgeStr);
-      if (m != null) {
-        pAge = int.tryParse(m.group(0)!);
-      }
-    }
-
-    final repDate = parseDateRobust(reportDateStr);
-    int? calculatedUserAge;
-
-    if (uDob != null && repDate != null) {
-      calculatedUserAge = repDate.year - uDob.year;
-      if (repDate.month < uDob.month || (repDate.month == uDob.month && repDate.day < uDob.day)) {
-        calculatedUserAge--;
-      }
-    } else if (userAge != null) {
-      if (repDate != null) {
-        final currYear = DateTime.now().year;
-        final repYear = repDate.year;
-        final elapsed = currYear - repYear;
-        calculatedUserAge = userAge - elapsed;
-      } else {
-        calculatedUserAge = userAge;
-      }
-    }
-
-    if (calculatedUserAge != null && pAge != null) {
-      if ((calculatedUserAge - pAge).abs() > 2) {
+        debugPrint("[IDENTITY MISMATCH] IC DOB mismatch: User DOB $uDob vs Patient IC DOB $iyy-$imm-$idd");
         return false;
       }
     }
 
     return true;
   }
+
+
 
   /// Pre-populate the report with all standard biomarkers from the dictionary as empty fields if not extracted.
   void _prepopulateMissingBiomarkers() {
@@ -469,9 +445,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
       return;
     }
 
-    // Age validation
-    if (!_checkAgeMatch()) {
-      _showLocalAgeMismatchDialog();
+    // Identity validation (DOB & IC checks)
+    if (!_checkIdentityMatch()) {
+      _showLocalIdentityMismatchDialog();
       return;
     }
 
@@ -479,7 +455,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
 
     try {
       // Step 1: Save corrected data
-      await ApiService.updateReport(widget.report.id, _data);
+      await ApiService.updateReport(widget.report.id, _data, force: _forceSubmit);
 
       // Step 2: Mark as sent
       await ApiService.sendReport(widget.report.id);
@@ -560,72 +536,114 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
-  void _showLocalNameMismatchDialog() {
+  /// Reusable bypass confirmation flow for verify screen mismatch dialogs.
+  /// Shows justification + first confirmation, then a second "Are you sure?" dialog.
+  /// On double-confirm, sets _forceSubmit = true and retries _handleSend.
+  void _showBypassDialog(String title, IconData icon, Color iconColor, String justification) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Name Mismatch'),
+            Icon(icon, color: iconColor),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, style: const TextStyle(fontSize: 17))),
           ],
         ),
-        content: Text("The patient name ('${_data.patientName}') does not match your registered name (${AuthService.currentUser!['name']}). Reports must belong to the account holder to maintain clinical data consistency."),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(justification, style: const TextStyle(fontSize: 14, height: 1.5)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Would you still like to submit this report?',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // Show secondary confirmation
+              showDialog(
+                context: context,
+                builder: (ctx2) => AlertDialog(
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  title: const Text('Are you sure?'),
+                  content: const Text(
+                    'This report has been flagged with mismatch issues. Are you absolutely sure you want to proceed with submission?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx2),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx2);
+                        setState(() => _forceSubmit = true);
+                        _handleSend();
+                      },
+                      child: const Text('Yes, Submit'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            child: const Text('Yes'),
           ),
         ],
       ),
+    );
+  }
+
+  void _showLocalNameMismatchDialog() {
+    _showBypassDialog(
+      'Name Mismatch',
+      Icons.warning_amber_rounded,
+      Colors.orange,
+      "The patient name ('${_data.patientName}') does not match your registered name (${AuthService.currentUser!['name']}). Reports must belong to the account holder to maintain clinical data consistency.",
     );
   }
 
   void _showLocalGenderMismatchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Gender Mismatch'),
-          ],
-        ),
-        content: Text("The patient gender ('${_data.gender}') does not match your registered gender (${AuthService.currentUser!['gender']}). Reports must belong to the account holder to maintain clinical data consistency."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+    _showBypassDialog(
+      'Gender Mismatch',
+      Icons.warning_amber_rounded,
+      Colors.orange,
+      "The patient gender ('${_data.gender}') does not match your registered gender (${AuthService.currentUser!['gender']}). Reports must belong to the account holder to maintain clinical data consistency.",
     );
   }
 
-  void _showLocalAgeMismatchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Age / DOB Mismatch'),
-          ],
-        ),
-        content: Text("The patient age/DOB/IC details on this report do not match your registered age (${AuthService.currentUser!['age'] ?? 'unknown'}) or DOB (${AuthService.currentUser!['dob'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+  void _showLocalIdentityMismatchDialog() {
+    _showBypassDialog(
+      'Identity Mismatch',
+      Icons.gpp_bad_outlined,
+      Theme.of(context).colorScheme.error,
+      "The patient DOB or IC details on this report do not match your registered DOB (${AuthService.currentUser?['dob'] ?? 'unknown'}) or IC (${AuthService.currentUser?['ic_number'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency.",
     );
   }
 
@@ -752,28 +770,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       ),
                       const Divider(),
                       _buildField(
-                        label: 'Age',
-                        value: _data.age ?? '',
-                        icon: Icons.calendar_today_outlined,
-                        keyboardType: TextInputType.number,
-                        errorText: !_checkAgeMatch()
-                            ? 'Age/DOB/IC must match your registered credentials'
-                            : null,
-                        onChanged: (v) {
-                          setState(() {
-                            _data.age = v;
-                            _hasChanges = true;
-                          });
-                        },
-                      ),
-                      const Divider(),
-                      _buildField(
                         label: 'Date of Birth',
                         value: _data.dob ?? '',
                         icon: Icons.cake_outlined,
                         hintText: 'YYYY-MM-DD',
-                        errorText: !_checkAgeMatch()
-                            ? 'Age/DOB/IC must match your registered credentials'
+                        errorText: !_checkIdentityMatch()
+                            ? 'DOB or IC must match your registered credentials'
                             : null,
                         onChanged: (v) {
                           setState(() {
@@ -788,8 +790,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         value: _data.icNumber ?? '',
                         icon: Icons.badge_outlined,
                         hintText: 'e.g., YYMMDD-XX-XXXX',
-                        errorText: !_checkAgeMatch()
-                            ? 'Age/DOB/IC must match your registered credentials'
+                        errorText: !_checkIdentityMatch()
+                            ? 'DOB or IC must match your registered credentials'
                             : null,
                         onChanged: (v) {
                           setState(() {
@@ -1113,7 +1115,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
               child: Text(
                 errorText,
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
+                  color: errorText.toLowerCase().contains('warning')
+                      ? Colors.orange
+                      : Theme.of(context).colorScheme.error,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),

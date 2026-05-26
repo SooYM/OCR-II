@@ -61,8 +61,8 @@ class ApiService {
 
   /// Upload an image to the backend for OCR + LLM processing.
   /// Returns a MedicalReport with structured data.
-  static Future<MedicalReport> uploadReport(XFile imageFile) async {
-    final uri = Uri.parse('$_baseUrl/api/upload');
+  static Future<MedicalReport> uploadReport(XFile imageFile, {bool force = false}) async {
+    final uri = Uri.parse('$_baseUrl/api/upload${force ? "?force=true" : ""}');
     final request = http.MultipartRequest('POST', uri);
 
     request.headers['bypass-tunnel-reminder'] = 'true';
@@ -94,13 +94,13 @@ class ApiService {
 
   /// Upload multiple page images for a single report.
   /// The backend merges all pages via LLM into one unified report.
-  static Future<MedicalReport> uploadMultipleReports(List<XFile> imageFiles) async {
+  static Future<MedicalReport> uploadMultipleReports(List<XFile> imageFiles, {bool force = false}) async {
     if (imageFiles.isEmpty) throw ApiException('No images provided', 400);
 
     // If only 1 image, use the original single-upload endpoint
-    if (imageFiles.length == 1) return uploadReport(imageFiles.first);
+    if (imageFiles.length == 1) return uploadReport(imageFiles.first, force: force);
 
-    final uri = Uri.parse('$_baseUrl/api/upload-multi');
+    final uri = Uri.parse('$_baseUrl/api/upload-multi${force ? "?force=true" : ""}');
     final request = http.MultipartRequest('POST', uri);
 
     request.headers['bypass-tunnel-reminder'] = 'true';
@@ -164,9 +164,9 @@ class ApiService {
   }
 
   /// Run OCR + LLM parsing on files already preprocessed on the backend.
-  static Future<MedicalReport> uploadPreprocessedReports(List<String> filepaths, List<String> filenames) async {
+  static Future<MedicalReport> uploadPreprocessedReports(List<String> filepaths, List<String> filenames, {bool force = false}) async {
     final response = await http.post(
-      Uri.parse('$_baseUrl/api/upload-multi/preprocessed'),
+      Uri.parse('$_baseUrl/api/upload-multi/preprocessed${force ? "?force=true" : ""}'),
       headers: {..._headers, 'Content-Type': 'application/json'},
       body: jsonEncode({
         'filepaths': filepaths,
@@ -203,9 +203,9 @@ class ApiService {
   // ─── Update Report ─────────────────────────────────────────────────────────
 
   /// Update structured data for a report (tester corrections).
-  static Future<void> updateReport(String id, StructuredData data) async {
+  static Future<void> updateReport(String id, StructuredData data, {bool force = false}) async {
     final response = await http.put(
-      Uri.parse('$_baseUrl/api/reports/$id'),
+      Uri.parse('$_baseUrl/api/reports/$id${force ? "?force=true" : ""}'),
       headers: _headers,
       body: jsonEncode({'structured_data': data.toJson()}),
     );
