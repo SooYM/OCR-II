@@ -489,7 +489,18 @@ class _MainScreenState extends State<MainScreen> {
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface))),
+                  Expanded(
+                    child: Text(
+                      '$displayName${targetUnit.isNotEmpty ? ' ($targetUnit)' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
                   Icon(Icons.fullscreen_rounded, size: 18, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
                 ],
               ),
@@ -1161,7 +1172,8 @@ class _MainScreenState extends State<MainScreen> {
         final key = result.key ?? result.testItem;
         if (key != null) {
           if (!testKeyToName.containsKey(key)) {
-            testKeyToName[key] = result.testItem;
+            final entry = BiomarkerDictionary.getEntryByKey(key);
+            testKeyToName[key] = entry?.standardName ?? result.testItem;
           }
           if (_parseValue(result.value) != null) {
             numericTestKeys.add(key);
