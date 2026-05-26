@@ -10,6 +10,7 @@ class MedicalReport {
   final bool isDuplicate;
   final bool isNameMismatch;
   final bool isGenderMismatch;
+  final bool isAgeMismatch;
 
   MedicalReport({
     required this.id,
@@ -22,6 +23,7 @@ class MedicalReport {
     this.isDuplicate = false,
     this.isNameMismatch = false,
     this.isGenderMismatch = false,
+    this.isAgeMismatch = false,
   });
 
   factory MedicalReport.fromJson(Map<String, dynamic> json) {
@@ -37,6 +39,7 @@ class MedicalReport {
       isDuplicate: json['is_duplicate'] as bool? ?? false,
       isNameMismatch: json['is_name_mismatch'] as bool? ?? false,
       isGenderMismatch: json['is_gender_mismatch'] as bool? ?? false,
+      isAgeMismatch: json['is_age_mismatch'] as bool? ?? false,
     );
   }
 
@@ -52,6 +55,7 @@ class MedicalReport {
       'is_duplicate': isDuplicate,
       'is_name_mismatch': isNameMismatch,
       'is_gender_mismatch': isGenderMismatch,
+      'is_age_mismatch': isAgeMismatch,
     };
   }
 }
@@ -71,6 +75,9 @@ class StructuredData {
   String? reportReference;
   List<TestResult> results;
   String? notes;
+  String? age;
+  String? dob;
+  String? icNumber;
 
   StructuredData({
     this.patientName,
@@ -86,6 +93,9 @@ class StructuredData {
     this.reportReference,
     this.results = const [],
     this.notes,
+    this.age,
+    this.dob,
+    this.icNumber,
   });
 
   factory StructuredData.fromJson(Map<String, dynamic> json) {
@@ -106,6 +116,9 @@ class StructuredData {
               .toList() ??
           [],
       notes: json['notes'] as String?,
+      age: json['age']?.toString(),
+      dob: json['dob'] as String?,
+      icNumber: json['ic_number'] as String?,
     );
   }
 
@@ -124,6 +137,9 @@ class StructuredData {
       'report_reference': reportReference,
       'results': results.map((r) => r.toJson()).toList(),
       'notes': notes,
+      'age': age,
+      'dob': dob,
+      'ic_number': icNumber,
     };
   }
 }

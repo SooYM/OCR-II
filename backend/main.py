@@ -117,6 +117,8 @@ class RegisterRequest(BaseModel):
     name: str
     password: str
     gender: str
+    age: int
+    dob: str
 
 class LoginRequest(BaseModel):
     email: str
@@ -185,6 +187,8 @@ def init_local_db():
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
             gender TEXT,
+            age INTEGER,
+            dob TEXT,
             created_at TEXT NOT NULL
         )
     """)
@@ -216,6 +220,18 @@ def init_local_db():
     # Migration: add gender column to users if missing
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN gender TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Migration: add age column to users if missing
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN age INTEGER")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Migration: add dob column to users if missing
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
     except sqlite3.OperationalError:
         pass  # Column already exists
 
@@ -282,7 +298,7 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
         conn.close()
         return dict(row) if row else None
 
-def create_user(email: str, name: str, password: str, gender: str) -> dict:
+def create_user(email: str, name: str, password: str, gender: str, age: int, dob: str) -> dict:
     user_id = str(uuid.uuid4())
     pw_hash = hash_password(password)
     now = datetime.now().isoformat()
@@ -292,6 +308,8 @@ def create_user(email: str, name: str, password: str, gender: str) -> dict:
         "name": name.strip(),
         "password_hash": pw_hash,
         "gender": gender.strip(),
+        "age": age,
+        "dob": dob.strip(),
         "created_at": now,
     }
     if STORAGE_ENGINE == "supabase" and supabase:
@@ -299,26 +317,40 @@ def create_user(email: str, name: str, password: str, gender: str) -> dict:
     else:
         conn = sqlite3.connect(str(DB_PATH))
         conn.execute(
-            "INSERT INTO users (id, email, name, password_hash, status, gender, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', gender.strip(), now)
+            "INSERT INTO users (id, email, name, password_hash, status, gender, age, dob, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', gender.strip(), age, dob.strip(), now)
         )
         conn.commit()
         conn.close()
-    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "gender": user_data["gender"], "created_at": now}
+    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "gender": user_data["gender"], "age": age, "dob": dob.strip(), "created_at": now}
 
-def update_user_profile(user_id: str, name: str, email: str, gender: Optional[str] = None):
+def update_user_profile(user_id: str, name: str, email: str, gender: Optional[str] = None, age: Optional[int] = None, dob: Optional[str] = None):
     update_data = {"name": name, "email": email}
     if gender:
         update_data["gender"] = gender
+    if age is not None:
+        update_data["age"] = age
+    if dob:
+        update_data["dob"] = dob
 
     if STORAGE_ENGINE == "supabase" and supabase:
         supabase.table("users").update(update_data).eq("id", user_id).execute()
     else:
         conn = sqlite3.connect(str(DB_PATH))
+        query = "UPDATE users SET name = ?, email = ?"
+        params = [name, email]
         if gender:
-            conn.execute("UPDATE users SET name = ?, email = ?, gender = ? WHERE id = ?", (name, email, gender, user_id))
-        else:
-            conn.execute("UPDATE users SET name = ?, email = ? WHERE id = ?", (name, email, user_id))
+            query += ", gender = ?"
+            params.append(gender)
+        if age is not None:
+            query += ", age = ?"
+            params.append(age)
+        if dob:
+            query += ", dob = ?"
+            params.append(dob)
+        query += " WHERE id = ?"
+        params.append(user_id)
+        conn.execute(query, tuple(params))
         conn.commit()
         conn.close()
 
@@ -403,13 +435,16 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
+        "age (The age of the patient as written on the report, e.g. '45' or '45 years'. If none is found, use '')",
+        "dob (The Date of Birth of the patient as written on the report, e.g. '1980-05-15' or '15/05/1980'. If none is found, use '')",
+        "ic_number (The Identity Card / NRIC / passport number of the patient as written on the report, e.g. '850512-14-5678' or similar NRIC/Passport. If none is found, use '')",
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
         "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -565,13 +600,16 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
         "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
+        "age (The age of the patient as written on the report, e.g. '45' or '45 years'. If none is found, use '')",
+        "dob (The Date of Birth of the patient as written on the report, e.g. '1980-05-15' or '15/05/1980'. If none is found, use '')",
+        "ic_number (The Identity Card / NRIC / passport number of the patient as written on the report, e.g. '850512-14-5678' or similar NRIC/Passport. If none is found, use '')",
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
         "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
     ]
     
-    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -1024,7 +1062,7 @@ def normalize_structured_data(data: dict) -> dict:
 
     # 3. Map to UI Format (for the Flutter app)
     results = []
-    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes"]
+    metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number"]
     for key, value in flat.items():
         if key in metadata_keys or not value: continue
         
@@ -1062,7 +1100,10 @@ def normalize_structured_data(data: dict) -> dict:
         "test_name": str(data.get("test_name", "")).strip(),
         "doctor_name": str(data.get("doctor_name", "")).strip(),
         "hospital_name": flat.get("lab", "").strip(),
-        "report_reference": flat.get("report_reference", "").strip()
+        "report_reference": flat.get("report_reference", "").strip(),
+        "age": str(data.get("age", "")).strip(),
+        "dob": str(data.get("dob", "")).strip(),
+        "ic_number": str(data.get("ic_number", "")).strip(),
     }
 
 def get_standard_unit_for_key(key: str) -> str:
@@ -1466,6 +1507,132 @@ def check_gender_match(user_gender: str, patient_gender: str) -> bool:
         return (is_user_male and is_patient_male) or (is_user_female and is_patient_female)
     return ug == pg
 
+def parse_date_robust(date_str: str):
+    import datetime
+    if not date_str:
+        return None
+    s = str(date_str).strip()
+    
+    # Try YYYY-MM-DD
+    m = re.match(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})', s)
+    if m:
+        try:
+            return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+            
+    # Try DD/MM/YYYY or DD-MM-YYYY
+    m = re.match(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})', s)
+    if m:
+        try:
+            return datetime.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            pass
+
+    # Try DD-MMM-YYYY or DD MMM YYYY (e.g. 12 May 1985, 12-May-1985, 12/May/1985)
+    months = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
+        'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+    }
+    m = re.match(r'^(\d{1,2})[-/\s]+([a-zA-Z]+)[-/\s]+(\d{4})', s)
+    if m:
+        m_name = m.group(2).lower()
+        if m_name in months:
+            try:
+                return datetime.date(int(m.group(3)), months[m_name], int(m.group(1)))
+            except ValueError:
+                pass
+                
+    # Try MMM DD, YYYY (e.g. May 12, 1985)
+    m = re.match(r'^([a-zA-Z]+)[-/\s]+(\d{1,2})[-/,\s]+(\d{4})', s)
+    if m:
+        m_name = m.group(1).lower()
+        if m_name in months:
+            try:
+                return datetime.date(int(m.group(3)), months[m_name], int(m.group(2)))
+            except ValueError:
+                pass
+                
+    return None
+
+def extract_dob_from_ic(ic_str: str):
+    if not ic_str:
+        return None
+    cleaned = re.sub(r'\D', '', str(ic_str))
+    if len(cleaned) == 12:
+        yy = int(cleaned[0:2])
+        mm = int(cleaned[2:4])
+        dd = int(cleaned[4:6])
+        if 1 <= mm <= 12 and 1 <= dd <= 31:
+            return (yy, mm, dd)
+    m = re.search(r'\b(\d{2})(\d{2})(\d{2})[-]?\d{2}[-]?\d{4}\b', str(ic_str))
+    if m:
+        yy = int(m.group(1))
+        mm = int(m.group(2))
+        dd = int(m.group(3))
+        if 1 <= mm <= 12 and 1 <= dd <= 31:
+            return (yy, mm, dd)
+    return None
+
+def check_age_and_identity_match(
+    user_age: Optional[int],
+    user_dob_str: Optional[str],
+    patient_age_str: Optional[str],
+    patient_dob_str: Optional[str],
+    patient_ic_str: Optional[str],
+    report_date_str: Optional[str]
+) -> bool:
+    import datetime
+    if not patient_age_str and not patient_dob_str and not patient_ic_str:
+        return True
+
+    u_dob = parse_date_robust(user_dob_str) if user_dob_str else None
+    p_dob = parse_date_robust(patient_dob_str) if patient_dob_str else None
+    
+    if u_dob and p_dob:
+        if u_dob != p_dob:
+            print(f"[IDENTITY MISMATCH] DOB mismatch: User DOB {u_dob} vs Patient DOB {p_dob}")
+            return False
+            
+    p_ic_dob = extract_dob_from_ic(patient_ic_str)
+    if u_dob and p_ic_dob:
+        uyy_last2 = u_dob.year % 100
+        umm = u_dob.month
+        udd = u_dob.day
+        iyy, imm, idd = p_ic_dob
+        if uyy_last2 != iyy or umm != imm or udd != idd:
+            print(f"[IDENTITY MISMATCH] IC DOB mismatch: User DOB {u_dob} vs Patient IC DOB {iyy:02d}{imm:02d}{idd:02d}")
+            return False
+
+    p_age = None
+    if patient_age_str:
+        m = re.search(r'\b\d+\b', str(patient_age_str))
+        if m:
+            p_age = int(m.group(0))
+
+    rep_date = parse_date_robust(report_date_str) if report_date_str else None
+    calculated_user_age = None
+    
+    if u_dob and rep_date:
+        calculated_user_age = rep_date.year - u_dob.year - ((rep_date.month, rep_date.day) < (u_dob.month, u_dob.day))
+    elif user_age is not None:
+        if rep_date:
+            curr_year = datetime.date.today().year
+            rep_year = rep_date.year
+            elapsed = curr_year - rep_year
+            calculated_user_age = user_age - elapsed
+        else:
+            calculated_user_age = user_age
+
+    if calculated_user_age is not None and p_age is not None:
+        if abs(calculated_user_age - p_age) > 2:
+            print(f"[IDENTITY MISMATCH] Age mismatch: Expected User Age at report {calculated_user_age} vs Patient Age {p_age}")
+            return False
+
+    return True
+
 async def check_duplicate_report(user_id: str, new_data: dict, exclude_id: str = None):
     """
     Compares the newly parsed data with existing reports for the user.
@@ -1623,15 +1790,25 @@ async def root():
 
 @app.post("/api/auth/register")
 async def register(req: RegisterRequest):
-    if not req.email or not req.password or not req.name or not req.gender:
-        raise HTTPException(status_code=400, detail="Email, name, password, and gender are required")
+    if not req.email or not req.password or not req.name or not req.gender or req.age is None or not req.dob:
+        raise HTTPException(status_code=400, detail="Email, name, password, gender, age, and DOB are required")
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if get_user_by_email(req.email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    user = create_user(req.email, req.name, req.password, req.gender)
+    user = create_user(req.email, req.name, req.password, req.gender, req.age, req.dob)
     token = create_jwt(user["id"], user["email"])
-    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"], "gender": user["gender"]}}
+    return {
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"],
+            "gender": user["gender"],
+            "age": user["age"],
+            "dob": user["dob"]
+        }
+    }
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest):
@@ -1641,21 +1818,40 @@ async def login(req: LoginRequest):
     if user.get("status") == "inactive":
         raise HTTPException(status_code=403, detail="Account is inactive. Please contact support.")
     token = create_jwt(user["id"], user["email"])
-    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"], "gender": user.get("gender")}}
+    return {
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"],
+            "gender": user.get("gender"),
+            "age": user.get("age"),
+            "dob": user.get("dob")
+        }
+    }
 
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    return {"id": current_user["id"], "email": current_user["email"], "name": current_user["name"], "gender": current_user.get("gender")}
+    return {
+        "id": current_user["id"],
+        "email": current_user["email"],
+        "name": current_user["name"],
+        "gender": current_user.get("gender"),
+        "age": current_user.get("age"),
+        "dob": current_user.get("dob")
+    }
 
 @app.put("/api/auth/profile")
 async def update_profile(updated_data: dict, current_user: dict = Depends(get_current_user)):
     name = updated_data.get("name")
     email = updated_data.get("email")
     gender = updated_data.get("gender")
+    age = updated_data.get("age")
+    dob = updated_data.get("dob")
     if not name or not email:
         raise HTTPException(status_code=400, detail="Name and email are required")
     
-    update_user_profile(current_user["id"], name, email, gender)
+    update_user_profile(current_user["id"], name, email, gender, age=age, dob=dob)
     # Fetch updated user to get accurate fields
     user = get_user_by_id(current_user["id"])
     return {
@@ -1664,7 +1860,9 @@ async def update_profile(updated_data: dict, current_user: dict = Depends(get_cu
             "id": current_user["id"], 
             "email": email, 
             "name": name, 
-            "gender": user.get("gender") if user else gender
+            "gender": user.get("gender") if user else gender,
+            "age": user.get("age") if user else age,
+            "dob": user.get("dob") if user else dob
         }
     }
 
@@ -2502,6 +2700,33 @@ async def upload_report(file: UploadFile = File(...), current_user: dict = Depen
                 "raw_text": raw_text
             }
 
+        # --- AGE & IDENTITY VALIDATION ---
+        user_age = current_user.get("age")
+        user_dob = current_user.get("dob")
+        patient_age = structured_data.get("age", "")
+        patient_dob = structured_data.get("dob", "")
+        patient_ic = structured_data.get("ic_number", "")
+        report_date = structured_data.get("collected", "")
+
+        if (user_age is not None or user_dob) and not check_age_and_identity_match(
+            user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
+        ):
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                except Exception:
+                    pass
+            return {
+                "id": report_id,
+                "filename": file.filename,
+                "upload_time": report_metadata["upload_time"],
+                "status": "age_mismatch",
+                "is_age_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
         # --- DUPLICATE CHECK ---
         is_duplicate = False
         try:
@@ -2630,6 +2855,34 @@ async def upload_multi_report(files: list[UploadFile] = File(...), current_user:
                 "upload_time": report_metadata["upload_time"],
                 "status": "gender_mismatch",
                 "is_gender_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
+        # --- AGE & IDENTITY VALIDATION ---
+        user_age = current_user.get("age")
+        user_dob = current_user.get("dob")
+        patient_age = structured_data.get("age", "")
+        patient_dob = structured_data.get("dob", "")
+        patient_ic = structured_data.get("ic_number", "")
+        report_date = structured_data.get("collected", "")
+
+        if (user_age is not None or user_dob) and not check_age_and_identity_match(
+            user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
+        ):
+            for sp in saved_paths:
+                if sp.exists():
+                    try:
+                        sp.unlink()
+                    except Exception:
+                        pass
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "age_mismatch",
+                "is_age_mismatch": True,
                 "structured_data": structured_data,
                 "user_verified": False,
                 "raw_text": raw_text
@@ -2831,6 +3084,28 @@ async def upload_multi_preprocessed(
                 "raw_text": raw_text
             }
 
+        # --- AGE & IDENTITY VALIDATION ---
+        user_age = current_user.get("age")
+        user_dob = current_user.get("dob")
+        patient_age = structured_data.get("age", "")
+        patient_dob = structured_data.get("dob", "")
+        patient_ic = structured_data.get("ic_number", "")
+        report_date = structured_data.get("collected", "")
+
+        if (user_age is not None or user_dob) and not check_age_and_identity_match(
+            user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
+        ):
+            return {
+                "id": report_id,
+                "filename": ", ".join(filenames),
+                "upload_time": report_metadata["upload_time"],
+                "status": "age_mismatch",
+                "is_age_mismatch": True,
+                "structured_data": structured_data,
+                "user_verified": False,
+                "raw_text": raw_text
+            }
+
         # --- DUPLICATE CHECK ---
         is_duplicate = False
         try:
@@ -2953,6 +3228,22 @@ async def update_report(report_id: str, updated_data: dict, background_tasks: Ba
         raise HTTPException(
             status_code=400,
             detail=f"Gender Mismatch: The patient gender on the report ('{patient_gender}') does not match your registered gender ('{user_gender}')."
+        )
+
+    # --- AGE & IDENTITY VALIDATION ---
+    user_age = user.get("age") if user else None
+    user_dob = user.get("dob") if user else None
+    patient_age = normalized_incoming.get("age", "")
+    patient_dob = normalized_incoming.get("dob", "")
+    patient_ic = normalized_incoming.get("ic_number", "")
+    report_date = normalized_incoming.get("collected", "")
+
+    if (user_age is not None or user_dob) and not check_age_and_identity_match(
+        user_age, user_dob, patient_age, patient_dob, patient_ic, report_date
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Age Mismatch: The patient age, date of birth, or IC number on this report does not match your registered credentials."
         )
 
     # Run duplicate check
@@ -3117,8 +3408,166 @@ def migrate_existing_users_gender():
     except Exception as e:
         print(f"[STARTUP GENDER MIGRATION ERROR] {e}")
 
+def migrate_existing_users_age_dob():
+    print("[STARTUP AGE/DOB MIGRATION] Running backfill migration...")
+    import datetime
+    try:
+        if STORAGE_ENGINE == "supabase" and supabase:
+            res = supabase.table("users").select("*").execute()
+            users = res.data or []
+            for u in users:
+                cur_age = u.get("age")
+                cur_dob = u.get("dob")
+                if not cur_age or not cur_dob:
+                    rep_res = supabase.table("reports").select("structured_data").eq("user_id", u["id"]).execute()
+                    reps = rep_res.data or []
+                    extracted_dob = None
+                    extracted_age = None
+                    
+                    for r in reps:
+                        sd = r.get("structured_data")
+                        if sd:
+                            if isinstance(sd, str):
+                                try:
+                                    sd = json.loads(sd)
+                                except Exception:
+                                    continue
+                            
+                            dob_val = sd.get("dob")
+                            p_dob = parse_date_robust(str(dob_val)) if dob_val else None
+                            if p_dob:
+                                extracted_dob = p_dob
+                            
+                            ic_val = sd.get("ic_number")
+                            ic_dob_tuple = extract_dob_from_ic(str(ic_val)) if ic_val else None
+                            if ic_dob_tuple and not extracted_dob:
+                                yy, mm, dd = ic_dob_tuple
+                                century = 2000 if yy <= int(datetime.date.today().year % 100) else 1900
+                                try:
+                                    extracted_dob = datetime.date(century + yy, mm, dd)
+                                except ValueError:
+                                    pass
+                                    
+                            age_val = sd.get("age")
+                            report_date_val = sd.get("collected")
+                            p_age = None
+                            if age_val:
+                                m = re.search(r'\b\d+\b', str(age_val))
+                                if m:
+                                    p_age = int(m.group(0))
+                            
+                            p_rep_date = parse_date_robust(str(report_date_val)) if report_date_val else None
+                            
+                            if p_age is not None:
+                                if p_rep_date:
+                                    birth_year = p_rep_date.year - p_age
+                                    curr_year = datetime.date.today().year
+                                    extracted_age = curr_year - birth_year
+                                    if not extracted_dob:
+                                        extracted_dob = datetime.date(birth_year, 1, 1)
+                                else:
+                                    extracted_age = p_age
+                            
+                            if extracted_dob:
+                                today = datetime.date.today()
+                                extracted_age = today.year - extracted_dob.year - ((today.month, today.day) < (extracted_dob.month, extracted_dob.day))
+                                break
+                                
+                    update_payload = {}
+                    if not cur_dob and extracted_dob:
+                        update_payload["dob"] = extracted_dob.isoformat()
+                    if not cur_age and extracted_age:
+                        update_payload["age"] = int(extracted_age)
+                        
+                    if update_payload:
+                        print(f"[STARTUP AGE/DOB MIGRATION] Updating Supabase User {u['email']}: {update_payload}")
+                        supabase.table("users").update(update_payload).eq("id", u["id"]).execute()
+        else:
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users")
+            users = [dict(row) for row in cursor.fetchall()]
+            for u in users:
+                cur_age = u.get("age")
+                cur_dob = u.get("dob")
+                if not cur_age or not cur_dob:
+                    cursor.execute("SELECT structured_data FROM reports WHERE user_id = ?", (u["id"],))
+                    reps = cursor.fetchall()
+                    extracted_dob = None
+                    extracted_age = None
+                    
+                    for r in reps:
+                        sd_str = r["structured_data"]
+                        if sd_str:
+                            try:
+                                sd = json.loads(sd_str)
+                            except Exception:
+                                continue
+                            
+                            dob_val = sd.get("dob")
+                            p_dob = parse_date_robust(str(dob_val)) if dob_val else None
+                            if p_dob:
+                                extracted_dob = p_dob
+                            
+                            ic_val = sd.get("ic_number")
+                            ic_dob_tuple = extract_dob_from_ic(str(ic_val)) if ic_val else None
+                            if ic_dob_tuple and not extracted_dob:
+                                yy, mm, dd = ic_dob_tuple
+                                century = 2000 if yy <= int(datetime.date.today().year % 100) else 1900
+                                try:
+                                    extracted_dob = datetime.date(century + yy, mm, dd)
+                                except ValueError:
+                                    pass
+                                    
+                            age_val = sd.get("age")
+                            report_date_val = sd.get("collected")
+                            p_age = None
+                            if age_val:
+                                m = re.search(r'\b\d+\b', str(age_val))
+                                if m:
+                                    p_age = int(m.group(0))
+                            
+                            p_rep_date = parse_date_robust(str(report_date_val)) if report_date_val else None
+                            
+                            if p_age is not None:
+                                if p_rep_date:
+                                    birth_year = p_rep_date.year - p_age
+                                    curr_year = datetime.date.today().year
+                                    extracted_age = curr_year - birth_year
+                                    if not extracted_dob:
+                                        extracted_dob = datetime.date(birth_year, 1, 1)
+                                else:
+                                    extracted_age = p_age
+                            
+                            if extracted_dob:
+                                today = datetime.date.today()
+                                extracted_age = today.year - extracted_dob.year - ((today.month, today.day) < (extracted_dob.month, extracted_dob.day))
+                                break
+                                
+                    update_parts = []
+                    params = []
+                    if not cur_dob and extracted_dob:
+                        update_parts.append("dob = ?")
+                        params.append(extracted_dob.isoformat())
+                    if not cur_age and extracted_age:
+                        update_parts.append("age = ?")
+                        params.append(int(extracted_age))
+                        
+                    if update_parts:
+                        params.append(u["id"])
+                        sql = f"UPDATE users SET {', '.join(update_parts)} WHERE id = ?"
+                        print(f"[STARTUP AGE/DOB MIGRATION] Updating SQLite User {u['email']}: {sql} with params {params[:-1]}")
+                        cursor.execute(sql, tuple(params))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"[STARTUP AGE/DOB MIGRATION ERROR] {e}")
+
 @app.on_event("startup")
 def startup_migration():
     migrate_existing_users_gender()
+    migrate_existing_users_age_dob()
+
 
 

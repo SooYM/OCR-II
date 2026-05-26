@@ -249,6 +249,132 @@ class _VerifyScreenState extends State<VerifyScreen> {
     return false;
   }
 
+  bool _checkAgeMatch() {
+    if (AuthService.currentUser == null) return true;
+    final userAge = AuthService.currentUser!['age'] as int?;
+    final userDobStr = AuthService.currentUser!['dob'] as String?;
+    
+    final patientAgeStr = _data.age;
+    final patientDobStr = _data.dob;
+    final patientIcStr = _data.icNumber;
+    final reportDateStr = _data.date;
+
+    if ((patientAgeStr == null || patientAgeStr.isEmpty) && 
+        (patientDobStr == null || patientDobStr.isEmpty) && 
+        (patientIcStr == null || patientIcStr.isEmpty)) {
+      return true;
+    }
+
+    DateTime? parseDateRobust(String? str) {
+      if (str == null || str.trim().isEmpty) return null;
+      final clean = str.replaceAll(RegExp(r'\s+'), ' ');
+      try {
+        final reg = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})');
+        final m = reg.firstMatch(clean);
+        if (m != null) {
+          return DateTime(int.parse(m.group(1)!), int.parse(m.group(2)!), int.parse(m.group(3)!));
+        }
+      } catch (_) {}
+      try {
+        final reg = RegExp(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})');
+        final m = reg.firstMatch(clean);
+        if (m != null) {
+          return DateTime(int.parse(m.group(3)!), int.parse(m.group(2)!), int.parse(m.group(1)!));
+        }
+      } catch (_) {}
+      try {
+        if (clean.length == 6) {
+          final yy = int.tryParse(clean.substring(0, 2));
+          final mm = int.tryParse(clean.substring(2, 4));
+          final dd = int.tryParse(clean.substring(4, 6));
+          if (yy != null && mm != null && dd != null && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+            final nowYear = DateTime.now().year;
+            final currentCentury = (nowYear ~/ 100) * 100;
+            int fullYear = currentCentury + yy;
+            if (fullYear > nowYear) {
+              fullYear -= 100;
+            }
+            return DateTime(fullYear, mm, dd);
+          }
+        }
+      } catch (_) {}
+      return DateTime.tryParse(clean);
+    }
+
+    final uDob = parseDateRobust(userDobStr);
+    final pDob = parseDateRobust(patientDobStr);
+
+    if (uDob != null && pDob != null) {
+      if (uDob.year != pDob.year || uDob.month != pDob.month || uDob.day != pDob.day) {
+        return false;
+      }
+    }
+
+    List<int>? extractDobFromIc(String? icStr) {
+      if (icStr == null || icStr.isEmpty) return null;
+      final cleaned = icStr.replaceAll(RegExp(r'\D'), '');
+      if (cleaned.length == 12) {
+        final yy = int.tryParse(cleaned.substring(0, 2));
+        final mm = int.tryParse(cleaned.substring(2, 4));
+        final dd = int.tryParse(cleaned.substring(4, 6));
+        if (yy != null && mm != null && dd != null) {
+          if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+            return [yy, mm, dd];
+          }
+        }
+      }
+      return null;
+    }
+
+    final pIcDob = extractDobFromIc(patientIcStr);
+    if (uDob != null && pIcDob != null) {
+      final uyyLast2 = uDob.year % 100;
+      final umm = uDob.month;
+      final udd = uDob.day;
+      final iyy = pIcDob[0];
+      final imm = pIcDob[1];
+      final idd = pIcDob[2];
+      if (uyyLast2 != iyy || umm != imm || udd != idd) {
+        return false;
+      }
+    }
+
+    int? pAge;
+    if (patientAgeStr != null && patientAgeStr.isNotEmpty) {
+      final m = RegExp(r'\d+').firstMatch(patientAgeStr);
+      if (m != null) {
+        pAge = int.tryParse(m.group(0)!);
+      }
+    }
+
+    final repDate = parseDateRobust(reportDateStr);
+    int? calculatedUserAge;
+
+    if (uDob != null && repDate != null) {
+      calculatedUserAge = repDate.year - uDob.year;
+      if (repDate.month < uDob.month || (repDate.month == uDob.month && repDate.day < uDob.day)) {
+        calculatedUserAge--;
+      }
+    } else if (userAge != null) {
+      if (repDate != null) {
+        final currYear = DateTime.now().year;
+        final repYear = repDate.year;
+        final elapsed = currYear - repYear;
+        calculatedUserAge = userAge - elapsed;
+      } else {
+        calculatedUserAge = userAge;
+      }
+    }
+
+    if (calculatedUserAge != null && pAge != null) {
+      if ((calculatedUserAge - pAge).abs() > 2) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   /// Pre-populate the report with all standard biomarkers from the dictionary as empty fields if not extracted.
   void _prepopulateMissingBiomarkers() {
     // Collect keys of biomarkers already present
@@ -340,6 +466,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
             AuthService.currentUser!['gender'] as String,
             _data.gender!)) {
       _showLocalGenderMismatchDialog();
+      return;
+    }
+
+    // Age validation
+    if (!_checkAgeMatch()) {
+      _showLocalAgeMismatchDialog();
       return;
     }
 
@@ -474,6 +606,29 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
+  void _showLocalAgeMismatchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Age / DOB Mismatch'),
+          ],
+        ),
+        content: Text("The patient age/DOB/IC details on this report do not match your registered age (${AuthService.currentUser!['age'] ?? 'unknown'}) or DOB (${AuthService.currentUser!['dob'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addTestResult() {
     setState(() {
       _data.results.add(TestResult(testItem: '', value: ''));
@@ -592,6 +747,54 @@ class _VerifyScreenState extends State<VerifyScreen> {
                             _data.gender = v;
                             _hasChanges = true;
                             _updateReferenceRangesForGender();
+                          });
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Age',
+                        value: _data.age ?? '',
+                        icon: Icons.calendar_today_outlined,
+                        keyboardType: TextInputType.number,
+                        errorText: !_checkAgeMatch()
+                            ? 'Age/DOB/IC must match your registered credentials'
+                            : null,
+                        onChanged: (v) {
+                          setState(() {
+                            _data.age = v;
+                            _hasChanges = true;
+                          });
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'Date of Birth',
+                        value: _data.dob ?? '',
+                        icon: Icons.cake_outlined,
+                        hintText: 'YYYY-MM-DD',
+                        errorText: !_checkAgeMatch()
+                            ? 'Age/DOB/IC must match your registered credentials'
+                            : null,
+                        onChanged: (v) {
+                          setState(() {
+                            _data.dob = v;
+                            _hasChanges = true;
+                          });
+                        },
+                      ),
+                      const Divider(),
+                      _buildField(
+                        label: 'IC Number',
+                        value: _data.icNumber ?? '',
+                        icon: Icons.badge_outlined,
+                        hintText: 'e.g., YYMMDD-XX-XXXX',
+                        errorText: !_checkAgeMatch()
+                            ? 'Age/DOB/IC must match your registered credentials'
+                            : null,
+                        onChanged: (v) {
+                          setState(() {
+                            _data.icNumber = v;
+                            _hasChanges = true;
                           });
                         },
                       ),

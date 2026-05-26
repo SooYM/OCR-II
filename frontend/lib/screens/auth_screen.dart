@@ -24,6 +24,8 @@ class _AuthScreenState extends State<AuthScreen>
   final _emailCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _ageCtrl = TextEditingController();
+  final _dobCtrl = TextEditingController();
   late AnimationController _pulseController;
 
   @override
@@ -40,6 +42,8 @@ class _AuthScreenState extends State<AuthScreen>
     _emailCtrl.dispose();
     _nameCtrl.dispose();
     _passwordCtrl.dispose();
+    _ageCtrl.dispose();
+    _dobCtrl.dispose();
     _pulseController.dispose();
     super.dispose();
   }
@@ -48,13 +52,21 @@ class _AuthScreenState extends State<AuthScreen>
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text.trim();
     final name = _nameCtrl.text.trim();
+    final ageStr = _ageCtrl.text.trim();
+    final dob = _dobCtrl.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       setState(() => _error = 'Email and password are required');
       return;
     }
-    if (!_isLogin && name.isEmpty) {
-      setState(() => _error = 'Name is required');
+    if (!_isLogin && (name.isEmpty || ageStr.isEmpty || dob.isEmpty)) {
+      setState(() => _error = 'Name, Age, and DOB are required');
+      return;
+    }
+
+    final age = int.tryParse(ageStr);
+    if (!_isLogin && (age == null || age <= 0)) {
+      setState(() => _error = 'Age must be a valid positive number');
       return;
     }
 
@@ -67,7 +79,7 @@ class _AuthScreenState extends State<AuthScreen>
       if (_isLogin) {
         await AuthService.login(email, password);
       } else {
-        await AuthService.register(email, name, password, _selectedGender);
+        await AuthService.register(email, name, password, _selectedGender, age!, dob);
       }
       if (mounted) {
         Navigator.pushReplacement(
@@ -249,6 +261,24 @@ class _AuthScreenState extends State<AuthScreen>
                           ),
                           const SizedBox(height: 14),
                           _buildGenderDropdown(),
+                          const SizedBox(height: 14),
+                          _buildTextField(
+                            controller: _ageCtrl,
+                            label: 'Age',
+                            icon: Icons.calendar_today_outlined,
+                            keyboardType: TextInputType.number,
+                          ),
+                          const SizedBox(height: 14),
+                          GestureDetector(
+                            onTap: () => _selectDOB(context),
+                            child: AbsorbPointer(
+                              child: _buildTextField(
+                                controller: _dobCtrl,
+                                label: 'Date of Birth',
+                                icon: Icons.cake_outlined,
+                              ),
+                            ),
+                          ),
                         ],
 
                         const SizedBox(height: 14),
@@ -414,5 +444,40 @@ class _AuthScreenState extends State<AuthScreen>
         }
       },
     );
+  }
+
+  Future<void> _selectDOB(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2000, 1, 1),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: Theme.of(context).colorScheme.primary,
+              onPrimary: Colors.white,
+              surface: Theme.of(context).colorScheme.surface,
+              onSurface: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      final formattedDate = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      setState(() {
+        _dobCtrl.text = formattedDate;
+        
+        final today = DateTime.now();
+        int calculatedAge = today.year - picked.year;
+        if (today.month < picked.month || (today.month == picked.month && today.day < picked.day)) {
+          calculatedAge--;
+        }
+        _ageCtrl.text = calculatedAge.toString();
+      });
+    }
   }
 }

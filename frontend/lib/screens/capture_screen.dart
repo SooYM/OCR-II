@@ -188,6 +188,8 @@ class _CaptureScreenState extends State<CaptureScreen>
           _showNameMismatchDialog(report);
         } else if (report.isGenderMismatch) {
           _showGenderMismatchDialog(report);
+        } else if (report.isAgeMismatch) {
+          _showAgeMismatchDialog(report);
         } else if (report.isDuplicate) {
           _showDuplicateDialog(report);
         } else {
@@ -243,6 +245,29 @@ class _CaptureScreenState extends State<CaptureScreen>
           ],
         ),
         content: Text("The patient gender on this report ('${report.structuredData?.gender}') does not match your registered gender (${AuthService.currentUser?['gender'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAgeMismatchDialog(MedicalReport report) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Age / DOB Mismatch'),
+          ],
+        ),
+        content: Text("The patient age/DOB/IC on this report does not match your registered age (${AuthService.currentUser?['age'] ?? 'unknown'}) or DOB (${AuthService.currentUser?['dob'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
