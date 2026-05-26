@@ -188,7 +188,7 @@ def init_local_db():
             status TEXT NOT NULL DEFAULT 'active',
             gender TEXT,
             age INTEGER,
-            dob TEXT,
+            dob DATE,
             created_at TEXT NOT NULL
         )
     """)
@@ -231,7 +231,7 @@ def init_local_db():
 
     # Migration: add dob column to users if missing
     try:
-        cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
+        cursor.execute("ALTER TABLE users ADD COLUMN dob DATE")
     except sqlite3.OperationalError:
         pass  # Column already exists
 
@@ -298,10 +298,19 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
         conn.close()
         return dict(row) if row else None
 
+def normalize_dob(dob_str: str) -> str:
+    if not dob_str or not str(dob_str).strip():
+        raise ValueError("Date of birth is required")
+    parsed = parse_date_robust(dob_str)
+    if not parsed:
+        raise ValueError(f"Invalid date of birth: '{dob_str}'. Please use YYYY-MM-DD or DD/MM/YYYY format.")
+    return parsed.isoformat()
+
 def create_user(email: str, name: str, password: str, gender: str, age: int, dob: str) -> dict:
     user_id = str(uuid.uuid4())
     pw_hash = hash_password(password)
     now = datetime.now().isoformat()
+    norm_dob = normalize_dob(dob)
     user_data = {
         "id": user_id,
         "email": email.lower().strip(),
@@ -309,7 +318,7 @@ def create_user(email: str, name: str, password: str, gender: str, age: int, dob
         "password_hash": pw_hash,
         "gender": gender.strip(),
         "age": age,
-        "dob": dob.strip(),
+        "dob": norm_dob,
         "created_at": now,
     }
     if STORAGE_ENGINE == "supabase" and supabase:
@@ -318,11 +327,11 @@ def create_user(email: str, name: str, password: str, gender: str, age: int, dob
         conn = sqlite3.connect(str(DB_PATH))
         conn.execute(
             "INSERT INTO users (id, email, name, password_hash, status, gender, age, dob, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', gender.strip(), age, dob.strip(), now)
+            (user_id, email.lower().strip(), name.strip(), pw_hash, 'active', gender.strip(), age, norm_dob, now)
         )
         conn.commit()
         conn.close()
-    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "gender": user_data["gender"], "age": age, "dob": dob.strip(), "created_at": now}
+    return {"id": user_id, "email": user_data["email"], "name": user_data["name"], "gender": user_data["gender"], "age": age, "dob": norm_dob, "created_at": now}
 
 def update_user_profile(user_id: str, name: str, email: str, gender: Optional[str] = None, age: Optional[int] = None, dob: Optional[str] = None):
     update_data = {"name": name, "email": email}
@@ -331,7 +340,7 @@ def update_user_profile(user_id: str, name: str, email: str, gender: Optional[st
     if age is not None:
         update_data["age"] = age
     if dob:
-        update_data["dob"] = dob
+        update_data["dob"] = normalize_dob(dob)
 
     if STORAGE_ENGINE == "supabase" and supabase:
         supabase.table("users").update(update_data).eq("id", user_id).execute()
@@ -347,7 +356,7 @@ def update_user_profile(user_id: str, name: str, email: str, gender: Optional[st
             params.append(age)
         if dob:
             query += ", dob = ?"
-            params.append(dob)
+            params.append(normalize_dob(dob))
         query += " WHERE id = ?"
         params.append(user_id)
         conn.execute(query, tuple(params))
@@ -1796,7 +1805,10 @@ async def register(req: RegisterRequest):
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if get_user_by_email(req.email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    user = create_user(req.email, req.name, req.password, req.gender, req.age, req.dob)
+    try:
+        user = create_user(req.email, req.name, req.password, req.gender, req.age, req.dob)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     token = create_jwt(user["id"], user["email"])
     return {
         "token": token,
@@ -1851,7 +1863,10 @@ async def update_profile(updated_data: dict, current_user: dict = Depends(get_cu
     if not name or not email:
         raise HTTPException(status_code=400, detail="Name and email are required")
     
-    update_user_profile(current_user["id"], name, email, gender, age=age, dob=dob)
+    try:
+        update_user_profile(current_user["id"], name, email, gender, age=age, dob=dob)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     # Fetch updated user to get accurate fields
     user = get_user_by_id(current_user["id"])
     return {
