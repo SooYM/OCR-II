@@ -402,7 +402,7 @@ class _MainScreenState extends State<MainScreen> {
     double minY = double.infinity;
     double maxY = double.negativeInfinity;
 
-    final entry = BiomarkerDictionary.getEntryByKey(testKey);
+    final entry = BiomarkerDictionary.getEntryByKey(testKey) ?? BiomarkerDictionary.match(testKey);
     final targetUnit = entry?.unit ?? '';
 
     // Parse ref range for numeric abnormal detection
@@ -1172,7 +1172,7 @@ class _MainScreenState extends State<MainScreen> {
         final key = result.key ?? result.testItem;
         if (key != null) {
           if (!testKeyToName.containsKey(key)) {
-            final entry = BiomarkerDictionary.getEntryByKey(key);
+            final entry = BiomarkerDictionary.getEntryByKey(key) ?? BiomarkerDictionary.match(key);
             testKeyToName[key] = entry?.standardName ?? result.testItem;
           }
           if (_parseValue(result.value) != null) {
@@ -2275,7 +2275,7 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
   @override
   void initState() {
     super.initState();
-    _entry = BiomarkerDictionary.getEntryByKey(widget.testKey);
+    _entry = BiomarkerDictionary.getEntryByKey(widget.testKey) ?? BiomarkerDictionary.match(widget.testKey);
     _defaultUnit = _entry?.unit ?? '';
     _availableUnits = _entry != null && _entry!.allowedUnits.isNotEmpty
         ? List<String>.from(_entry!.allowedUnits)
