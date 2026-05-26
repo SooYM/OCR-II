@@ -559,13 +559,13 @@ class _MainScreenState extends State<MainScreen> {
                               else if (v == 5) t = 'Pos';
                               else if (v > 0) t = '${v-1}+';
                               return SideTitleWidget(
-                                axisSide: meta.axisSide,
+                                meta: meta,
                                 space: 8,
                                 child: Text(t, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 9)),
                               );
                             }
                             return SideTitleWidget(
-                              axisSide: meta.axisSide,
+                              meta: meta,
                               space: 8,
                               child: Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
                             );
@@ -1379,7 +1379,7 @@ class _MainScreenState extends State<MainScreen> {
                         showTitles: true, reservedSize: 48,
                         getTitlesWidget: (value, meta) {
                           return SideTitleWidget(
-                            axisSide: meta.axisSide,
+                            meta: meta,
                             space: 8,
                             child: Text(value.toStringAsFixed(1), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w500)),
                           );
@@ -1535,7 +1535,7 @@ class _MainScreenState extends State<MainScreen> {
                                   showTitles: true, reservedSize: 52,
                                   getTitlesWidget: (value, meta) {
                                     return SideTitleWidget(
-                                      axisSide: meta.axisSide,
+                                      meta: meta,
                                       space: 8,
                                       child: Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11)),
                                     );
@@ -2580,13 +2580,13 @@ class _FullScreenChartPageState extends State<_FullScreenChartPage> {
                                           else if (v == 5) t = 'Pos';
                                           else if (v > 0) t = '${v-1}+';
                                           return SideTitleWidget(
-                                            axisSide: meta.axisSide,
+                                            meta: meta,
                                             space: 8,
                                             child: Text(t, style: const TextStyle(fontSize: 11)),
                                           );
                                         }
                                         return SideTitleWidget(
-                                          axisSide: meta.axisSide,
+                                          meta: meta,
                                           space: 8,
                                           child: Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 11)),
                                         );

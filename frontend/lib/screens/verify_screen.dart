@@ -422,7 +422,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
     }
 
     // Name validation
-    if (_data.patientName != null &&
+    if (!_forceSubmit &&
+        _data.patientName != null &&
         _data.patientName!.isNotEmpty &&
         AuthService.currentUser != null &&
         !_checkNameMatch(
@@ -433,7 +434,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
     }
 
     // Gender validation
-    if (_data.gender != null &&
+    if (!_forceSubmit &&
+        _data.gender != null &&
         _data.gender!.isNotEmpty &&
         AuthService.currentUser != null &&
         AuthService.currentUser!['gender'] != null &&
@@ -446,7 +448,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     }
 
     // Identity validation (DOB & IC checks)
-    if (!_checkIdentityMatch()) {
+    if (!_forceSubmit && !_checkIdentityMatch()) {
       _showLocalIdentityMismatchDialog();
       return;
     }
