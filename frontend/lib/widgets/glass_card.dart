@@ -29,7 +29,6 @@ class GlassCard extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      padding: padding ?? const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: backgroundColor ?? Theme.of(context).colorScheme.surface.withOpacity(isDark ? 0.8 : 0.95),
         borderRadius: radius,
@@ -40,7 +39,10 @@ class GlassCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: radius,
-        child: child,
+        child: Padding(
+          padding: padding ?? const EdgeInsets.all(20),
+          child: child,
+        ),
       ),
     );
   }
