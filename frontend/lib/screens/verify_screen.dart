@@ -68,33 +68,27 @@ class _VerifyScreenState extends State<VerifyScreen> {
     final lower = trimmed.toLowerCase();
     
     // Check common typos and case for "negative"
-    if (lower == 'negative' ||
-        lower == 'negativ' || 
-        lower == 'negativve' || 
-        lower == 'negitive' || 
-        lower == 'negtive' || 
-        lower == 'nagetive' ||
-        lower == 'negeative') {
+    if (lower.startsWith('neg') || 
+        lower.startsWith('nag') || 
+        lower.startsWith('nege') ||
+        lower == 'nil') {
       return 'Negative';
     }
     
     // Check common typos and case for "positive"
-    if (lower == 'positive' ||
-        lower == 'positiv' || 
-        lower == 'positivve' || 
-        lower == 'positivee' || 
-        lower == 'postive' || 
-        lower == 'posetive') {
+    if (lower.startsWith('pos') || 
+        lower.startsWith('pot') || 
+        lower == 'cloudy') {
       return 'Positive';
     }
     
     // Check common typos and case for "trace"
-    if (lower == 'trace' || lower == 'trac' || lower == 'trase' || lower == 'tracce') {
+    if (lower.startsWith('trac') || lower.startsWith('tras')) {
       return 'Trace';
     }
     
     // Check common typos and case for "clear"
-    if (lower == 'clear' || lower == 'cleare' || lower == 'cleari') {
+    if (lower.startsWith('clea') || lower == 'cleari') {
       return 'Clear';
     }
     
@@ -993,37 +987,40 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 ),
                 const SizedBox(height: 12),
                 GlassCard(
-                  child: TextFormField(
-                    initialValue: _data.notes ?? '',
-                    maxLines: 4,
-                    readOnly: !_editableFields.contains('notes'),
-                    onChanged: (v) {
-                      _data.notes = v;
-                      _hasChanges = true;
-                    },
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 14,
-                      height: 1.5,
-                    ),
-                    textAlignVertical: TextAlignVertical.center,
-                    decoration: InputDecoration(
-                      hintText: 'Any additional notes...',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          Icons.edit_outlined,
-                          size: 18,
-                          color: _editableFields.contains('notes') ? Colors.transparent : null,
-                        ),
-                        onPressed: _editableFields.contains('notes') ? null : () => _requestEdit('notes', 'Notes'),
+                  child: () {
+                    final bool isNotesEditable = !widget.report.userVerified || _editableFields.contains('notes');
+                    return TextFormField(
+                      initialValue: _data.notes ?? '',
+                      maxLines: 4,
+                      readOnly: !isNotesEditable,
+                      onChanged: (v) {
+                        _data.notes = v;
+                        _hasChanges = true;
+                      },
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 14,
+                        height: 1.5,
                       ),
-                    ),
-                  ),
+                      textAlignVertical: TextAlignVertical.center,
+                      decoration: InputDecoration(
+                        hintText: 'Any additional notes...',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 18,
+                            color: isNotesEditable ? Colors.transparent : null,
+                          ),
+                          onPressed: isNotesEditable ? null : () => _requestEdit('notes', 'Notes'),
+                        ),
+                      ),
+                    );
+                  }(),
                 ),
 
                 // Bottom padding for the sticky button
@@ -1145,7 +1142,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     String? hintText,
     String? errorText,
   }) {
-    final bool isEditable = _editableFields.contains(label);
+    final bool isEditable = !widget.report.userVerified || _editableFields.contains(label);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Column(
@@ -1365,6 +1362,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
   Widget _buildResultCard(int index, TestResult result) {
     final isMatched = _matchedIndices.contains(index);
     final matchEntry = _matchedEntries[index];
+    final bool isTestItemEditable = !widget.report.userVerified || _editableFields.contains('${index}_testItem');
     final String currentRefRange = result.referenceRange ?? (matchEntry?.referenceRange ?? '');
     final bool isExceeding = _exceedsReferenceRange(result.value, currentRefRange);
 
@@ -1413,7 +1411,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                     else
                       TextFormField(
                         initialValue: result.testItem,
-                        readOnly: !_editableFields.contains('${index}_testItem'),
+                        readOnly: !isTestItemEditable,
                         onChanged: (v) {
                           result.testItem = v;
                           _hasChanges = true;
@@ -1450,11 +1448,11 @@ class _VerifyScreenState extends State<VerifyScreen> {
                             icon: Icon(
                               Icons.edit_outlined,
                               size: 16,
-                              color: _editableFields.contains('${index}_testItem') ? Colors.transparent : null,
+                              color: isTestItemEditable ? Colors.transparent : null,
                             ),
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
-                            onPressed: _editableFields.contains('${index}_testItem') ? null : () => _requestEdit('${index}_testItem', 'Test Item Name'),
+                            onPressed: isTestItemEditable ? null : () => _requestEdit('${index}_testItem', 'Test Item Name'),
                           ),
                         ),
                       ),
@@ -1629,7 +1627,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     required Function(String) onChanged,
     Function(String)? onFocusLost,
   }) {
-    final bool isEditable = _editableFields.contains(fieldKey);
+    final bool isEditable = !widget.report.userVerified || _editableFields.contains(fieldKey);
     String currentValue = value;
     return Column(
       key: key,
