@@ -34,6 +34,15 @@ class _VerifyScreenState extends State<VerifyScreen> {
   final Map<int, BiomarkerEntry> _matchedEntries = {};
   final Map<int, UniqueKey> _valueFieldKeys = {};
   final Set<String> _editableFields = {};
+  final Map<String, FocusNode> _focusNodes = {};
+
+  @override
+  void dispose() {
+    for (final node in _focusNodes.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
 
   Future<void> _requestEdit(String fieldKey, String displayLabel) async {
     final confirm = await showDialog<bool>(
@@ -59,6 +68,9 @@ class _VerifyScreenState extends State<VerifyScreen> {
     if (confirm == true) {
       setState(() {
         _editableFields.add(fieldKey);
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusNodes[fieldKey]?.requestFocus();
       });
     }
   }
@@ -989,34 +1001,47 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 GlassCard(
                   child: () {
                     final bool isNotesEditable = !widget.report.userVerified || _editableFields.contains('notes');
-                    return TextFormField(
-                      initialValue: _data.notes ?? '',
-                      maxLines: 4,
-                      readOnly: !isNotesEditable,
-                      onChanged: (v) {
-                        _data.notes = v;
-                        _hasChanges = true;
+                    final focusNode = _focusNodes.putIfAbsent('notes', () => FocusNode());
+                    return Focus(
+                      onFocusChange: (hasFocus) {
+                        if (!hasFocus) {
+                          if (widget.report.userVerified) {
+                            setState(() {
+                              _editableFields.remove('notes');
+                            });
+                          }
+                        }
                       },
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                      textAlignVertical: TextAlignVertical.center,
-                      decoration: InputDecoration(
-                        hintText: 'Any additional notes...',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            Icons.edit_outlined,
-                            size: 18,
-                            color: isNotesEditable ? Colors.transparent : null,
+                      child: TextFormField(
+                        initialValue: _data.notes ?? '',
+                        maxLines: 4,
+                        readOnly: !isNotesEditable,
+                        focusNode: focusNode,
+                        onChanged: (v) {
+                          _data.notes = v;
+                          _hasChanges = true;
+                        },
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
+                        textAlignVertical: TextAlignVertical.center,
+                        decoration: InputDecoration(
+                          hintText: 'Any additional notes...',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              Icons.edit_outlined,
+                              size: 18,
+                              color: isNotesEditable ? Colors.transparent : null,
+                            ),
+                            onPressed: isNotesEditable ? null : () => _requestEdit('notes', 'Notes'),
                           ),
-                          onPressed: isNotesEditable ? null : () => _requestEdit('notes', 'Notes'),
                         ),
                       ),
                     );
@@ -1143,6 +1168,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     String? errorText,
   }) {
     final bool isEditable = !widget.report.userVerified || _editableFields.contains(label);
+    final focusNode = _focusNodes.putIfAbsent(label, () => FocusNode());
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Column(
@@ -1164,45 +1190,57 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 ),
               ),
               Expanded(
-                child: TextFormField(
-                  key: ValueKey('${label}_${isEditable}'),
-                  initialValue: value,
-                  readOnly: !isEditable,
-                  onChanged: onChanged,
-                  inputFormatters: inputFormatters,
-                  keyboardType: keyboardType,
-                  textAlignVertical: TextAlignVertical.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontSize: 15,
-                  ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-                      ),
+                child: Focus(
+                  onFocusChange: (hasFocus) {
+                    if (!hasFocus) {
+                      if (widget.report.userVerified) {
+                        setState(() {
+                          _editableFields.remove(label);
+                        });
+                      }
+                    }
+                  },
+                  child: TextFormField(
+                    key: ValueKey('${label}_${isEditable}'),
+                    initialValue: value,
+                    readOnly: !isEditable,
+                    focusNode: focusNode,
+                    onChanged: onChanged,
+                    inputFormatters: inputFormatters,
+                    keyboardType: keyboardType,
+                    textAlignVertical: TextAlignVertical.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontSize: 15,
                     ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        Icons.edit_outlined,
-                        size: 16,
-                        color: isEditable ? Colors.transparent : null,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                        ),
                       ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: isEditable ? null : () => _requestEdit(label, label),
-                    ),
-                    fillColor: Colors.transparent,
-                    hintText: hintText,
-                    hintStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                      fontSize: 14,
-                      fontWeight: FontWeight.normal,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          size: 16,
+                          color: isEditable ? Colors.transparent : null,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: isEditable ? null : () => _requestEdit(label, label),
+                      ),
+                      fillColor: Colors.transparent,
+                      hintText: hintText,
+                      hintStyle: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                        fontSize: 14,
+                        fontWeight: FontWeight.normal,
+                      ),
                     ),
                   ),
                 ),
@@ -1409,50 +1447,62 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         ),
                       )
                     else
-                      TextFormField(
-                        initialValue: result.testItem,
-                        readOnly: !isTestItemEditable,
-                        onChanged: (v) {
-                          result.testItem = v;
-                          _hasChanges = true;
-                          final newMatch = BiomarkerDictionary.match(v, unit: result.unit);
-                          setState(() {
-                            if (newMatch != null) {
-                              _matchedIndices.add(index);
-                              _matchedEntries[index] = newMatch;
-                              result.key = newMatch.key;
-
-                              if (newMatch.unit.isNotEmpty && (result.unit == null || result.unit!.isEmpty)) {
-                                result.unit = newMatch.unit;
-                              }
-                              if (newMatch.referenceRange != null && (result.referenceRange == null || result.referenceRange!.isEmpty)) {
-                                result.referenceRange = newMatch.referenceRange;
-                              }
-                            } else {
-                              _matchedIndices.remove(index);
-                              _matchedEntries.remove(index);
+                      Focus(
+                        onFocusChange: (hasFocus) {
+                          if (!hasFocus) {
+                            if (widget.report.userVerified) {
+                              setState(() {
+                                _editableFields.remove('${index}_testItem');
+                              });
                             }
-                          });
+                          }
                         },
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                        textAlignVertical: TextAlignVertical.center,
-                        decoration: InputDecoration(
-                          hintText: 'Test item name',
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                          border: InputBorder.none,
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              Icons.edit_outlined,
-                              size: 16,
-                              color: isTestItemEditable ? Colors.transparent : null,
+                        child: TextFormField(
+                          initialValue: result.testItem,
+                          readOnly: !isTestItemEditable,
+                          focusNode: _focusNodes.putIfAbsent('${index}_testItem', () => FocusNode()),
+                          onChanged: (v) {
+                            result.testItem = v;
+                            _hasChanges = true;
+                            final newMatch = BiomarkerDictionary.match(v, unit: result.unit);
+                            setState(() {
+                              if (newMatch != null) {
+                                _matchedIndices.add(index);
+                                _matchedEntries[index] = newMatch;
+                                result.key = newMatch.key;
+
+                                if (newMatch.unit.isNotEmpty && (result.unit == null || result.unit!.isEmpty)) {
+                                  result.unit = newMatch.unit;
+                                }
+                                if (newMatch.referenceRange != null && (result.referenceRange == null || result.referenceRange!.isEmpty)) {
+                                  result.referenceRange = newMatch.referenceRange;
+                                }
+                              } else {
+                                _matchedIndices.remove(index);
+                                _matchedEntries.remove(index);
+                              }
+                            });
+                          },
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                          textAlignVertical: TextAlignVertical.center,
+                          decoration: InputDecoration(
+                            hintText: 'Test item name',
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            border: InputBorder.none,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: isTestItemEditable ? Colors.transparent : null,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: isTestItemEditable ? null : () => _requestEdit('${index}_testItem', 'Test Item Name'),
                             ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: isTestItemEditable ? null : () => _requestEdit('${index}_testItem', 'Test Item Name'),
                           ),
                         ),
                       ),
@@ -1628,6 +1678,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     Function(String)? onFocusLost,
   }) {
     final bool isEditable = !widget.report.userVerified || _editableFields.contains(fieldKey);
+    final focusNode = _focusNodes.putIfAbsent(fieldKey, () => FocusNode());
     String currentValue = value;
     return Column(
       key: key,
@@ -1645,12 +1696,20 @@ class _VerifyScreenState extends State<VerifyScreen> {
         const SizedBox(height: 4),
         Focus(
           onFocusChange: (hasFocus) {
-            if (!hasFocus && onFocusLost != null) {
-              onFocusLost(currentValue);
+            if (!hasFocus) {
+              if (onFocusLost != null) {
+                onFocusLost(currentValue);
+              }
+              if (widget.report.userVerified) {
+                setState(() {
+                  _editableFields.remove(fieldKey);
+                });
+              }
             }
           },
           child: TextFormField(
             initialValue: value,
+            focusNode: focusNode,
             onChanged: (v) {
               currentValue = v;
               onChanged(v);

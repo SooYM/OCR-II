@@ -18,6 +18,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _nameFocusNode = FocusNode();
+  final _emailFocusNode = FocusNode();
   bool _isLoading = false;
   final Set<String> _expandedSections = {};
   bool _isNameEditable = false;
@@ -56,6 +58,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _nameFocusNode.dispose();
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
@@ -452,10 +456,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           controller: _nameController,
                           icon: Icons.person_outline_rounded,
                           isEditable: _isNameEditable,
+                          focusNode: _nameFocusNode,
                           onEditRequested: () async {
                             final confirm = await _showEditConfirmation('Full Name');
                             if (confirm == true) {
                               setState(() => _isNameEditable = true);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _nameFocusNode.requestFocus();
+                              });
                             }
                           },
                         ),
@@ -465,10 +473,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           controller: _emailController,
                           icon: Icons.email_outlined,
                           isEditable: _isEmailEditable,
+                          focusNode: _emailFocusNode,
                           onEditRequested: () async {
                             final confirm = await _showEditConfirmation('Email Address');
                             if (confirm == true) {
                               setState(() => _isEmailEditable = true);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _emailFocusNode.requestFocus();
+                              });
                             }
                           },
                           keyboardType: TextInputType.emailAddress,
@@ -703,6 +715,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required IconData icon,
     required bool isEditable,
     required VoidCallback onEditRequested,
+    required FocusNode focusNode,
     TextInputType? keyboardType,
   }) {
     return Column(
@@ -710,23 +723,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          readOnly: !isEditable,
-          decoration: InputDecoration(
-            prefixIcon: Icon(icon, size: 20),
-            suffixIcon: !isEditable
-                ? IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    onPressed: onEditRequested,
-                  )
-                : null,
-            hintText: 'Enter $label',
-            filled: true,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(isEditable ? 0.3 : 0.15),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        Focus(
+          onFocusChange: (hasFocus) {
+            if (!hasFocus) {
+              setState(() {
+                if (label == 'Full Name') {
+                  _isNameEditable = false;
+                } else if (label == 'Email Address') {
+                  _isEmailEditable = false;
+                }
+              });
+            }
+          },
+          child: TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            readOnly: !isEditable,
+            focusNode: focusNode,
+            decoration: InputDecoration(
+              prefixIcon: Icon(icon, size: 20),
+              suffixIcon: !isEditable
+                  ? IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      onPressed: onEditRequested,
+                    )
+                  : null,
+              hintText: 'Enter $label',
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(isEditable ? 0.3 : 0.15),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
           ),
         ),
       ],
