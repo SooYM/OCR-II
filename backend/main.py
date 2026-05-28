@@ -327,9 +327,9 @@ def get_user_by_ic(ic_number: str) -> Optional[dict]:
         conn.close()
         return dict(row) if row else None
 
-def normalize_dob(dob_str: str) -> str:
+def normalize_dob(dob_str: Optional[str]) -> str:
     if not dob_str or not str(dob_str).strip():
-        raise ValueError("Date of birth is required")
+        return ""
     parsed = parse_date_robust(dob_str)
     if not parsed:
         raise ValueError(f"Invalid date of birth: '{dob_str}'. Please use YYYY-MM-DD or DD/MM/YYYY format.")
