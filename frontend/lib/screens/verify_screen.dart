@@ -535,6 +535,31 @@ class _VerifyScreenState extends State<VerifyScreen> {
       return;
     }
 
+    // Ask user to confirm sending the report
+    final confirmSend = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+        title: const Text('Send Report?'),
+        content: const Text('Are you sure you want to send this medical report? Once sent, it will be finalized in your records.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmSend != true) {
+      return;
+    }
+
     setState(() => _isSending = true);
 
     try {
