@@ -1,377 +1,501 @@
 # 🩺 MedScan — Medical Report Digitization & Health Analytics
 
-A premium, full-stack healthcare dashboard and medical report digitizer. MedScan uses AI-powered vision to extract structured data from blood reports, visualizes health trends over time, and provides personalized AI-driven health insights.
+A premium, production-grade, full-stack healthcare dashboard and medical report digitizer. MedScan utilizes AI-powered computer vision (OpenAI Vision API) to extract structured clinical data from scanned blood, urine, and physiological reports, normalizes multi-source lab measurements, tracks and visualizes biomarker trends, and delivers personalized, context-aware AI health insights.
 
-## ✨ Features
+---
 
-- **🌙 Premium Theme Toggle** — Seamlessly switch between clean light mode and premium dark mode.
-- **📈 Global Date Filtering** — Unified date range filter that dynamically updates all charts and tables across the dashboard.
-- **📊 Comparative Trend Analysis** — Overlay multiple biomarkers (e.g., LDL vs HDL) on a single interactive line chart with synchronized tooltips.
-- **📋 Collapsible Profile Groups** — Analytics table organized into 14+ standardized medical profiles (Lipid, Liver, CBC, etc.) with interactive expand/collapse functionality.
-- **📸 Multi-Page Capture** — Photograph or pick multiple pages; the AI merges them into one unified record.
-- **🤖 AI-Powered Extraction** — OpenAI Vision (GPT-4o) reads images directly for high-accuracy extraction.
-- **➕ Manual Logging** — Add report entries manually using a dedicated "+" button directly within the dashboard.
-- **🔍 Document Reference Tracking** — Surface unique report identifiers (Accession No, Report No) as `Ref:` keys on history cards and check screens.
-- **🚫 Smart Duplicate Detection** — Prevents duplicate uploads using a multi-attribute checking system that compares normalized/cleaned Lab Reference numbers, Lab Numbers/Sample IDs, and clinical signature overlaps.
-- **🕒 24h Time Normalization** — Automatically formats extraction and manual inputs into standard 24h `HH:MM:SS` format.
-- **🔍 Full-screen Chart Expansion** — Tap any graph to expand into a detailed, full-screen trend analysis view with persistent legends.
-- **✨ AI Health Summary** — Layman-friendly, empathetic dashboard summary automatically highlights out-of-range biomarkers, physiochemical connections, and features direct redirect linking to the AI Chat assistant.
-- **🧠 AI Health Analysis** — Get personalized insights with rich text formatting and the ability to ask custom follow-up questions.
-- **✅ Human-in-the-Loop Verification** — Review and correct data before submission to ensure 100% accuracy. Dynamically pre-populates all 92 dictionary-supported biomarkers as empty/editable entries when not extracted by OCR and handles exponent/Unicode-aware unit normalization to prevent dropdown casing crashes.
-- **🔐 Secure User Authentication** — JWT-based login and signup system for personalized data isolation and ownership validation.
-- **🎨 Premium UI/UX** — Glassmorphism design, smooth animations, and optimized layouts for all screen sizes.
+## 📖 Table of Contents
+1. [System Architecture & Data Flow](#-system-architecture--data-flow)
+2. [Database Architecture & Security Layout](#-database-architecture--security-layout)
+3. [Core Engines & Pipeline Mechanics](#-core-engines--pipeline-mechanics)
+   - [Content-Aware Image Splitting](#1-content-aware-image-splitting)
+   - [OpenCV Image Preprocessing](#2-opencv-image-preprocessing)
+   - [Robust Autocorrect & Typo Normalization](#3-robust-autocorrect--typo-normalization)
+   - [Smart Duplicate Prevention Engine](#4-smart-duplicate-prevention-engine)
+   - [24h Time & Date Normalization](#5-24h-time--date-normalization)
+4. [API Reference Manual](#-api-reference-manual)
+5. [Frontend Architecture & UI Flow](#-frontend-architecture--ui-flow)
+6. [Installation & Deployment Guide](#-installation--deployment-guide)
+7. [OCR Capture & Scanning Guidelines](#-ocr-capture--scanning-guidelines)
+8. [Standardized Medical Data Dictionary](#-standardized-medical-data-dictionary)
+9. [Troubleshooting & Support](#-troubleshooting--support)
 
-## ⚙️ Core Pipelines & Engine Mechanics
+---
 
-### 1. ✂️ Content-Aware Image Splitting
-To solve the standard issue of OpenAI Vision missing or misaligning small text lines on high-density medical reports, MedScan integrates a content-aware image splitting engine (`splitter.py`):
-- **Horizontal Projection Profile**: Binarizes the image using Otsu's thresholding, inversion, and horizontal summation of dark pixels (text elements) along each row.
-- **Whitespace Gap Detection**: Identifies contiguous vertical bands of empty whitespace separating text lines.
-- **Midpoint Alignment**: Searches the middle 70% of the image to find the whitespace gap center closest to the physical midpoint, ensuring no line of text is sliced horizontally.
-- **Safety Overlap Margin**: Splits the image into top and bottom halves with an automatic 3% vertical overlap on each side, guaranteeing that boundary characters are completely visible in at least one segment.
+## 🏗️ System Architecture & Data Flow
 
-### 2. 🪄 Image Preprocessing & Contrast Enhancement
-Prior to analysis, scanned images are processed to remove environmental factors (uneven lighting, shadows, creases):
-- **Illumination Correction**: Extracts the background map via dilation followed by a large median blur (21x21 kernel), then divides the original color channels by this map. This normalizes lighting and converts the background to clean white.
-- **Dynamic Contrast Range**: Normalizes the final image dynamic range to maximize readability.
-- **Unsharp Masking**: Applies a sharpening filter kernel to enhance edge definitions, making fine character segments stand out.
-- **High-Quality Upscaling**: Proportionally resizes any split section or small image with `INTER_CUBIC` interpolation to a minimum height of 800px if it falls below the threshold.
-
-### 3. 🚫 Smart Duplicate Prevention Engine
-To prevent database clutter and redundant chart data points, MedScan implements a multi-criteria duplicate checking algorithm (`check_duplicate_report`). Rather than a basic raw comparison, the engine analyzes reports **value-by-value** at the biomarker level:
-- **Biomarker Intersection**: The check only compares biomarkers (by name/key) that are present in both the new report and the existing report (non-empty intersection).
-- **Unit Standardization**: The engine dynamically standardizes clinical units before comparing values (e.g., converting RBC/WBC, platelet counts, absolute cell counts, and eGFR to a common unit to avoid false mismatches).
-- **2% Numeric Tolerance**: If the standardized values are numeric, they match if the difference is within **2%** (accounting for rounding/precision differences).
-- **Qualitative Comparison**: Non-numeric/qualitative biomarkers fallback to a trimmed, case-insensitive string match.
-- **Multi-Criteria Validation**:
-  - **Criteria 1 (Exact Reference Match)**: Matches normalized, alphanumeric-only `report_reference` (e.g. Accession/Report Number).
-  - **Criteria 1B (Exact Lab Number Match)**: Matches normalized, alphanumeric-only `labreference` (e.g. Lab Specimen Number).
-  - **Criteria 2 (High Clinical Fingerprint Overlap)**: Matches reports sharing $\ge 3$ biomarker keys with $\ge 90\%$ identical clinical values, regardless of date.
-  - **Criteria 3 (Low Contradiction Clinical Match)**: Matches reports sharing $\ge 2$ biomarker keys with $100\%$ identical values, provided dates and patient IDs do not explicitly contradict.
-  - **Criteria 4 (Same Date & Patient ID Match)**: Matches reports with identical dates, patient IDs, and $\ge 80\%$ clinical overlap.
-  - **Criteria 5 (Fuzzy Date Match)**: Matches reports with dates within $\pm 2$ days, identical patient IDs, and $\ge 80\%$ clinical overlap.
-
-### 4. 🕒 24h Time Normalization
-Time values extracted from reports or entered manually are parsed and formatted into standard 24h `HH:MM:SS` format. If a report specifies a collection time and reported/printed time, both are isolated. If only one time is specified, the system maps it to both fields to prevent data gaps.
-
-### 5. 🗃️ Database Layout, Swapped Fields, & Isolated Notes
-To resolve terminology overlaps and separate clinical findings from user notes, the database schema and extraction models align as follows:
-- **`report_reference`** (formerly `sample_id`): Represents the unique printed report reference document identifier (e.g. Accession No., Episode No.).
-- **`labreference`** (formerly `lab_reference`): Represents the unique physical lab sample specimen container ID (e.g. Lab No., Specimen ID).
-- **`original_labreference`**: Retains the raw, unmodified report reference string from the OCR engine for data verification.
-- **General Notes vs. Clinical `others`**: Previously, the `others` clinical biomarker under the Urine profile was conflated with general report notes. General report-level comments and remarks are now isolated into an independent `notes` field (stored in the main `reports` database table JSON payload and exposed directly to the AI chat and dashboard), whereas the `others` field remains strictly a clinical biomarker under the Urinalysis profile.
-Existing records have been fully migrated by swapping column values and updating key constraints to maintain historical consistency.
-
-### 6. 🔐 Secure User Authentication & Isolation
-MedScan features JWT-based authentication using PyJWT and bcrypt. Every database query filters records using the user ID parsed from the verified authorization headers, ensuring complete data privacy and security.
-
-### 7. 🤖 AI Health Summary & Physiological Correlation Engine
-MedScan integrates an automated clinical summary generator that delivers immediate, layman-friendly insights whenever the user refreshes or loads their trend dashboard:
-- **Empathetic Layman Translation**: Avoids dry clinical tables by translating out-of-range indicators into simple, readable wellness terms.
-- **Physiological Correlations**: Uses OpenAI LLM structures to trace biological dependencies between multiple metrics (e.g., lipid profile cholesterol ratios correlated with glycemic indicators).
-- **Smooth Deep-Dive Transition**: Embedded link allows the user to immediately transition to the AI Chat view, auto-preserving their current dashboard context.
-
-## 🏗️ Architecture
+MedScan is built as a split-responsibility client-server system consisting of a **Flutter mobile client** and a **FastAPI backend microservice**, integrated with a secure **Supabase PostgreSQL** cloud database (or a local SQLite fallback for testing).
 
 ```
-┌──────────────────────┐       ┌──────────────────────┐       ┌──────────────┐
-│   Flutter Mobile App │──────▶│   FastAPI Backend     │──────▶│   Supabase   │
-│                      │ HTTP  │                      │       │  PostgreSQL  │
-│  • Trend Dashboard   │       │  • OpenAI GPT-4o API  │       │              │
-│  • AI Analytics      │◀──────│  • Data normalization │       │  • users     │
-│  • Report Management │  JSON │  • Secure JWT Auth    │       │  • reports   │
-└──────────────────────┘       └──────────────────────┘       └──────────────┘
+ ┌────────────────────────────────────────────────────────────────────────────────┐
+ │                              FLUTTER MOBILE CLIENT                             │
+ └────────────────────────────────────────────────────────────────────────────────┘
+        │ (Capture Photo / Gallery Select)
+        ▼
+ ┌────────────────────────────────────────────────────────────────────────────────┐
+ │                               FASTAPI BACKEND                                  │
+ ├────────────────────────────────────────────────────────────────────────────────┤
+ │ 1. Image Preprocessing (OpenCV CLAHE, Illumination Correction)                 │
+ │ 2. Content-Aware Splitting (Whitespace Gap Alignment)                          │
+ │ 3. OpenAI Vision API (Multi-Segment GPT-4o OCR Execution)                      │
+ │ 4. Backend Autocorrection & Time/Date Normalization                            │
+ │ 5. Identity Verification (Checks user NRIC/DOB/Gender against Patient metadata)│
+ │ 6. Duplicate Engine (Fuzzy date, lab ID & signature overlap checking)          │
+ └────────────────────────────────────────────────────────────────────────────────┘
+        │
+        ├──────────────────────┬────────────────────────┐
+        ▼ (Supabase JSON/SQL)  ▼ (Local Test Fallback)  ▼ (API Gateway)
+ ┌───────────────┐      ┌───────────────┐        ┌───────────────┐
+ │   SUPABASE    │      │  SQLITE LOCAL │        │  OPENAI API   │
+ │  POSTGRESQL   │      │     DB        │        │   (GPT-4o)    │
+ └───────────────┘      └───────────────┘        └───────────────┘
 ```
 
-## 📂 Project Structure
+### Complete End-to-End Data Pipeline Flow:
+1. **Image Selection & Optimization**: The mobile client compresses captured images and posts them to the backend API (`/api/upload`).
+2. **Vision Extraction**: The backend splits pages, enhances contrast, and passes segment blocks to OpenAI Vision.
+3. **Typo Correction & Validation**: The backend filters structural outputs, applies `backend_autocorrect_typo` to standardize qualitative results, and returns the unified payload to the client.
+4. **Human-in-the-Loop Review**: The user inspects data in the **Verify Data** screen. Unverified parameters are fully editable without modal lockups.
+5. **Database Commit**: Upon clicking "Send", the client pushes the verified structure (`/api/reports/{id}`). The backend performs a final duplicate analysis, persists the document to the `reports` table, and feeds the biomarker values to the 92-column `staging_medical_records` clinical data table.
 
+---
+
+## 🗄️ Database Architecture & Security Layout
+
+MedScan supports dual storage engines configured via the `STORAGE_ENGINE` environment variable: **Supabase PostgreSQL** (production) and **SQLite** (local development).
+
+### 1. Supabase PostgreSQL Entity-Relationship Schema
+
+The database is structured to separate report document assets from clean clinical measurements, facilitating fast timeseries lookups.
+
+#### A. Users Table (`users`)
+Stores user profiles, demographic details used for OCR report owner matches, and cached AI medical insights.
+```sql
+CREATE TABLE users (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email          TEXT UNIQUE NOT NULL,
+    name           TEXT NOT NULL,
+    gender         TEXT, -- Normalised to "Male" or "Female"
+    dob            DATE, -- Normalized Date of Birth
+    ic_number      TEXT, -- Normalised Identity Card / NRIC / Passport
+    password_hash  TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'active',
+    health_summary TEXT, -- Cached markdown summary
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_users_email ON users (email);
 ```
-OCR-II/
-├── backend/
-│   ├── main.py              # FastAPI server (Auth, CRUD, AI Analysis, OCR)
-│   ├── requirements.txt     # Python dependencies
-│   ├── .env.template        # Environment variable template
-│   └── uploads/             # Temporary uploaded images
-├── frontend/
-│   ├── lib/
-│   │   ├── main.dart        # App initialization
-│   │   ├── models/          # Data models (MedicalReport, User, etc.)
-│   │   ├── screens/         # Dashboard, Capture, Auth, History, Verify
-│   │   ├── services/        # ApiService, AuthService, ThemeService
-│   │   ├── theme/           # AppTheme (Premium Light & Dark Themes)
-│   │   └── widgets/         # GlassCard, Custom Charts, AI Analysis UI
-│   └── pubspec.yaml
-└── ...
+
+#### B. Reports Table (`reports`)
+Stores the raw parsed payload from OpenAI, file upload reference locations, and confirmation states.
+```sql
+CREATE TABLE reports (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id          UUID REFERENCES users(id) ON DELETE CASCADE,
+    filename         TEXT NOT NULL,
+    upload_time      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status           TEXT NOT NULL DEFAULT 'processing',
+    raw_text         TEXT,
+    structured_data  JSONB, -- Entire parsed nested dictionary
+    user_verified    INTEGER DEFAULT 0, -- Toggled to 1 after user saves
+    file_path        TEXT
+);
+CREATE INDEX idx_reports_user_id ON reports (user_id);
 ```
 
-## 🚀 Getting Started
+#### C. Staging Medical Records (`staging_medical_records`)
+A 92-column table designed for structured analysis. Every column represents a standardized biomarker (e.g. `total_cholesterol_mg_dl` as `DOUBLE PRECISION`, `urine_colour` as `TEXT`). It links back to `reports` via a cascade-deleting foreign key.
+```sql
+CREATE TABLE staging_medical_records (
+    report_id                  UUID PRIMARY KEY REFERENCES reports(id) ON DELETE CASCADE,
+    medid                      BIGINT, -- Normalised Patient ID / NRIC digits
+    original_medid             TEXT,
+    labreference               TEXT, -- Specimen Sample ID
+    original_labreference      TEXT,
+    report_reference           TEXT, -- Episode / Accession No
+    lab                        TEXT, -- Clinic / Lab Location
+    collected                  DATE,
+    time                       TIME,
+    reported_time              TIME,
+    gender                     TEXT,
+    -- ... Urinalysis, CBC, Lipids, Liver, Kidney, Thyroid, HbA1c, Urine ACR, Iron profiles ...
+    total_cholesterol_mg_dl    DOUBLE PRECISION,
+    wbc_cells_ul               BIGINT,
+    urine_colour               TEXT,
+    ph                         DOUBLE PRECISION
+);
+```
 
-### Prerequisites
+### 2. Supabase Post-May 2026 Explicit API Grant Standards
+To comply with Supabase's strict API exposure rules (effective May 30, 2026), explicit access privileges must be granted to the `anon`, `authenticated`, and `service_role` roles for all newly created tables. The project setup queries execute the following explicit grants:
+```sql
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 
-| Tool | Version |
-|------|---------|
-| Flutter SDK | ≥ 3.10 |
-| Python | ≥ 3.10 |
-| OpenAI API Key | Required |
-| Supabase/PostgreSQL | Required |
+-- Grant API mapping privileges
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE reports TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE staging_medical_records TO anon, authenticated, service_role;
 
-### Backend Setup
+-- Simple security policies (Production environments should restrict USING clauses based on authenticated JWT claims)
+CREATE POLICY "Server bypass for users" ON users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Server bypass for reports" ON reports FOR ALL USING (true) WITH CHECK (true);
+```
 
+---
+
+## ⚙️ Core Engines & Pipeline Mechanics
+
+### 1. Content-Aware Image Splitting (`splitter.py`)
+To prevent token bloat while boosting vision recognition accuracy for small-font text grids, high-resolution pages are split into halves dynamically:
+* **Projection Binarization**: The page is binarized using Otsu's thresholding. Pixels are summed horizontally across the page row-by-row to construct a **Horizontal Projection Profile**.
+* **Whitespace Identification**: The engine scans the middle 70% of the image height to locate continuous zero-sum row bands, indicating spaces between clinical rows.
+* **Smart Midpoint Slicing**: Rather than cut mathematically in half (which could split a row of letters in two), the engine identifies the whitespace gap closest to the true vertical center and cuts there.
+* **3% Overlap Padding**: An overlap boundary of 3% is added to each slice to guarantee that text at the cut edge remains fully legible in at least one image block.
+
+### 2. OpenCV Image Preprocessing (`enhancer.py`)
+Environmental scanning variables (camera angles, shadow gradients, page folds) are normalized prior to OCR:
+* **Illumination Correction**: Background color maps are calculated by applying a large OpenCV morphological dilation followed by a median blur (using a 21x21 kernel). Dividing the raw image by this background mask eliminates page shadows and renders a clean white backdrop.
+* **CLAHE Contrast Adjustment**: Contrast Limited Adaptive Histogram Equalization is applied to amplify ink definition without blowing out thin lines.
+* **Proportional Upscaling**: If an image segment height is smaller than 800px, it is upscaled proportionally using `INTER_CUBIC` interpolation to protect character edge sharpness during GPT-4o ingestion.
+
+### 3. Robust Autocorrect & Typo Normalization
+Medical reports contain highly specific qualitative results that are frequently misspelled by OCR engines or typed incorrectly by users. Both the **Flutter frontend** and **FastAPI backend** implement a standardized case-insensitive prefix-matching parser:
+
+#### Typo Matching Matrix:
+| Target Standard | Match Rules / Case-Insensitive Prefixes | Typical Typos Corrected |
+|-----------------|------------------------------------------|--------------------------|
+| **Negative**    | Starts with `neg`, `nag`, `nege`, or equals `nil` | `negativ`, `nege`, `nagative`, `nil` |
+| **Positive**    | Starts with `pos`, `pot`, or equals `cloudy` | `posti`, `postiv`, `potisive`, `cloudy` |
+| **Trace**       | Starts with `trac` or `tras` | `trac`, `trace`, `tras` |
+| **Clear**       | Starts with `clea` or equals `cleari` | `clea`, `cleari`, `clear` |
+
+#### A. Backend Implementation (`backend/main.py`)
+Automatically normalizes qualitative values parsed by OpenAI Vision *before* they are returned in API JSON response payloads:
+```python
+def backend_autocorrect_typo(val_str: str) -> str:
+    if not val_str:
+        return val_str
+    trimmed = val_str.strip()
+    lower = trimmed.lower()
+    
+    if lower.startswith('neg') or lower.startswith('nag') or lower.startswith('nege') or lower == 'nil':
+        return 'Negative'
+    if lower.startswith('pos') or lower.startswith('pot') or lower == 'cloudy':
+        return 'Positive'
+    if lower.startswith('trac') or lower.startswith('tras'):
+        return 'Trace'
+    if lower.startswith('clea') or lower == 'cleari':
+        return 'Clear'
+        
+    return trimmed
+```
+
+#### B. Frontend Implementation (`frontend/lib/screens/verify_screen.dart`)
+Corrects manual user input in the value fields instantly when the text field loses focus (`onFocusLost` listener) or when the final "Send" button is tapped:
+```dart
+String _autoCorrectTypo(String input) {
+  final trimmed = input.trim();
+  final lower = trimmed.toLowerCase();
+  
+  if (lower.startsWith('neg') || lower.startsWith('nag') || lower.startsWith('nege') || lower == 'nil') {
+    return 'Negative';
+  }
+  if (lower.startsWith('pos') || lower.startsWith('pot') || lower == 'cloudy') {
+    return 'Positive';
+  }
+  if (lower.startsWith('trac') || lower.startsWith('tras')) {
+    return 'Trace';
+  }
+  if (lower.startsWith('clea') || lower == 'cleari') {
+    return 'Clear';
+  }
+  return input;
+}
+```
+
+### 4. Smart Duplicate Prevention Engine
+To maintain high clinical dataset integrity, uploading reports that contain identical biomarker data points is blocked. Before saving, the backend parses incoming structured data against the user's historical reports using a multi-layered check:
+* **Unit Standardization**: The engine reads standard biomarker configurations (from `get_standard_unit_for_key(key)`) and normalizes incoming values using `convert_unit` before comparison.
+* **2% Numeric Tolerance**: Standard numeric floats are compared. If they differ by $\le 2\%$, they are treated as matching to prevent duplicate records arising from minor conversion rounding differences.
+* **Multi-Attribute Matching Matrix**:
+  1. **Criteria 1 (Explicit Report ID)**: Cleaned alphanumeric `report_reference` matches exactly.
+  2. **Criteria 1B (Explicit Specimen ID)**: Cleaned alphanumeric `labreference` matches exactly.
+  3. **Criteria 2 (Clinical Signature Match)**: $\ge 3$ biomarker keys match with $\ge 90\%$ value identity, regardless of report date.
+  4. **Criteria 3 (Non-contradicting Overlap)**: $\ge 2$ biomarker keys match with $100\%$ value identity, and dates/patient IDs do not explicitly contradict.
+  5. **Criteria 4 (Same-Day Match)**: Identical collection date, matching Patient ID (`medid`), and $\ge 80\%$ biomarker matches.
+  6. **Criteria 5 (Fuzzy Date Match)**: Collection dates are within $\pm 2$ days, Patient ID matches, and $\ge 80\%$ biomarkers are identical.
+
+### 5. 24h Time & Date Normalization
+* **Date Stripping**: Strips time suffixes (e.g. `12/04/2026 11:30 AM` $\rightarrow$ `12/04/2026`), cleans variable separators (`/`, `-`, `.`), maps English month names (`May`, `Jan`) to standard integer representations, and formats to `YYYY-MM-DD`.
+* **Time Normalization**: Handles short-digit notation (e.g. `1430` $\rightarrow$ `14:30:00`, `930` $\rightarrow$ `09:30:00`), normalizes 12h AM/PM suffixes to standard 24h intervals (e.g. `02:30 PM` $\rightarrow$ `14:30:00`), and falls back to clean outputs.
+
+---
+
+## 🔌 API Reference Manual
+
+All backend responses return standard HTTP status codes. Secured endpoints require a JWT bearer token passed in the `Authorization` header: `Bearer <token>`.
+
+### 1. User Registration
+* **Endpoint**: `POST /api/auth/register`
+* **Content-Type**: `application/json`
+* **Request Payload**:
+  ```json
+  {
+    "email": "user@example.com",
+    "name": "John Doe",
+    "password": "StrongPassword123!",
+    "gender": "Male",
+    "dob": "1990-05-15",
+    "ic_number": "900515-14-5678"
+  }
+  ```
+* **Success Response (200 OK)**:
+  ```json
+  {
+    "id": "e4a2bc1d-28ab-4001-ba13-432890efba12",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "gender": "Male",
+    "dob": "1990-05-15",
+    "ic_number": "900515-14-5678",
+    "created_at": "2026-05-28T10:53:19.482Z"
+  }
+  ```
+
+### 2. User Login
+* **Endpoint**: `POST /api/auth/login`
+* **Content-Type**: `application/json`
+* **Request Payload**:
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "StrongPassword123!"
+  }
+  ```
+* **Success Response (200 OK)**:
+  ```json
+  {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "bearer",
+    "user": {
+      "id": "e4a2bc1d-28ab-4001-ba13-432890efba12",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "gender": "Male",
+      "dob": "1990-05-15",
+      "ic_number": "900515-14-5678"
+    }
+  }
+  ```
+
+### 3. Upload Multi-Page Report (OCR Pipeline)
+* **Endpoint**: `POST /api/upload-multi`
+* **Content-Type**: `multipart/form-data`
+* **Query Parameters**: `force` (bool, default `false` - set to `true` to override name/gender validation mismatches)
+* **Body Form Parameters**: `files` (Array of binary image files)
+* **Success Response (200 OK)**:
+  ```json
+  {
+    "id": "8bfa2e41-c1e0-47b2-bd74-129840afcd5e",
+    "filename": "page1.png, page2.png",
+    "upload_time": "2026-05-28T10:55:00.124Z",
+    "status": "completed",
+    "structured_data": {
+      "patient_name": "JOHN DOE",
+      "patient_id": "900515145678",
+      "date": "2026-05-10",
+      "time": "08:30:00",
+      "reported_time": "14:15:00",
+      "gender": "Male",
+      "test_name": "Full Blood Count & Lipid Profile",
+      "doctor_name": "Dr. Sarah Connor",
+      "hospital_name": "City Pathology Center",
+      "notes": "Patient was fasting for 12 hours.",
+      "results": [
+        {
+          "test_item": "Total Cholesterol",
+          "value": "195",
+          "unit": "mg/dL",
+          "key": "total_cholesterol_mg_dl"
+        },
+        {
+          "test_item": "Proteins",
+          "value": "Negative",
+          "unit": "mg/dL",
+          "key": "proteins"
+        }
+      ]
+    },
+    "user_verified": false,
+    "raw_text": "Extracted via OpenAI Vision API (2 page(s))"
+  }
+  ```
+
+* **Validation Mismatch Response (200 OK with specific status)**:
+  If the name or gender extracted from the report does not match the registered user profile details, it will flag a warning:
+  ```json
+  {
+    "id": "8bfa2e41-c1e0-47b2-bd74-129840afcd5e",
+    "filename": "page1.png",
+    "upload_time": "2026-05-28T10:55:00.124Z",
+    "status": "name_mismatch",
+    "is_name_mismatch": true,
+    "is_gender_mismatch": false,
+    "is_age_mismatch": false,
+    "is_duplicate": false,
+    "structured_data": { ... },
+    "user_verified": false
+  }
+  ```
+
+---
+
+## 📱 Frontend Architecture & UI Flow
+
+The mobile interface is written in **Flutter (Dart)**. It uses a custom **Glassmorphism design language** consisting of translucent widgets, linear color gradients, and dynamic background blurs.
+
+### 1. View-Mode & Verification Logic Flow (`verify_screen.dart`)
+The screen utilizes a conditional modal lock depending on whether the report has already been reviewed:
+* **Fresh Upload/Scan (`report.userVerified == false`)**:
+  - The UI runs in **Unlocked Editing Mode**.
+  - All text boxes are immediately interactive text input forms.
+  - The edit icon is hidden to signify that edits do not require confirmation.
+  - TYPO correction is automatically applied to qualitative inputs when the focus leaves the field.
+* **Verified History Report (`report.userVerified == true`)**:
+  - The UI runs in **Locked Read-Only Mode**.
+  - Text fields are disabled. Clicking a field does nothing.
+  - A pencil edit icon (`Icons.edit_outlined`) is rendered next to the field.
+  - Tapping the pencil displays a material dialog prompt: `Are you sure you want to edit [Field Name]?`.
+  - Upon user confirmation, only that specific input box is unlocked for editing.
+
+### 2. Dynamic Password Strength Meter (`auth_screen.dart`)
+During user registration, the password input dynamically updates its style according to strength rules:
+* **Rules**: Must be at least 8 characters long, contain at least one uppercase letter, one number, and one special character (e.g. `!`, `@`, `#`).
+* **Visual States**: An active text controller listener monitors input in real time. If the criteria are not met, the input border color, label style, and helper error text are colored **red**. As soon as the criteria are satisfied, the styling immediately reverts to standard theme colors.
+
+---
+
+## 🚀 Installation & Deployment Guide
+
+### System Dependencies
+Ensure the host system has **Python 3.10+**, **CMake**, and **C compiler tools** (required to compile OpenCV `cv2` extensions).
+
+### 1. Backend Service Setup
 ```bash
-cd backend
+# Clone the repository
+cd OCR-II/backend
+
+# Create a virtual environment
 python3 -m venv venv
 source venv/bin/activate
+
+# Install requirements
+pip install --upgrade pip
 pip install -r requirements.txt
-cp .env.template .env # Configure your API keys and Database URL
+
+# Create your local environment file
+cp .env.template .env
+```
+
+#### Environment Variables Configuration (`.env`):
+```ini
+PORT=8000
+STORAGE_ENGINE=supabase  # or 'sqlite'
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4o
+
+# Required if STORAGE_ENGINE=supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-service-role-key
+
+# Security
+JWT_SECRET=your-secure-jwt-random-string
+```
+
+Run backend server:
+```bash
 python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 🗄️ Database Setup (Supabase PostgreSQL)
-
-If you are using Supabase as your storage backend (`STORAGE_ENGINE=supabase` in `.env`), run the setup SQL scripts in the **Supabase SQL Editor** (Dashboard > SQL Editor) to provision the database schema:
-
-#### 1. Core Tables & RLS Policies Setup
-Run the script below (available in [supabase_auth_setup.sql](file:///Users/sooyauming/Desktop/Intern/OCR%20II/backend/supabase_auth_setup.sql)) to create the `users` authentication table, add foreign key relationships to `reports`, and set up Row Level Security (RLS) policies:
-
-```sql
--- Create users table for app-level authentication
-CREATE TABLE IF NOT EXISTS users (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email         TEXT UNIQUE NOT NULL,
-    name          TEXT NOT NULL,
-    gender        TEXT, -- Normalize to "Male" or "Female"
-    password_hash TEXT NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'active',
-    health_summary TEXT, -- Cached AI health summary
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Index for fast email lookups during login
-CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
-
--- Create reports table for storing digitized files and structured metadata
-CREATE TABLE IF NOT EXISTS reports (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    filename        TEXT NOT NULL,
-    upload_time     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    status          TEXT NOT NULL DEFAULT 'processing',
-    raw_text        TEXT,
-    structured_data JSONB,
-    user_verified   INTEGER DEFAULT 0,
-    file_path       TEXT
-);
-
--- Ensure user_id column exists and links to users table
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'reports' AND column_name = 'user_id'
-    ) THEN
-        ALTER TABLE reports ADD COLUMN user_id UUID REFERENCES users(id);
-    END IF;
-END $$;
-
--- Index for fetching reports by user
-CREATE INDEX IF NOT EXISTS idx_reports_user_id ON reports (user_id);
-
--- Create chat_sessions table for medical chat history context
-CREATE TABLE IF NOT EXISTS chat_sessions (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    title       TEXT NOT NULL
-);
-
--- Index for fast session lookup by user
-CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions (user_id);
-
--- Create chat_messages table for session message log
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id  UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
-    role        TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    timestamp   TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Index for message ordering per session
-CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages (session_id);
-
--- Enable Row Level Security (RLS) on all core tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
-
--- Allow service role / API anon key full access (server-side auth bypass)
-CREATE POLICY "Allow all access to users" ON users FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to reports" ON reports FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to chat_sessions" ON chat_sessions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to chat_messages" ON chat_messages FOR ALL USING (true) WITH CHECK (true);
-
--- Grant explicit API privileges (required for Supabase projects after May 30, 2026)
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO anon, authenticated, service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE reports TO anon, authenticated, service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE chat_sessions TO anon, authenticated, service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE chat_messages TO anon, authenticated, service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE staging_medical_records TO anon, authenticated, service_role;
-```
-
-#### 2. Adding Gender Column (Existing Databases)
-If you already had a database instance running, make sure to add the `gender` column using [add_gender_column.sql](file:///Users/sooyauming/Desktop/Intern/OCR%20II/backend/add_gender_column.sql):
-
-```sql
-ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
-```
-
-#### 3. Local SQLite Storage Engine
-If you are running the backend in local mode (`STORAGE_ENGINE=sqlite`), the database file (`medical_reports.db`) and schema modifications (including the `gender` column auto-migration) will be provisioned and configured **automatically** on startup.
-
-
-### Frontend Setup
-
+### 2. Frontend Flutter Setup
+Make sure you have the Flutter SDK configured on your path (`flutter --version` $\ge$ 3.10).
 ```bash
-cd frontend
+cd ../frontend
+
+# Install packages
 flutter pub get
+
+# Run on connected simulator or device
 flutter run
 ```
 
-## 📱 Usage Flow
+---
 
-1. **Auth** — Sign up or log in to your secure personalized account.
-2. **Scan or Add** — Capture blood report pages for AI auto-merging, or tap the "+" icon to log data manually.
-3. **Verify** — Confirm/correct the extracted values and check the collection date/reference code.
-4. **Dashboard** — Filter by date range and analyze trends using individual or comparative charts.
-5. **Table** — Expand specific medical profiles in the analytics table to view detailed biomarker history.
-6. **AI Analysis** — Generate detailed summaries or ask specific questions about your results.
+## 📷 OCR Capture & Scanning Guidelines
 
-## 🔌 API Endpoints
+To ensure the OpenAI Vision parsing pipeline yields optimal results, instruct users to adhere to these imaging guidelines:
+1. **Vertical Document Alignment (Strict)**: Images must be scanned **right-side up**. Rotating the document by $90^\circ$ or $180^\circ$ causes letter alignment extraction errors, which will result in data parsing failures.
+2. **Homogeneous Illumination**: Minimize light hotspots, shadow blocks, and camera reflections.
+3. **Flatness & Wrinkle Removal**: Smooth paper folds to avoid skewed row text.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/auth/register` | User registration |
-| `POST` | `/api/auth/login` | JWT Authentication |
-| `POST` | `/api/upload-multi` | Process multi-page reports via AI Vision |
-| `POST` | `/api/reports/manual` | Initialize a blank manual entry report |
-| `GET` | `/api/reports/my` | Retrieve user-specific report history |
-| `DELETE` | `/api/reports/{id}` | Securely delete a report |
-| `POST` | `/api/reports/analyze` | Generate rich-text AI health insights |
+---
 
-## 📷 OCR Scan & Capture Guidelines
+## 📖 Standardized Medical Data Dictionary
 
-For high-accuracy data extraction, please ensure you follow these capture guidelines:
+| Profile Profile / Category | Parameter Key | Target Unit | Field Type |
+|-------------------|---------------|-------------|------------|
+| **Urinalysis** | `urine_colour` | - | `TEXT` |
+| | `appearance` | - | `TEXT` |
+| | `specific_gravity` | - | `DOUBLE PRECISION` |
+| | `ph` | - | `DOUBLE PRECISION` |
+| | `proteins` | `mg/dL` | `TEXT` |
+| | `glucose` | - | `TEXT` |
+| | `bilirubin` | - | `TEXT` |
+| | `ketones` | - | `TEXT` |
+| | `blood` | - | `TEXT` |
+| | `urobilinogen` | `EU/dL` | `TEXT` |
+| | `nitrites` | - | `TEXT` |
+| | `wbc_pus_cells_hpf` | `/HPF` | `TEXT` |
+| | `rbc` | `/HPF` | `TEXT` |
+| | `epithelial_cells_hpf`| `/HPF` | `TEXT` |
+| **Complete Blood Count** | `hemoglobin_g_dl` | `g/dL` | `DOUBLE PRECISION` |
+| | `rbc_count_mil_ul` | `mil/uL` | `DOUBLE PRECISION` |
+| | `hematocrit_pct` | `%` | `DOUBLE PRECISION` |
+| | `mcv_fl` | `fL` | `DOUBLE PRECISION` |
+| | `mch_pg` | `pg` | `DOUBLE PRECISION` |
+| | `mchc_g_dl` | `g/dL` | `DOUBLE PRECISION` |
+| | `wbc_cells_ul` | `cells/uL` | `BIGINT` |
+| **Lipid Profile** | `total_cholesterol_mg_dl` | `mg/dL` | `DOUBLE PRECISION` |
+| | `hdl_mg_dl` | `mg/dL` | `DOUBLE PRECISION` |
+| | `ldl_mg_dl` | `mg/dL` | `DOUBLE PRECISION` |
+| | `triglycerides_mg_dl` | `mg/dL` | `DOUBLE PRECISION` |
+| **Liver Function** | `alp_u_l` | `U/L` | `DOUBLE PRECISION` |
+| | `alt_sgpt_u_l` | `U/L` | `DOUBLE PRECISION` |
+| | `ast_sgot_u_l` | `U/L` | `DOUBLE PRECISION` |
+| | `protein_total_g_dl` | `g/dL` | `DOUBLE PRECISION` |
+| **Kidney Function** | `creatinine_mg_dl` | `mg/dL` | `DOUBLE PRECISION` |
+| | `urea_mg_dl` | `mg/dL` | `DOUBLE PRECISION` |
+| | `egfr_ml_min_173m2` | `mL/min/1.73m²` | `DOUBLE PRECISION` |
+| **Thyroid Profile** | `tsh_uiu_ml` | `uIU/mL` | `DOUBLE PRECISION` |
 
-* **Document Orientation (Critical)**: Always capture or upload images **right-side up**. If a document is uploaded upside down ($180^\circ$ rotated), the characters will be extracted upside down (resulting in garbled text) and the parsing engine will fail to map the values, falling back to a raw text block in the Notes field.
-* **Lighting**: Capture under uniform, bright lighting to avoid heavy shadows and glares.
-* **Flatness**: Keep the document as flat as possible. Wrinkles and bends can distort text lines and cause incorrect biomarker matching.
+---
 
-## 🛠️ Tech Stack
+## 🔍 Troubleshooting & Support
 
-**Frontend**
-- **Flutter** — Cross-platform UI
-- **fl_chart** — High-performance interactive visualizations
-- **flutter_markdown** — Rich text AI response rendering
-- **animate_do** — Premium UI micro-interactions
-- **shared_preferences** — Theme preference persistence
+#### 1. `ModuleNotFoundError: No module named 'cv2'`
+* **Cause**: OpenCV is not installed or not built correctly within your active virtual environment.
+* **Solution**: Ensure your virtual environment is active (`source venv/bin/activate`) and run `pip install opencv-python-headless`. The `-headless` package is recommended for servers to avoid GUI system library dependency issues.
 
-- **PyJWT & Bcrypt** — Industrial-grade security
+#### 2. Supabase `ConnectionTerminated` Errors on Long Requests
+* **Cause**: HTTP/2 multiplexing dropouts between the client and Supabase Edge endpoints.
+* **Solution**: In `backend/main.py`, a custom HTTP client configuration uses `http2=False` to force stable HTTP/1.1 connections:
+  ```python
+  httpx_client = httpx.Client(http2=False, timeout=httpx.Timeout(30.0, read=60.0))
+  ```
 
-## 📖 Data Dictionary & Standardized Units
+#### 3. Supabase API Mismatch Errors (`PGRST204` or `22P02`)
+* **Cause**: PostgREST fails to insert custom columns or string values into strict database fields (such as text values like "Negative" in double precision columns).
+* **Solution**: The backend `mark_report_sent` includes a retry correction loop. It captures Postgres error syntax patterns, automatically identifies the failing key, cleans ranges (extracts numerical floats from ranges or symbols), or nullifies fields to prevent crashes and ensure data persistence.
 
-MedScan standardizes all extracted medical data into the following 14 profiles and units to ensure consistent trend tracking across different laboratories.
-
-| Profile / Category | Parameter | Standard Unit | Description |
-|--------------------|-----------|---------------|-------------|
-| **Urine** | Urine Colour | - | The visual color of the urine sample. |
-|  | Appearance | - | The clarity or turbidity of the urine. |
-|  | Specific Gravity | - | Measures the concentration of particles in the urine. |
-|  | pH | - | Measures the acidity or alkalinity of the urine. |
-|  | Proteins | `mg/dL` | Detects the presence of protein in the urine. |
-|  | Glucose (Urine) | - | Detects the presence of sugar in the urine. |
-|  | Bilirubin (Urine) | - | Detects processed bilirubin in the urine. |
-|  | Ketones | - | Detects ketones, a byproduct of fat breakdown. |
-|  | Blood (Urine) | - | Detects the presence of blood or hemoglobin in the urine. |
-|  | Urobilinogen | `EU/dL` | A byproduct of bilirubin breakdown found in urine. |
-|  | Nitrites | - | Often indicates the presence of a urinary tract infection (UTI). |
-|  | WBC / Pus Cells | `/HPF` | Presence of white blood cells in urine, indicating infection or inflammation. |
-|  | RBC (Urine) | `/HPF` | Presence of red blood cells in urine. |
-|  | Epithelial Cells | `/HPF` | Cells that line the urinary tract. |
-|  | Casts | `/LPF` | Cylindrical structures formed in the kidney tubules. |
-|  | Crystals | - | Solid particles formed from chemicals in the urine. |
-|  | Others | - | Any other elements observed in urine. |
-| **CBC** | Hemoglobin | `g/dL` | The protein in red blood cells that carries oxygen throughout the body. |
-|  | RBC Count | `mil/uL` | The total number of red blood cells in a volume of blood. |
-|  | Hematocrit | `%` | The proportion of blood that consists of red blood cells. |
-|  | MCV | `fL` | The average size of your red blood cells. |
-|  | MCH | `pg` | The average amount of hemoglobin in each red blood cell. |
-|  | MCHC | `g/dL` | The average concentration of hemoglobin in a given volume of red blood cells. |
-|  | RDW-CV | `%` | A measure of the variation in size of red blood cells. |
-|  | RDW-SD | `fL` | The actual measurement of the width of the red blood cell distribution curve. |
-|  | WBC | `cells/uL` | The total number of white blood cells, which help the body fight infections. |
-|  | Neutrophils | `%` | The most common type of white blood cell, primarily responsible for fighting bacterial infections. |
-|  | Lymphocytes | `%` | White blood cells that are key to the immune system, including T cells and B cells. |
-|  | Eosinophils | `%` | White blood cells active during allergic reactions and parasitic infections. |
-|  | Monocytes | `%` | White blood cells that migrate to tissues and become macrophages to consume pathogens. |
-|  | Basophils | `%` | The least common white blood cell, involved in inflammatory and allergic responses. |
-|  | Abs. Neutrophils | `cells/uL` | The actual number of neutrophils present in the blood. |
-|  | Abs. Lymphocytes | `cells/uL` | The actual number of lymphocytes present in the blood. |
-|  | Abs. Monocytes | `cells/uL` | The actual number of monocytes present in the blood. |
-|  | Abs. Eosinophils | `cells/uL` | The actual number of eosinophils present in the blood. |
-|  | Abs. Basophils | `cells/uL` | The actual number of basophils present in the blood. |
-| **Platelet Profile** | Platelet Count | `x10³/uL` | Cells that help the blood clot to stop bleeding. |
-|  | MPV | `fL` | The average size of the platelets in your blood. |
-|  | Platelet RDW | `%` | Measurement of how much platelets vary in size. |
-|  | PCT | `%` | The volume occupied by platelets in the blood. |
-|  | P-LCR | `%` | The percentage of large-sized platelets. |
-|  | IMG | `%` | Immature Granulocyte percentage. |
-|  | IMM | `%` | Immature Monocyte percentage. |
-|  | IML | `%` | Immature Lymphocyte percentage. |
-|  | LIC | `%` | Large Immature Cell percentage. |
-| **Lipid Profile** | Total Cholesterol | `mg/dL` | The total amount of cholesterol found in your blood. |
-|  | HDL Cholesterol | `mg/dL` | Known as 'good' cholesterol; it helps remove other forms of cholesterol from your bloodstream. |
-|  | LDL Cholesterol | `mg/dL` | Known as 'bad' cholesterol; high levels can lead to plaque buildup in arteries. |
-|  | VLDL Cholesterol | `mg/dL` | A type of blood fat that carries triglycerides. |
-|  | Triglycerides | `mg/dL` | A type of fat (lipid) found in your blood, used for energy. |
-|  | Non-HDL Cholesterol | `mg/dL` | Total cholesterol minus HDL; represents all potentially harmful cholesterol. |
-|  | Total/HDL Ratio | - | The ratio of total cholesterol to HDL, used to assess heart disease risk. |
-|  | LDL/HDL Ratio | - | The ratio of LDL to HDL cholesterol. |
-| **Liver Function** | Bilirubin Total | `mg/dL` | A yellow pigment produced during the normal breakdown of red blood cells. |
-|  | Bilirubin Direct | `mg/dL` | Bilirubin that has been processed by the liver and is ready for excretion. |
-|  | Bilirubin Indirect | `mg/dL` | Bilirubin that has not yet been processed by the liver. |
-|  | ALP | `U/L` | An enzyme found in the liver, bones, kidneys, and digestive system. |
-|  | ALT (SGPT) | `U/L` | An enzyme found mostly in the liver; high levels suggest liver damage. |
-|  | AST (SGOT) | `U/L` | An enzyme found in the liver, heart, and muscles. |
-|  | GGT | `U/L` | An enzyme found in the liver and bile ducts; sensitive to alcohol and bile duct issues. |
-|  | Total Protein | `g/dL` | The total amount of albumin and globulin in the blood. |
-|  | Albumin | `g/dL` | A protein made by the liver that keeps fluid from leaking out of blood vessels. |
-|  | Globulin | `g/dL` | A group of proteins in the blood that help the immune system and liver function. |
-|  | A/G Ratio | - | The ratio of albumin to globulin in the blood. |
-| **Kidney Function** | Creatinine | `mg/dL` | A waste product from muscle breakdown, filtered by the kidneys. |
-|  | Urea | `mg/dL` | A waste product formed in the liver when protein is broken down. |
-|  | BUN | `mg/dL` | The amount of nitrogen in your blood that comes from the waste product urea. |
-|  | BUN/Creatinine Ratio | - | The ratio of BUN to creatinine, used to diagnose acute kidney issues. |
-|  | Sodium | `mmol/L` | An electrolyte that helps maintain fluid balance and nerve function. |
-|  | Potassium | `mmol/L` | An electrolyte vital for heart and muscle function. |
-|  | Chloride | `mmol/L` | An electrolyte that helps maintain proper blood volume and pressure. |
-|  | Uric Acid | `mg/dL` | A waste product from the breakdown of purines; high levels can cause gout. |
-|  | eGFR | `mL/min/1.73m²` | A calculation of how well the kidneys are filtering waste from the blood. |
-| **Iron Profile** | Iron | `ug/dL` | A mineral used by the body to make hemoglobin. |
-|  | UIBC | `ug/dL` | The reserve capacity of transferrin to bind iron. |
-|  | TIBC | `ug/dL` | The total capacity of the blood to carry iron. |
-|  | Transferrin Saturation | `%` | The percentage of transferrin that is saturated with iron. |
-| **HbA1c** | HbA1c | `%` | Measures average blood sugar levels over the past 2-3 months. |
-|  | Estimated Avg. Glucose | `mg/dL` | A calculated average of blood glucose based on HbA1c results. |
-|  | HbF | `%` | A form of hemoglobin that is normal in infants but low in adults. |
-| **Urine ACR** | Urine Albumin | `mg/L` | Small amounts of albumin in the urine, an early sign of kidney disease. |
-|  | Urine Creatinine | `mg/dL` | Creatinine measured in a urine sample. |
-|  | Albumin/Creatinine Ratio | - | The ratio of albumin to creatinine in the urine, used to detect kidney damage. |
-| **Calcium & Phos** | Calcium | `mg/dL` | Important for bone health, muscle function, and nerve signaling. |
-|  | Phosphorus | `mg/dL` | A mineral that works with calcium to build bones and teeth. |
-| **Thyroid Profile** | Total T3 | `ng/dL` | One of the two main hormones produced by the thyroid gland. |
-|  | Total T4 | `ug/dL` | The main hormone produced by the thyroid gland. |
-|  | TSH | `uIU/mL` | Hormone from the pituitary gland that tells the thyroid to make T3 and T4. |
-| **Glucose - Fasting** | Fasting Glucose | `mg/dL` | Blood sugar level measured after an 8-12 hour fast. |
-| **Glucose - PP** | Postprandial Glucose | `mg/dL` | Blood sugar level measured 2 hours after a meal. |
-| **Glucose (Diagnopath)** | FBS | `mg/dL` | Fasting Blood Sugar (Diagnostic specific). |
-|  | PLBS | `mg/dL` | Post Lunch Blood Sugar (Diagnostic specific). |
+---
