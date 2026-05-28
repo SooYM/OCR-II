@@ -327,16 +327,17 @@ def get_user_by_ic(ic_number: str) -> Optional[dict]:
         conn.close()
         return dict(row) if row else None
 
-def normalize_dob(dob_str: Optional[str]) -> str:
+def normalize_dob(dob_str: Optional[str]) -> Optional[str]:
     if not dob_str or not str(dob_str).strip():
-        return ""
+        return None
     parsed = parse_date_robust(dob_str)
     if not parsed:
         raise ValueError(f"Invalid date of birth: '{dob_str}'. Please use YYYY-MM-DD or DD/MM/YYYY format.")
     return parsed.isoformat()
 
-def normalize_ic(ic_str: Optional[str]) -> str:
-    if not ic_str: return ""
+def normalize_ic(ic_str: Optional[str]) -> Optional[str]:
+    if not ic_str or not str(ic_str).strip():
+        return None
     import re
     cleaned = re.sub(r'\D', '', str(ic_str).strip())
     if len(cleaned) == 12:
