@@ -31,6 +31,30 @@ class _AuthScreenState extends State<AuthScreen>
   bool _preferNotToSayDob = false;
   late AnimationController _pulseController;
 
+  void _onPasswordChanged() {
+    if (!_isLogin) {
+      setState(() {});
+    }
+  }
+
+  bool _isPasswordStrong(String password) {
+    if (password.length < 8) return false;
+    final hasUppercase = password.contains(RegExp(r'[A-Z]'));
+    final hasDigits = password.contains(RegExp(r'[0-9]'));
+    final hasSpecial = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
+    return hasUppercase && hasDigits && hasSpecial;
+  }
+
+  String? get _passwordErrorText {
+    if (_isLogin) return null;
+    final text = _passwordCtrl.text;
+    if (text.isEmpty) return null;
+    if (!_isPasswordStrong(text)) {
+      return 'Password must be >= 8 chars and include capital, number, and symbol';
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -38,10 +62,12 @@ class _AuthScreenState extends State<AuthScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
+    _passwordCtrl.addListener(_onPasswordChanged);
   }
 
   @override
   void dispose() {
+    _passwordCtrl.removeListener(_onPasswordChanged);
     _emailCtrl.dispose();
     _nameCtrl.dispose();
     _passwordCtrl.dispose();
@@ -458,6 +484,7 @@ class _AuthScreenState extends State<AuthScreen>
                           label: 'Password',
                           icon: Icons.lock_outline,
                           obscure: _obscurePassword,
+                          errorText: _passwordErrorText,
                           suffixIcon: IconButton(
                             icon: Icon(
                               _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -537,6 +564,7 @@ class _AuthScreenState extends State<AuthScreen>
     Widget? suffixIcon,
     String? hintText,
     List<TextInputFormatter>? inputFormatters,
+    String? errorText,
   }) {
     return TextField(
       controller: controller,
@@ -549,6 +577,7 @@ class _AuthScreenState extends State<AuthScreen>
         prefixIcon: Icon(icon, size: 20),
         suffixIcon: suffixIcon,
         hintText: hintText,
+        errorText: errorText,
       ),
       onSubmitted: (_) => _submit(),
     );
