@@ -1035,6 +1035,35 @@ def backend_normalize_time(time_str: str) -> str:
         return f"{h:02d}:{m:02d}:{sec:02d}"
     return time_str
 
+def backend_autocorrect_typo(val_str: str) -> str:
+    if not val_str:
+        return val_str
+    trimmed = val_str.strip()
+    lower = trimmed.lower()
+    
+    # Check common typos and case for "negative"
+    if (lower.startswith('neg') or 
+        lower.startswith('nag') or 
+        lower.startswith('nege') or
+        lower == 'nil'):
+        return 'Negative'
+      
+    # Check common typos and case for "positive"
+    if (lower.startswith('pos') or 
+        lower.startswith('pot') or 
+        lower == 'cloudy'):
+        return 'Positive'
+      
+    # Check common typos and case for "trace"
+    if lower.startswith('trac') or lower.startswith('tras'):
+        return 'Trace'
+      
+    # Check common typos and case for "clear"
+    if lower.startswith('clea') or lower == 'cleari':
+        return 'Clear'
+      
+    return trimmed
+
 def normalize_structured_data(data: dict) -> dict:
     """Ensure all required keys exist and return a structure friendly to the Flutter UI."""
     # Robustly handle different possible input keys for collected and time
@@ -1099,14 +1128,20 @@ def normalize_structured_data(data: dict) -> dict:
                 flat[key] = str(val).strip().title() if val else ""
         else:
             val = data.get(key, "")
-            flat[key] = str(val) if val is not None else ""
+            val_str = str(val) if val is not None else ""
+            flat[key] = backend_autocorrect_typo(val_str)
             
     # 2. If data already has 'results' (from UI update), merge them back into flat
     if "results" in data:
         for res in data["results"]:
             k = res.get("key")
             if k and k in STAGING_SCHEMA_KEYS:
-                flat[k] = res.get("value", "")
+                val_str = str(res.get("value", "")).strip()
+                metadata_keys = ["medid", "original_medid", "labreference", "original_labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number"]
+                if k not in metadata_keys:
+                    flat[k] = backend_autocorrect_typo(val_str)
+                else:
+                    flat[k] = val_str
 
     # 3. Map to UI Format (for the Flutter app)
     results = []
