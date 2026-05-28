@@ -149,7 +149,19 @@ CREATE TABLE IF NOT EXISTS users (
 -- Index for fast email lookups during login
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 
--- Link reports table to users
+-- Create reports table for storing digitized files and structured metadata
+CREATE TABLE IF NOT EXISTS reports (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    filename        TEXT NOT NULL,
+    upload_time     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    status          TEXT NOT NULL DEFAULT 'processing',
+    raw_text        TEXT,
+    structured_data JSONB,
+    user_verified   INTEGER DEFAULT 0,
+    file_path       TEXT
+);
+
+-- Ensure user_id column exists and links to users table
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -163,13 +175,47 @@ END $$;
 -- Index for fetching reports by user
 CREATE INDEX IF NOT EXISTS idx_reports_user_id ON reports (user_id);
 
--- Enable Row Level Security (RLS)
+-- Create chat_sessions table for medical chat history context
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    title       TEXT NOT NULL
+);
+
+-- Index for fast session lookup by user
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions (user_id);
+
+-- Create chat_messages table for session message log
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    timestamp   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Index for message ordering per session
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages (session_id);
+
+-- Enable Row Level Security (RLS) on all core tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role / API anon key full access (server-side auth bypass)
 CREATE POLICY "Allow all access to users" ON users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all access to reports" ON reports FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to chat_sessions" ON chat_sessions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all access to chat_messages" ON chat_messages FOR ALL USING (true) WITH CHECK (true);
+
+-- Grant explicit API privileges (required for Supabase projects after May 30, 2026)
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE reports TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE chat_sessions TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE chat_messages TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE staging_medical_records TO anon, authenticated, service_role;
 ```
 
 #### 2. Adding Gender Column (Existing Databases)

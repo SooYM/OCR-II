@@ -11,7 +11,7 @@ MedScan is a comprehensive medical report OCR and tracking application built wit
     *   On mismatch detection or duplication, shows detailed clinical flags and justifications.
     *   Provides a double-confirmation bypass dialog flow allowing patients to force upload/save reports if they insist.
 *   **Privacy-Friendly Authentication & Optional Profile Data**:
-    *   Allows users to choose "Prefer not to say" for both IC/NRIC number and Date of Birth (DOB) during registration.
+    *   Allows users to choose "Prefer not to provide" for both Identity Number (eg:NRIC) and Birthdate during registration.
     *   Includes inline disclaimers clarifying that verification data is strictly for report validation, and users have a legal/privacy right to skip them.
 *   **Interactive Trend Analysis Dashboard**: 
     *   **Full-Screen Charting**: Visualizes health progress over time across multiple reports using discrete data point connections.

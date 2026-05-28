@@ -84,7 +84,7 @@ class _AuthScreenState extends State<AuthScreen>
 
     // IC validation (only if user didn't skip it)
     if (!_isLogin && !_preferNotToSayIc && icNumber.isEmpty) {
-      setState(() => _error = 'IC Number is required (or choose "Prefer not to say")');
+      setState(() => _error = 'Identity Number (eg:NRIC) is required (or choose "Prefer not to provide")');
       return;
     }
 
@@ -94,7 +94,7 @@ class _AuthScreenState extends State<AuthScreen>
         // Auto-extract DOB from IC
         final extracted = _extractDobFromIc(icNumber);
         if (extracted == null) {
-          setState(() => _error = 'Invalid IC number. First 6 digits must be YYMMDD.');
+          setState(() => _error = 'Invalid Identity Number. First 6 digits must be YYMMDD.');
           return;
         }
         dob = extracted;
@@ -102,7 +102,7 @@ class _AuthScreenState extends State<AuthScreen>
         // Manual DOB entry
         final manualDob = _dobCtrl.text.trim();
         if (manualDob.isEmpty) {
-          setState(() => _error = 'Date of Birth is required (or choose "Prefer not to say")');
+          setState(() => _error = 'Birthdate is required (or choose "Prefer not to provide")');
           return;
         }
         // Validate the format YYYY-MM-DD
@@ -342,7 +342,7 @@ class _AuthScreenState extends State<AuthScreen>
                                     });
                                   },
                                   child: const Text(
-                                    'Prefer not to provide IC number',
+                                    'Prefer not to provide Identity Number (eg:NRIC)',
                                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                                   ),
                                 ),
@@ -353,7 +353,7 @@ class _AuthScreenState extends State<AuthScreen>
                             const SizedBox(height: 10),
                             _buildTextField(
                               controller: _icCtrl,
-                              label: 'IC Number',
+                              label: 'Identity Number (eg:NRIC)',
                               icon: Icons.badge_outlined,
                               hintText: 'e.g., 860101-08-1234',
                               keyboardType: TextInputType.number,
@@ -363,7 +363,7 @@ class _AuthScreenState extends State<AuthScreen>
                           Padding(
                             padding: const EdgeInsets.only(top: 6, left: 4),
                             child: Text(
-                              'IC number is only for verification of report ownership. You have the right not to provide it.',
+                              'Identity Number (eg:NRIC) is only for verification of report ownership. You can choose not to provide it.',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontStyle: FontStyle.italic,
@@ -402,7 +402,7 @@ class _AuthScreenState extends State<AuthScreen>
                                       });
                                     },
                                     child: const Text(
-                                      'Prefer not to provide Date of Birth',
+                                      'Prefer not to provide Birthdate',
                                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                                     ),
                                   ),
@@ -413,7 +413,7 @@ class _AuthScreenState extends State<AuthScreen>
                               const SizedBox(height: 10),
                               _buildTextField(
                                 controller: _dobCtrl,
-                                label: 'Date of Birth',
+                                label: 'Birthdate',
                                 icon: Icons.cake_outlined,
                                 hintText: 'YYYY-MM-DD',
                                 keyboardType: TextInputType.datetime,
@@ -422,7 +422,7 @@ class _AuthScreenState extends State<AuthScreen>
                             Padding(
                               padding: const EdgeInsets.only(top: 6, left: 4),
                               child: Text(
-                                'Date of Birth is used for report age verification. You have the right not to provide it.',
+                                'Birthdate is only for verification of report ownership. You can choose not to provide it.',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontStyle: FontStyle.italic,

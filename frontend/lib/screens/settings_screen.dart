@@ -301,12 +301,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'MedScan collects and stores your medical report data (biomarkers, lab values, patient information) securely. Your data is used solely for:\n• Displaying your health history and trends\n• Generating AI-powered health summaries\n• Verifying report ownership via identity matching\n\nWe do not sell, share, or distribute your medical data to third parties.',
                   ),
                   _buildTermsSection(
-                    '4. IC Number & Date of Birth Optionality',
-                    'Your IC (Identity Card) number and Date of Birth are requested solely for the purpose of verifying that uploaded medical reports belong to you. You have the right to decline providing either or both of these fields during registration by selecting "Prefer not to say". Choosing not to provide this information may reduce the accuracy of report ownership verification but will not prevent you from using the application.',
+                    '4. Identity Number (eg:NRIC) & Date of Birth Optionality',
+                    'Your Identity Number (eg:NRIC) and Date of Birth are requested solely for the purpose of verifying that uploaded medical reports belong to you. You have the right to decline providing either or both of these fields during registration by selecting "Prefer not to say". Choosing not to provide this information may reduce the accuracy of report ownership verification but will not prevent you from using the application.',
                   ),
                   _buildTermsSection(
                     '5. Report Verification & Mismatch Handling',
-                    'MedScan performs identity verification checks when reports are uploaded, including name, gender, date of birth, and IC number matching. If a mismatch or potential duplicate is detected, you will be notified with a justification explaining the flag. You may choose to proceed with the upload at your own discretion after confirming twice.',
+                    'MedScan performs identity verification checks when reports are uploaded, including name, gender, date of birth, and Identity Number (eg:NRIC) matching. If a mismatch or potential duplicate is detected, you will be notified with a justification explaining the flag. You may choose to proceed with the upload at your own discretion after confirming twice.',
                   ),
                   _buildTermsSection(
                     '6. AI-Generated Content',
@@ -434,7 +434,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(height: 20),
                         // Read-only identity fields
                         _buildReadOnlyField(
-                          label: 'IC Number',
+                          label: 'Identity Number (eg:NRIC)',
                           value: AuthService.currentUser?['ic_number'] ?? '—',
                           icon: Icons.badge_outlined,
                         ),

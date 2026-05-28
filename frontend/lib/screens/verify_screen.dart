@@ -645,7 +645,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
       'Identity Mismatch',
       Icons.gpp_bad_outlined,
       Theme.of(context).colorScheme.error,
-      "The patient DOB or IC details on this report do not match your registered DOB (${AuthService.currentUser?['dob'] ?? 'unknown'}) or IC (${AuthService.currentUser?['ic_number'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency.",
+      "The patient Birthdate or Identity Number details on this report do not match your registered Birthdate (${AuthService.currentUser?['dob'] ?? 'unknown'}) or Identity Number (${AuthService.currentUser?['ic_number'] ?? 'unknown'}). Reports must belong to the account holder to maintain clinical data consistency.",
     );
   }
 
@@ -772,12 +772,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       ),
                       const Divider(),
                       _buildField(
-                        label: 'Date of Birth',
+                        label: 'Birthdate',
                         value: _data.dob ?? '',
                         icon: Icons.cake_outlined,
                         hintText: 'YYYY-MM-DD',
                         errorText: !_checkIdentityMatch()
-                            ? 'DOB or IC must match your registered credentials'
+                            ? 'Birthdate or Identity Number must match your registered credentials'
                             : null,
                         onChanged: (v) {
                           setState(() {
@@ -788,12 +788,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       ),
                       const Divider(),
                       _buildField(
-                        label: 'IC Number',
+                        label: 'Identity Number (eg:NRIC)',
                         value: _data.icNumber ?? '',
                         icon: Icons.badge_outlined,
                         hintText: 'e.g., YYMMDD-XX-XXXX',
                         errorText: !_checkIdentityMatch()
-                            ? 'DOB or IC must match your registered credentials'
+                            ? 'Birthdate or Identity Number must match your registered credentials'
                             : null,
                         onChanged: (v) {
                           setState(() {

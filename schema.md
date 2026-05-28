@@ -107,4 +107,7 @@ CREATE TABLE staging_medical_records (
     plbs_mg_dl BIGINT
 );
 
+-- Grant API access to the staging_medical_records table (required for Supabase projects after May 30, 2026)
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE staging_medical_records TO anon, authenticated, service_role;
+
 
