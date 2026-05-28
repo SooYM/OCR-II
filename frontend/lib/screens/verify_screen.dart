@@ -26,8 +26,11 @@ class VerifyScreen extends StatefulWidget {
 
 class _VerifyScreenState extends State<VerifyScreen> {
   late StructuredData _data;
+  late StructuredData _originalData;
   bool _isSending = false;
   bool _hasChanges = false;
+  bool _initialHasChanges = false;
+  int _formRebuildKey = 0;
   bool _forceSubmit = false;
   final Set<int> _matchedIndices = {};
   final Set<int> _convertedIndices = {};
@@ -110,20 +113,21 @@ class _VerifyScreenState extends State<VerifyScreen> {
   @override
   void initState() {
     super.initState();
-    // Copy structured data so we can edit it
-    _data = widget.report.structuredData ??
-        StructuredData(
-          patientName: '',
-          patientId: '',
-          gender: '',
-          date: '',
-          time: '',
-          testName: '',
-          doctorName: '',
-          hospitalName: '',
-          results: [],
-          notes: '',
-        );
+    // Copy structured data so we can edit it without modifying the original object reference
+    _data = widget.report.structuredData != null
+        ? StructuredData.fromJson(widget.report.structuredData!.toJson())
+        : StructuredData(
+            patientName: '',
+            patientId: '',
+            gender: '',
+            date: '',
+            time: '',
+            testName: '',
+            doctorName: '',
+            hospitalName: '',
+            results: [],
+            notes: '',
+          );
         
     // Auto-fill username in the patient name section if empty
     if ((_data.patientName == null || _data.patientName!.isEmpty) &&
@@ -154,6 +158,20 @@ class _VerifyScreenState extends State<VerifyScreen> {
         _data.date = '$d / $m / ${dt.year}';
       }
     }
+
+    // If the report already has pre-populated data (e.g. from OCR scan),
+    // mark as having changes so the Send button is immediately active.
+    // For empty manual-entry forms, _hasChanges stays false until user types.
+    if (!widget.report.userVerified) {
+      final hasPrePopulatedData = _data.results.any((r) => r.value.trim().isNotEmpty);
+      if (hasPrePopulatedData) {
+        _hasChanges = true;
+      }
+    }
+
+    // Save a copy of the initialized and normalized data for reversion on discard
+    _originalData = StructuredData.fromJson(_data.toJson());
+    _initialHasChanges = _hasChanges;
   }
 
   /// Run each test result through the biomarker dictionary matcher.
@@ -535,28 +553,56 @@ class _VerifyScreenState extends State<VerifyScreen> {
       return;
     }
 
-    // Ask user to confirm sending the report
-    final confirmSend = await showDialog<bool>(
+    // Confirmation dialog — different wording for existing vs new reports
+    final bool isExistingReport = widget.report.userVerified;
+    final confirmSend = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
-        title: const Text('Send Report?'),
-        content: const Text('Are you sure you want to send this medical report? Once sent, it will be finalized in your records.'),
+        title: Text(isExistingReport ? 'Save Changes?' : 'Send Report?'),
+        content: Text(isExistingReport
+            ? 'You have edited this report. Would you like to save and send the updated report, or discard your changes?'
+            : 'Are you sure you want to send this medical report? Once sent, it will be finalized in your records.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Send'),
-          ),
+          if (isExistingReport) ...[
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'discard'),
+              child: Text(
+                'Discard',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'save'),
+              child: const Text('Save Changes'),
+            ),
+          ] else ...[
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'save'),
+              child: const Text('Send'),
+            ),
+          ],
         ],
       ),
     );
 
-    if (confirmSend != true) {
+    if (confirmSend == 'discard') {
+      // Revert all local edits back to original data snapshot
+      setState(() {
+        _data = StructuredData.fromJson(_originalData.toJson());
+        _hasChanges = _initialHasChanges;
+        _editableFields.clear();
+        _formRebuildKey++;
+      });
+      return;
+    }
+
+    if (confirmSend != 'save') {
       return;
     }
 
@@ -813,6 +859,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
           // Scrollable form
           Expanded(
             child: ListView(
+              key: ValueKey(_formRebuildKey),
               padding: const EdgeInsets.all(20),
               children: [
                 // Patient Info Section
@@ -850,8 +897,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         value: _data.patientId ?? '',
                         icon: Icons.numbers,
                         onChanged: (v) {
-                          _data.patientId = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.patientId = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                       const Divider(),
@@ -917,8 +966,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         keyboardType: TextInputType.number,
                         inputFormatters: [DateInputFormatter()],
                         onChanged: (v) {
-                          _data.date = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.date = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                       const Divider(),
@@ -928,8 +979,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         icon: Icons.access_time_outlined,
                         hintText: 'e.g., 07:01:00 or 10:00 AM',
                         onChanged: (v) {
-                          _data.time = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.time = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                     ],
@@ -953,8 +1006,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         value: _data.testName ?? '',
                         icon: Icons.science_outlined,
                         onChanged: (v) {
-                          _data.testName = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.testName = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                       const Divider(),
@@ -964,8 +1019,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         icon: Icons.tag_outlined,
                         hintText: 'e.g., LAB-2024-00123',
                         onChanged: (v) {
-                          _data.reportReference = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.reportReference = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                       const Divider(),
@@ -975,8 +1032,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         icon: Icons.numbers_outlined,
                         hintText: 'e.g., 140222',
                         onChanged: (v) {
-                          _data.labreference = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.labreference = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                       const Divider(),
@@ -985,8 +1044,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         value: _data.doctorName ?? '',
                         icon: Icons.medical_information_outlined,
                         onChanged: (v) {
-                          _data.doctorName = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.doctorName = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                       const Divider(),
@@ -995,8 +1056,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         value: _data.hospitalName ?? '',
                         icon: Icons.local_hospital_outlined,
                         onChanged: (v) {
-                          _data.hospitalName = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.hospitalName = v;
+                            _hasChanges = true;
+                          });
                         },
                       ),
                     ],
@@ -1043,8 +1106,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                         readOnly: !isNotesEditable,
                         focusNode: focusNode,
                         onChanged: (v) {
-                          _data.notes = v;
-                          _hasChanges = true;
+                          setState(() {
+                            _data.notes = v;
+                            _hasChanges = true;
+                          });
                         },
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurface,
@@ -1109,54 +1174,71 @@ class _VerifyScreenState extends State<VerifyScreen> {
   }
 
   Widget _buildSendButton() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00D9A6), Color(0xFF00B4D8)],
-        ),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.secondary.withOpacity(0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _isSending ? null : _handleSend,
+    // Disable Send until user has entered or edited at least one field
+    final bool isDisabled = _isSending || !_hasChanges;
+
+    return AnimatedOpacity(
+      opacity: isDisabled && !_isSending ? 0.45 : 1.0,
+      duration: const Duration(milliseconds: 250),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          gradient: isDisabled && !_isSending
+              ? LinearGradient(
+                  colors: [Colors.grey.shade600, Colors.grey.shade500],
+                )
+              : const LinearGradient(
+                  colors: [Color(0xFF00D9A6), Color(0xFF00B4D8)],
+                ),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (_isSending)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
-                else ...[
-                  const Icon(Icons.send_rounded, color: Colors.white, size: 22),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Send Report',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.3,
-                    ),
+          boxShadow: isDisabled
+              ? []
+              : [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
                   ),
                 ],
-              ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: isDisabled ? null : _handleSend,
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_isSending)
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  else ...[
+                    Icon(
+                      widget.report.userVerified ? Icons.save_rounded : Icons.send_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      widget.report.userVerified ? 'Save & Send Report' : 'Send Report',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1562,8 +1644,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   value: result.value,
                   fieldKey: '${index}_Value',
                   onChanged: (v) {
-                    result.value = v;
-                    _hasChanges = true;
+                    setState(() {
+                      result.value = v;
+                      _hasChanges = true;
+                    });
                   },
                   onFocusLost: (v) {
                     final autocorrected = _autoCorrectTypo(v);
@@ -1633,8 +1717,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   value: result.referenceRange ?? '',
                   fieldKey: '${index}_ReferenceRange',
                   onChanged: (v) {
-                    result.referenceRange = v;
-                    _hasChanges = true;
+                    setState(() {
+                      result.referenceRange = v;
+                      _hasChanges = true;
+                    });
                   },
                 ),
           if (isExceeding)
