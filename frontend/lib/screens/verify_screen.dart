@@ -1006,6 +1006,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       fontSize: 14,
                       height: 1.5,
                     ),
+                    textAlignVertical: TextAlignVertical.center,
                     decoration: InputDecoration(
                       hintText: 'Any additional notes...',
                       border: InputBorder.none,
@@ -1013,12 +1014,14 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       focusedBorder: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.zero,
-                      suffixIcon: !_editableFields.contains('notes')
-                          ? IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 18),
-                              onPressed: () => _requestEdit('notes', 'Notes'),
-                            )
-                          : null,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          size: 18,
+                          color: _editableFields.contains('notes') ? Colors.transparent : null,
+                        ),
+                        onPressed: _editableFields.contains('notes') ? null : () => _requestEdit('notes', 'Notes'),
+                      ),
                     ),
                   ),
                 ),
@@ -1149,11 +1152,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(width: 12),
               SizedBox(
-                width: 90,
+                width: 115,
                 child: Text(
                   label,
                   style: const TextStyle(
@@ -1170,6 +1174,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   onChanged: onChanged,
                   inputFormatters: inputFormatters,
                   keyboardType: keyboardType,
+                  textAlignVertical: TextAlignVertical.center,
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
                     color: Theme.of(context).colorScheme.onSurface,
@@ -1182,21 +1187,23 @@ class _VerifyScreenState extends State<VerifyScreen> {
                     enabledBorder: InputBorder.none,
                     focusedBorder: UnderlineInputBorder(
                       borderSide: BorderSide(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
                       ),
                     ),
-                    suffixIcon: !isEditable
-                        ? IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 16),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () => _requestEdit(label, label),
-                          )
-                        : null,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: isEditable ? Colors.transparent : null,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: isEditable ? null : () => _requestEdit(label, label),
+                    ),
                     fillColor: Colors.transparent,
                     hintText: hintText,
                     hintStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                       fontSize: 14,
                       fontWeight: FontWeight.normal,
                     ),
@@ -1207,7 +1214,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
           ),
           if (errorText != null)
             Padding(
-              padding: const EdgeInsets.only(left: 118.0, top: 4.0),
+              padding: const EdgeInsets.only(left: 143.0, top: 4.0),
               child: Text(
                 errorText,
                 style: TextStyle(
@@ -1433,19 +1440,22 @@ class _VerifyScreenState extends State<VerifyScreen> {
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
+                        textAlignVertical: TextAlignVertical.center,
                         decoration: InputDecoration(
                           hintText: 'Test item name',
                           isDense: true,
                           contentPadding: EdgeInsets.zero,
                           border: InputBorder.none,
-                          suffixIcon: !_editableFields.contains('${index}_testItem')
-                              ? IconButton(
-                                  icon: const Icon(Icons.edit_outlined, size: 16),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () => _requestEdit('${index}_testItem', 'Test Item Name'),
-                                )
-                              : null,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              Icons.edit_outlined,
+                              size: 16,
+                              color: _editableFields.contains('${index}_testItem') ? Colors.transparent : null,
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: _editableFields.contains('${index}_testItem') ? null : () => _requestEdit('${index}_testItem', 'Test Item Name'),
+                          ),
                         ),
                       ),
                     if (!isMatched && result.testItem.isNotEmpty)
@@ -1653,20 +1663,23 @@ class _VerifyScreenState extends State<VerifyScreen> {
               fontWeight: FontWeight.w600,
               color: Theme.of(context).colorScheme.secondary,
             ),
+            textAlignVertical: TextAlignVertical.center,
             decoration: InputDecoration(
               isDense: true,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(isEditable ? 0.5 : 0.25),
-              suffixIcon: !isEditable
-                  ? IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 16),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () => _requestEdit(fieldKey, label),
-                    )
-                  : null,
+              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: isEditable ? 0.5 : 0.25),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: 16,
+                  color: isEditable ? Colors.transparent : null,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: isEditable ? null : () => _requestEdit(fieldKey, label),
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
