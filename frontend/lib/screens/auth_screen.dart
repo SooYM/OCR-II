@@ -82,6 +82,21 @@ class _AuthScreenState extends State<AuthScreen>
       return;
     }
 
+    if (!_isLogin) {
+      // Strong password validation for registration
+      if (password.length < 8) {
+        setState(() => _error = 'Password must be at least 8 characters long');
+        return;
+      }
+      final hasUppercase = password.contains(RegExp(r'[A-Z]'));
+      final hasDigits = password.contains(RegExp(r'[0-9]'));
+      final hasSpecial = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
+      if (!hasUppercase || !hasDigits || !hasSpecial) {
+        setState(() => _error = 'Password must include at least one capital letter, one number, and one symbol');
+        return;
+      }
+    }
+
     // IC validation (only if user didn't skip it)
     if (!_isLogin && !_preferNotToSayIc && icNumber.isEmpty) {
       setState(() => _error = 'Identity Number (eg:NRIC) is required (or choose "Prefer not to provide")');
@@ -313,8 +328,31 @@ class _AuthScreenState extends State<AuthScreen>
                           const SizedBox(height: 14),
                           _buildGenderDropdown(),
 
-                          // IC Number section with disclaimer and toggle
+                          // Identity Number section
                           const SizedBox(height: 18),
+                          if (!_preferNotToSayIc) ...[
+                            _buildTextField(
+                              controller: _icCtrl,
+                              label: 'Identity Number (eg:NRIC)',
+                              icon: Icons.badge_outlined,
+                              hintText: 'e.g., 860101-08-1234',
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [IcNumberInputFormatter()],
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Text(
+                              'Identity Number (eg:NRIC) is only for verification of report ownership. You can choose not to provide it.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
                           Row(
                             children: [
                               SizedBox(
@@ -349,32 +387,32 @@ class _AuthScreenState extends State<AuthScreen>
                               ),
                             ],
                           ),
-                          if (!_preferNotToSayIc) ...[
-                            const SizedBox(height: 10),
-                            _buildTextField(
-                              controller: _icCtrl,
-                              label: 'Identity Number (eg:NRIC)',
-                              icon: Icons.badge_outlined,
-                              hintText: 'e.g., 860101-08-1234',
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [IcNumberInputFormatter()],
-                            ),
-                          ],
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6, left: 4),
-                            child: Text(
-                              'Identity Number (eg:NRIC) is only for verification of report ownership. You can choose not to provide it.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontStyle: FontStyle.italic,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
-                              ),
-                            ),
-                          ),
 
-                          // DOB section with toggle (shown when IC is skipped)
+                          // Birthdate section with toggle (shown when Identity Number is skipped)
                           if (_preferNotToSayIc) ...[
                             const SizedBox(height: 18),
+                            if (!_preferNotToSayDob) ...[
+                              _buildTextField(
+                                controller: _dobCtrl,
+                                label: 'Birthdate',
+                                icon: Icons.cake_outlined,
+                                hintText: 'YYYY-MM-DD',
+                                keyboardType: TextInputType.datetime,
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Text(
+                                'Birthdate is only for verification of report ownership. You can choose not to provide it.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
                             Row(
                               children: [
                                 SizedBox(
@@ -408,27 +446,6 @@ class _AuthScreenState extends State<AuthScreen>
                                   ),
                                 ),
                               ],
-                            ),
-                            if (!_preferNotToSayDob) ...[
-                              const SizedBox(height: 10),
-                              _buildTextField(
-                                controller: _dobCtrl,
-                                label: 'Birthdate',
-                                icon: Icons.cake_outlined,
-                                hintText: 'YYYY-MM-DD',
-                                keyboardType: TextInputType.datetime,
-                              ),
-                            ],
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6, left: 4),
-                              child: Text(
-                                'Birthdate is only for verification of report ownership. You can choose not to provide it.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontStyle: FontStyle.italic,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
-                                ),
-                              ),
                             ),
                           ],
                         ],

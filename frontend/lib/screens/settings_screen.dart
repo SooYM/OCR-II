@@ -20,6 +20,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _emailController = TextEditingController();
   bool _isLoading = false;
   final Set<String> _expandedSections = {};
+  bool _isNameEditable = false;
+  bool _isEmailEditable = false;
+
+  Future<bool?> _showEditConfirmation(String label) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+        title: Text('Edit $label?'),
+        content: Text('Are you sure you want to edit your $label?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Edit'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -50,6 +74,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _emailController.text.trim(),
       );
       if (mounted) {
+        setState(() {
+          _isNameEditable = false;
+          _isEmailEditable = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully')),
         );
@@ -423,12 +451,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           label: 'Full Name',
                           controller: _nameController,
                           icon: Icons.person_outline_rounded,
+                          isEditable: _isNameEditable,
+                          onEditRequested: () async {
+                            final confirm = await _showEditConfirmation('Full Name');
+                            if (confirm == true) {
+                              setState(() => _isNameEditable = true);
+                            }
+                          },
                         ),
                         const SizedBox(height: 16),
                         _buildTextField(
                           label: 'Email Address',
                           controller: _emailController,
                           icon: Icons.email_outlined,
+                          isEditable: _isEmailEditable,
+                          onEditRequested: () async {
+                            final confirm = await _showEditConfirmation('Email Address');
+                            if (confirm == true) {
+                              setState(() => _isEmailEditable = true);
+                            }
+                          },
                           keyboardType: TextInputType.emailAddress,
                         ),
                         const SizedBox(height: 20),
@@ -659,6 +701,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String label,
     required TextEditingController controller,
     required IconData icon,
+    required bool isEditable,
+    required VoidCallback onEditRequested,
     TextInputType? keyboardType,
   }) {
     return Column(
@@ -669,11 +713,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          readOnly: !isEditable,
           decoration: InputDecoration(
             prefixIcon: Icon(icon, size: 20),
+            suffixIcon: !isEditable
+                ? IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    onPressed: onEditRequested,
+                  )
+                : null,
             hintText: 'Enter $label',
             filled: true,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(isEditable ? 0.3 : 0.15),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
