@@ -489,10 +489,11 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
-        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
+        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')",
+        "is_medical_report (Either 'yes' or 'no'. Set to 'yes' if the document is a medical laboratory report, blood test report, urine test report, or clinical/health test report containing biometric measurements/markers. Set to 'no' if it is a general document, receipt, menu, certificate, recipe, or other non-medical document.)"
     ]
     
-    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number"]
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number", "is_medical_report"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -654,10 +655,11 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
         "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
         "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
-        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')"
+        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')",
+        "is_medical_report (Either 'yes' or 'no'. Set to 'yes' if the document is a medical laboratory report, blood test report, urine test report, or clinical/health test report containing biometric measurements/markers. Set to 'no' if it is a general document, receipt, menu, certificate, recipe, or other non-medical document.)"
     ]
     
-    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number"]
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number", "is_medical_report"]
     biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
     
     all_keys = metadata_descriptions + biomarker_keys
@@ -1171,6 +1173,8 @@ def normalize_structured_data(data: dict) -> dict:
         # Include 'key' so we can map it back on update
         results.append({"test_item": name, "value": clean_val, "unit": final_unit, "key": key})
 
+    is_medical = str(data.get("is_medical_report", "yes")).strip().lower() != "no"
+
     # Return a combined object that Flutter can parse
     return {
         **flat, 
@@ -1187,6 +1191,7 @@ def normalize_structured_data(data: dict) -> dict:
         "age": str(data.get("age", "")).strip(),
         "dob": str(data.get("dob", "")).strip(),
         "ic_number": str(data.get("ic_number", "")).strip(),
+        "is_not_medical_report": not is_medical,
     }
 
 def get_standard_unit_for_key(key: str) -> str:
@@ -2795,9 +2800,12 @@ async def upload_report(file: UploadFile = File(...), force: bool = False, curre
         report_metadata["structured_data"] = structured_data
         TEMP_REPORTS[report_id] = report_metadata
 
-        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate:
+        is_not_medical_report = structured_data.get("is_not_medical_report", False)
+
+        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate or is_not_medical_report:
             status_val = "completed"
-            if is_name_mismatched: status_val = "name_mismatch"
+            if is_not_medical_report: status_val = "non_medical_report"
+            elif is_name_mismatched: status_val = "name_mismatch"
             elif is_gender_mismatched: status_val = "gender_mismatch"
             elif is_age_mismatched: status_val = "age_mismatch"
             elif is_duplicate: status_val = "duplicate"
@@ -2811,6 +2819,7 @@ async def upload_report(file: UploadFile = File(...), force: bool = False, curre
                 "is_gender_mismatch": is_gender_mismatched,
                 "is_age_mismatch": is_age_mismatched,
                 "is_duplicate": is_duplicate,
+                "is_not_medical_report": is_not_medical_report,
                 "structured_data": structured_data,
                 "user_verified": False,
                 "raw_text": raw_text
@@ -2821,6 +2830,7 @@ async def upload_report(file: UploadFile = File(...), force: bool = False, curre
             "filename": file.filename,
             "upload_time": report_metadata["upload_time"],
             "status": "completed",
+            "is_not_medical_report": False,
             "structured_data": structured_data,
             "user_verified": False,
             "raw_text": raw_text
@@ -2924,9 +2934,12 @@ async def upload_multi_report(files: list[UploadFile] = File(...), force: bool =
         report_metadata["structured_data"] = structured_data
         TEMP_REPORTS[report_id] = report_metadata
 
-        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate:
+        is_not_medical_report = structured_data.get("is_not_medical_report", False)
+
+        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate or is_not_medical_report:
             status_val = "completed"
-            if is_name_mismatched: status_val = "name_mismatch"
+            if is_not_medical_report: status_val = "non_medical_report"
+            elif is_name_mismatched: status_val = "name_mismatch"
             elif is_gender_mismatched: status_val = "gender_mismatch"
             elif is_age_mismatched: status_val = "age_mismatch"
             elif is_duplicate: status_val = "duplicate"
@@ -2940,6 +2953,7 @@ async def upload_multi_report(files: list[UploadFile] = File(...), force: bool =
                 "is_gender_mismatch": is_gender_mismatched,
                 "is_age_mismatch": is_age_mismatched,
                 "is_duplicate": is_duplicate,
+                "is_not_medical_report": is_not_medical_report,
                 "structured_data": structured_data,
                 "user_verified": False,
                 "raw_text": raw_text
@@ -2950,6 +2964,7 @@ async def upload_multi_report(files: list[UploadFile] = File(...), force: bool =
             "filename": ", ".join(filenames),
             "upload_time": report_metadata["upload_time"],
             "status": "completed",
+            "is_not_medical_report": False,
             "structured_data": structured_data,
             "user_verified": False,
             "raw_text": raw_text
@@ -3125,9 +3140,12 @@ async def upload_multi_preprocessed(
         report_metadata["structured_data"] = structured_data
         TEMP_REPORTS[report_id] = report_metadata
 
-        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate:
+        is_not_medical_report = structured_data.get("is_not_medical_report", False)
+
+        if is_name_mismatched or is_gender_mismatched or is_age_mismatched or is_duplicate or is_not_medical_report:
             status_val = "completed"
-            if is_name_mismatched: status_val = "name_mismatch"
+            if is_not_medical_report: status_val = "non_medical_report"
+            elif is_name_mismatched: status_val = "name_mismatch"
             elif is_gender_mismatched: status_val = "gender_mismatch"
             elif is_age_mismatched: status_val = "age_mismatch"
             elif is_duplicate: status_val = "duplicate"
@@ -3141,6 +3159,7 @@ async def upload_multi_preprocessed(
                 "is_gender_mismatch": is_gender_mismatched,
                 "is_age_mismatch": is_age_mismatched,
                 "is_duplicate": is_duplicate,
+                "is_not_medical_report": is_not_medical_report,
                 "structured_data": structured_data,
                 "user_verified": False,
                 "raw_text": raw_text
@@ -3151,6 +3170,7 @@ async def upload_multi_preprocessed(
             "filename": ", ".join(filenames),
             "upload_time": report_metadata["upload_time"],
             "status": "completed",
+            "is_not_medical_report": False,
             "structured_data": structured_data,
             "user_verified": False,
             "raw_text": raw_text

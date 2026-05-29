@@ -184,7 +184,9 @@ class _CaptureScreenState extends State<CaptureScreen>
       });
 
       if (mounted) {
-        if (report.isNameMismatch) {
+        if (report.isNotMedicalReport) {
+          _showNotMedicalReportDialog();
+        } else if (report.isNameMismatch) {
           _showNameMismatchDialog(report);
         } else if (report.isGenderMismatch) {
           _showGenderMismatchDialog(report);
@@ -207,6 +209,29 @@ class _CaptureScreenState extends State<CaptureScreen>
         );
       }
     }
+  }
+
+  void _showNotMedicalReportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: Theme.of(context).colorScheme.error),
+            const SizedBox(width: 8),
+            const Text('Invalid Document'),
+          ],
+        ),
+        content: const Text('The uploaded document does not appear to be a medical report. Please scan or upload a valid medical report (e.g. blood test or lab results) to proceed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmBypass(MedicalReport report, String title, String justification) {

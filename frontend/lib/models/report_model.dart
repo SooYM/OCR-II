@@ -11,6 +11,7 @@ class MedicalReport {
   final bool isNameMismatch;
   final bool isGenderMismatch;
   final bool isAgeMismatch;
+  final bool isNotMedicalReport;
 
   MedicalReport({
     required this.id,
@@ -24,6 +25,7 @@ class MedicalReport {
     this.isNameMismatch = false,
     this.isGenderMismatch = false,
     this.isAgeMismatch = false,
+    this.isNotMedicalReport = false,
   });
 
   factory MedicalReport.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,7 @@ class MedicalReport {
       isNameMismatch: json['is_name_mismatch'] as bool? ?? false,
       isGenderMismatch: json['is_gender_mismatch'] as bool? ?? false,
       isAgeMismatch: json['is_age_mismatch'] as bool? ?? false,
+      isNotMedicalReport: json['is_not_medical_report'] as bool? ?? false,
     );
   }
 
@@ -56,6 +59,7 @@ class MedicalReport {
       'is_name_mismatch': isNameMismatch,
       'is_gender_mismatch': isGenderMismatch,
       'is_age_mismatch': isAgeMismatch,
+      'is_not_medical_report': isNotMedicalReport,
     };
   }
 }

@@ -306,9 +306,6 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
 
   Widget _buildReportCard(MedicalReport report) {
     final testName = report.structuredData?.testName;
-    final resultCount = report.structuredData?.results
-            .where((r) => r.value.trim().isNotEmpty)
-            .length ?? 0;
 
     final reportRef = report.structuredData?.reportReference;
     final hasReportRef = reportRef != null && reportRef.trim().isNotEmpty;
@@ -345,20 +342,6 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (resultCount > 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '$resultCount',
-                      style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontSize: 11, fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ],
                 const SizedBox(width: 12),
                 GestureDetector(
                   onTap: () => _deleteReport(report),
