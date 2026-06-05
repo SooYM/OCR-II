@@ -23,6 +23,10 @@ MedScan is a comprehensive medical report OCR and tracking application built wit
     *   Features real-time token streaming, persistent session memory, and swipe-to-delete history management.
 *   **Comprehensive Biomarker Dictionary**: Supports 93 distinct medical biomarkers (Lipid Profile, Glucose, Kidney Function, Liver Function, CBC, Thyroid, etc.), standard units, and clinical reference ranges.
 *   **Terms & Conditions of Usage**: Built directly into settings, offering users full legal transparency on acceptance of terms, medical disclaimers, data collection & privacy policy, and mismatch flows.
+*   **Premium Onboarding & Splash Guide**:
+    *   Automatically runs for first-time users on fresh install launch (on `AuthScreen`) to explain core features.
+    *   Includes custom visual interactive widgets for each page (viewfinder camera guide with a moving laser, form verification edits, AI summary layout, CustomPaint trend line chart, duplication blocking shield, and simulated chat typing stream).
+    *   Saves completion state using `SharedPreferences` to suppress auto-popping, but remains accessible manually via Settings.
 *   **Modern Premium UI**: Built with glassmorphism cards, collapsible animated settings, responsive greetings, and sleek micro-animations for a premium healthcare experience.
 
 ## 🧬 Medical Unit Conversion System

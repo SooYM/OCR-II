@@ -13,7 +13,7 @@ class ApiService {
   static const _urlKey = 'medscan_base_url';
 
   // Default URL — update this or change at runtime via the settings icon
-  static String _baseUrl = 'https://preacher-dreadful-jarring.ngrok-free.dev';
+  static String _baseUrl = 'https://aihubdev.qiu.edu.my/backend';
 
   /// Get the current base URL.
   static String get baseUrl => _baseUrl;

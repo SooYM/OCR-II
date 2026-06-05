@@ -14,9 +14,11 @@ import 'capture_screen.dart';
 import 'report_history_screen.dart';
 import 'ai_chat_screen.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/user_guide_dialog.dart';
 import 'auth_screen.dart';
 import 'settings_screen.dart';
 import '../utils/biomarker_dictionary.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Main screen with bottom navigation: Dashboard, Scan, My Reports.
 class MainScreen extends StatefulWidget {
@@ -61,6 +63,23 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _fetchDashboardData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkFirstTimeUser();
+    });
+  }
+
+  Future<void> _checkFirstTimeUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool hasSeenGuide = prefs.getBool('has_seen_user_guide_v1') ?? false;
+    if (!hasSeenGuide) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const UserGuideDialog(isFirstTime: true),
+        );
+      }
+    }
   }
 
   @override
