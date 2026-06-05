@@ -38,3 +38,6 @@ supabase_filter_people.sql
 backend/populate_patricia_records.py
 backend/refresh_health_summaries.py
 
+# Deployment packages
+backend_deploy/
+backend_deploy.zip

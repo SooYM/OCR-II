@@ -13,3 +13,4 @@ bcrypt
 opencv-python-headless
 numpy
 imutils
+a2wsgi

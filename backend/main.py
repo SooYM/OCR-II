@@ -49,6 +49,7 @@ app = FastAPI(
     title="Medical Report Digitization API",
     description="Simplified prototype — OCR + LLM medical report processing",
     version="2.0.0",
+    root_path=os.getenv("ROOT_PATH", ""),
 )
 
 app.add_middleware(
@@ -2394,13 +2395,14 @@ async def generate_and_cache_health_summary(user_id: str) -> str:
     YOUR TASKS:
     1. SUMMARY: Provide a single direct sentence summarizing the overall health trajectory based on the latest data.
     2. ABNORMAL BIOMARKERS & PHYSIOLOGICAL CORRELATIONS: Compactly identify biomarkers that are out of standard clinical reference ranges, stating their exact values. Explain in a single simple sentence how these out-of-range metrics physiologically connect (e.g. how lipid and glucose issues relate to metabolic energy).
-    3. ACTIONABLE STEPS: Suggest exactly 2 simple, high-impact, and supportive lifestyle/dietary adjustments.
+    3. 1-YEAR PREDICTION: Provide a concise, realistic, and constructive 1-year health prediction/outlook of the patient's status if they continue their current trajectory without changes (mentioning potential escalation risks or improvement pathways).
+    4. ACTIONABLE STEPS: Suggest exactly 2 simple, high-impact, and supportive lifestyle/dietary adjustments.
 
     CONSTRAINTS:
     - Tone/Language: Empathetic, supportive, and in simple layman terms. Use plain English; define any necessary medical terms instantly.
     - Style: Start directly with the analysis. STRICTLY avoid introductory sentences (like "Based on your reports...") or polite final remarks (like "Consult your doctor..."). 
     - Formatting: Clean markdown. Use **bolding** for biomarker names and values/units. Use concise bullet points for scannability.
-    - Length: Word count MUST be between 100 to 175 words. Do not exceed this limit; it must fit compactly on a mobile dashboard screen while preserving all key clinical data points.
+    - Length: Word count MUST be between 130 to 220 words. Do not exceed this limit; it must fit compactly on a mobile dashboard screen while preserving all key clinical data points.
     - Do not include any HTML tags.
     """
 
