@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../widgets/glass_card.dart';
-import '../widgets/user_guide_dialog.dart';
 import 'main_screen.dart';
 
 /// Premium dark-themed Login / Register screen.
@@ -65,23 +63,6 @@ class _AuthScreenState extends State<AuthScreen>
       duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
     _passwordCtrl.addListener(_onPasswordChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkFirstTimeUser();
-    });
-  }
-
-  Future<void> _checkFirstTimeUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final bool hasSeenGuide = prefs.getBool('has_seen_user_guide_v1') ?? false;
-    if (!hasSeenGuide) {
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const UserGuideDialog(isFirstTime: true),
-        );
-      }
-    }
   }
 
   @override

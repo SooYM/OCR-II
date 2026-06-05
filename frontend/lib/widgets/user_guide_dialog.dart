@@ -162,7 +162,7 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
                         'Smart Trim: Cut out blank spaces between rows to focus on the numbers.',
                         'Combine Pages: Multi-page reports are saved together as one record.',
                       ],
-                      visualWidget: const _ScanVisualWidget(),
+                      visualWidget: const ScanVisualWidget(),
                     ),
                     _buildPage(
                       index: 1,
@@ -175,7 +175,7 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
                         'Standard Time: Automatically converts times like "3 PM" into clinical 24-hour time.',
                         'Quick Edits: Just tap any name, number, or unit to correct it yourself.',
                       ],
-                      visualWidget: const _VerifyVisualWidget(),
+                      visualWidget: const VerifyVisualWidget(),
                     ),
                     _buildPage(
                       index: 2,
@@ -188,7 +188,7 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
                         'Connecting the Dots: Shows how different test results might relate to one another.',
                         'Ask Questions: Tap the chat link next to the summary to ask the AI assistant about your results.',
                       ],
-                      visualWidget: const _SummaryVisualWidget(),
+                      visualWidget: const SummaryVisualWidget(),
                     ),
                     _buildPage(
                       index: 3,
@@ -201,7 +201,7 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
                         'Filter Dates: Choose specific dates to see how you were doing then.',
                         'Easy Categories: Your health markers are sorted into simple groups (like Heart, Liver, Kidney, and blood tests).',
                       ],
-                      visualWidget: const _TrendsVisualWidget(),
+                      visualWidget: const TrendsVisualWidget(),
                     ),
                     _buildPage(
                       index: 4,
@@ -214,7 +214,7 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
                         'Similar Readings: Flags reports with nearly identical values to avoid repeats.',
                         'Date Check: Prevents saving the same test if it was uploaded within a few days.',
                       ],
-                      visualWidget: const _DeduplicationVisualWidget(),
+                      visualWidget: const DeduplicationVisualWidget(),
                     ),
                     _buildPage(
                       index: 5,
@@ -227,7 +227,7 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
                         'Practical Tips: Ask for wellness ideas, food suggestions, or help understanding your trends.',
                         'Start Chatting: Ask things like "What is good cholesterol?" or "Explain my kidney test results."',
                       ],
-                      visualWidget: const _ChatVisualWidget(),
+                      visualWidget: const ChatVisualWidget(),
                     ),
                   ],
                 ),
@@ -426,8 +426,8 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
                     ),
                   ),
                   Expanded(
-                    child: RichText(
-                      text: TextSpan(
+                    child: Text.rich(
+                      TextSpan(
                         style: TextStyle(
                           fontSize: 12,
                           color: Theme.of(context)
@@ -459,14 +459,14 @@ class _UserGuideDialogState extends State<UserGuideDialog> {
 }
 
 // ─── 1. SCAN & ENHANCE VISUAL ──────────────────────────────────────────────
-class _ScanVisualWidget extends StatefulWidget {
-  const _ScanVisualWidget();
+class ScanVisualWidget extends StatefulWidget {
+  const ScanVisualWidget({super.key});
 
   @override
-  State<_ScanVisualWidget> createState() => _ScanVisualWidgetState();
+  State<ScanVisualWidget> createState() => _ScanVisualWidgetState();
 }
 
-class _ScanVisualWidgetState extends State<_ScanVisualWidget> with SingleTickerProviderStateMixin {
+class _ScanVisualWidgetState extends State<ScanVisualWidget> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -618,14 +618,14 @@ class _ViewfinderPainter extends CustomPainter {
 }
 
 // ─── 2. VERIFY & CORRECT VISUAL ─────────────────────────────────────────────
-class _VerifyVisualWidget extends StatefulWidget {
-  const _VerifyVisualWidget();
+class VerifyVisualWidget extends StatefulWidget {
+  const VerifyVisualWidget({super.key});
 
   @override
-  State<_VerifyVisualWidget> createState() => _VerifyVisualWidgetState();
+  State<VerifyVisualWidget> createState() => _VerifyVisualWidgetState();
 }
 
-class _VerifyVisualWidgetState extends State<_VerifyVisualWidget> with SingleTickerProviderStateMixin {
+class _VerifyVisualWidgetState extends State<VerifyVisualWidget> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _cursorOpacity;
   bool _showMockKeyboard = false;
@@ -674,28 +674,41 @@ class _VerifyVisualWidgetState extends State<_VerifyVisualWidget> with SingleTic
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _showMockKeyboard ? theme.colorScheme.primary : theme.colorScheme.outline,
-                width: _showMockKeyboard ? 1.5 : 1,
+          // Verify Screen Mini Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient(context),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 14),
               ),
-              boxShadow: [
-                if (_showMockKeyboard)
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.15),
-                    blurRadius: 8,
-                  ),
-              ],
-            ),
+              const SizedBox(width: 8),
+              Text(
+                'Verify & Edit Data',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Simulated Row from VerifyScreen
+          GlassCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Row(
               children: [
                 Expanded(
@@ -706,9 +719,9 @@ class _VerifyVisualWidgetState extends State<_VerifyVisualWidget> with SingleTic
                       Text(
                         'LDL Cholesterol',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: cs.onSurface.withOpacity(0.55),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -717,7 +730,7 @@ class _VerifyVisualWidgetState extends State<_VerifyVisualWidget> with SingleTic
                           Text(
                             _currentVal,
                             style: const TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -726,16 +739,16 @@ class _VerifyVisualWidgetState extends State<_VerifyVisualWidget> with SingleTic
                               opacity: _cursorOpacity,
                               child: Container(
                                 width: 2,
-                                height: 16,
-                                color: theme.colorScheme.primary,
+                                height: 14,
+                                color: cs.primary,
                               ),
                             ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Text(
                             'mmol/L',
                             style: TextStyle(
-                              fontSize: 11,
-                              color: theme.colorScheme.onSurface.withOpacity(0.4),
+                              fontSize: 10,
+                              color: cs.onSurface.withOpacity(0.4),
                             ),
                           ),
                         ],
@@ -748,40 +761,37 @@ class _VerifyVisualWidgetState extends State<_VerifyVisualWidget> with SingleTic
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: _showMockKeyboard
-                        ? Colors.orange.withOpacity(0.1)
-                        : Colors.teal.withOpacity(0.1),
+                        ? Colors.orange.withOpacity(0.12)
+                        : Colors.teal.withOpacity(0.12),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     _showMockKeyboard ? Icons.edit_rounded : Icons.check_circle_outline_rounded,
-                    size: 18,
+                    size: 16,
                     color: _showMockKeyboard ? Colors.orange : Colors.teal,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           AnimatedOpacity(
             opacity: _showMockKeyboard ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 200),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.keyboard_outlined, size: 12, color: theme.colorScheme.primary),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Correcting value...',
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.keyboard_outlined, size: 12, color: cs.primary),
+                const SizedBox(width: 6),
+                Text(
+                  'Correcting value...',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurfaceVariant.withOpacity(0.7),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -791,84 +801,102 @@ class _VerifyVisualWidgetState extends State<_VerifyVisualWidget> with SingleTic
 }
 
 // ─── 3. AI HEALTH SUMMARY VISUAL ────────────────────────────────────────────
-class _SummaryVisualWidget extends StatelessWidget {
-  const _SummaryVisualWidget();
+class SummaryVisualWidget extends StatelessWidget {
+  const SummaryVisualWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.15),
-                  shape: BoxShape.circle,
+              ShaderMask(
+                shaderCallback: (bounds) => AppTheme.primaryGradient(context).createShader(bounds),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 14,
                 ),
-                child: const Icon(Icons.psychology_alt_rounded, size: 16, color: Colors.amber),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Text(
-                'AI Summary',
+                'AI Health Summary',
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                  letterSpacing: -0.2,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 4),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                 decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
+                  gradient: AppTheme.accentGradient(context),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.check, size: 10, color: Colors.teal),
-                    SizedBox(width: 2),
-                    Text('Stable', style: TextStyle(fontSize: 9, color: Colors.teal, fontWeight: FontWeight.bold)),
-                  ],
+                child: const Text(
+                  'AI ASSISTED',
+                  style: TextStyle(
+                    fontSize: 6,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.02),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: theme.colorScheme.outline.withOpacity(0.15),
-              ),
-            ),
+          GlassCard(
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Your cholesterol is high, but your kidney function is normal.',
                   style: TextStyle(
-                    fontSize: 11,
-                    height: 1.35,
-                    color: theme.colorScheme.onSurface.withOpacity(0.8),
+                    fontSize: 10,
+                    height: 1.4,
+                    color: cs.onSurface.withOpacity(0.85),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildSummaryPill(context, 'LDL Cholesterol', Colors.red, true),
-                    const SizedBox(width: 6),
-                    _buildSummaryPill(context, 'Creatinine', Colors.green, false),
+                    Row(
+                      children: [
+                        _buildSummaryPill(context, 'LDL Cholesterol', Colors.red, true),
+                        const SizedBox(width: 6),
+                        _buildSummaryPill(context, 'Creatinine', Colors.green, false),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.primaryGradient(context),
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.chat_bubble_outline_rounded, size: 8, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'Ask AI',
+                            style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -881,7 +909,7 @@ class _SummaryVisualWidget extends StatelessWidget {
 
   Widget _buildSummaryPill(BuildContext context, String text, Color color, bool isWarn) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
       decoration: BoxDecoration(
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(6),
@@ -898,14 +926,14 @@ class _SummaryVisualWidget extends StatelessWidget {
           Text(
             text,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 8,
               fontWeight: FontWeight.w600,
               color: color,
             ),
           ),
           if (isWarn) ...[
             const SizedBox(width: 3),
-            Icon(Icons.warning_amber_rounded, size: 9, color: color),
+            Icon(Icons.warning_amber_rounded, size: 8, color: color),
           ],
         ],
       ),
@@ -914,70 +942,95 @@ class _SummaryVisualWidget extends StatelessWidget {
 }
 
 // ─── 4. TRACK YOUR TRENDS VISUAL ───────────────────────────────────────────
-class _TrendsVisualWidget extends StatelessWidget {
-  const _TrendsVisualWidget();
+class TrendsVisualWidget extends StatelessWidget {
+  const TrendsVisualWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        children: [
-          // Graphic Trends Box
-          Expanded(
-            flex: 3,
-            child: SizedBox(
-              height: 110,
-              child: CustomPaint(
-                painter: _MiniGraphPainter(
-                  strokeColor: Colors.purple,
-                  gridColor: theme.colorScheme.outline.withOpacity(0.3),
-                  referenceColor: Colors.teal.withOpacity(0.12),
-                  onSurfaceColor: theme.colorScheme.onSurface,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          // Legend / Overlay Information
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: GlassCard(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            // Header mimicking dashboard mini chart
+            Row(
               children: [
-                Row(
-                  children: [
-                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.purple, shape: BoxShape.circle)),
-                    const SizedBox(width: 6),
-                    const Text('HDL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.teal, shape: BoxShape.circle)),
-                    const SizedBox(width: 6),
-                    const Text('Ref Range', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
+                Expanded(
+                  child: Text(
+                    'HDL Cholesterol (mmol/L)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
                   ),
-                  child: const Text(
-                    'Trends: Rising 📈',
-                    style: TextStyle(fontSize: 9, color: Colors.purple, fontWeight: FontWeight.bold),
+                ),
+                Icon(Icons.fullscreen_rounded, size: 14, color: cs.onSurface.withOpacity(0.3)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                // Graphic Trends Box
+                Expanded(
+                  flex: 3,
+                  child: SizedBox(
+                    height: 80,
+                    child: CustomPaint(
+                      painter: _MiniGraphPainter(
+                        strokeColor: Colors.purple,
+                        gridColor: cs.outline.withOpacity(0.3),
+                        referenceColor: Colors.teal.withOpacity(0.12),
+                        onSurfaceColor: cs.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Legend / Overlay Information
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.purple, shape: BoxShape.circle)),
+                          const SizedBox(width: 6),
+                          const Text('HDL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.teal, shape: BoxShape.circle)),
+                          const SizedBox(width: 6),
+                          const Text('Ref Range', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Rising 📈',
+                          style: TextStyle(fontSize: 8, color: Colors.purple, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1085,14 +1138,14 @@ class _MiniGraphPainter extends CustomPainter {
 }
 
 // ─── 5. SMART DEDUPLICATION VISUAL ──────────────────────────────────────────
-class _DeduplicationVisualWidget extends StatefulWidget {
-  const _DeduplicationVisualWidget();
+class DeduplicationVisualWidget extends StatefulWidget {
+  const DeduplicationVisualWidget({super.key});
 
   @override
-  State<_DeduplicationVisualWidget> createState() => _DeduplicationVisualWidgetState();
+  State<DeduplicationVisualWidget> createState() => _DeduplicationVisualWidgetState();
 }
 
-class _DeduplicationVisualWidgetState extends State<_DeduplicationVisualWidget> with SingleTickerProviderStateMixin {
+class _DeduplicationVisualWidgetState extends State<DeduplicationVisualWidget> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _overlap;
   late Animation<double> _shieldScale;
@@ -1130,6 +1183,7 @@ class _DeduplicationVisualWidgetState extends State<_DeduplicationVisualWidget> 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -1143,7 +1197,7 @@ class _DeduplicationVisualWidgetState extends State<_DeduplicationVisualWidget> 
                 offset: Offset(-24 - shift, 0),
                 child: Transform.rotate(
                   angle: -0.05,
-                  child: _buildMiniReport(theme, 'Report 1\nSpecimen #9822', Colors.blue),
+                  child: _buildMiniReport(theme, 'Ref: #9822', cs.primary),
                 ),
               ),
 
@@ -1152,7 +1206,7 @@ class _DeduplicationVisualWidgetState extends State<_DeduplicationVisualWidget> 
                 offset: Offset(24 + shift, 0),
                 child: Transform.rotate(
                   angle: 0.05,
-                  child: _buildMiniReport(theme, 'Report 2\nSpecimen #9822', Colors.teal),
+                  child: _buildMiniReport(theme, 'Ref: #9822', Colors.red),
                 ),
               ),
 
@@ -1196,58 +1250,82 @@ class _DeduplicationVisualWidgetState extends State<_DeduplicationVisualWidget> 
     );
   }
 
-  Widget _buildMiniReport(ThemeData theme, String text, Color color) {
-    return Container(
-      width: 90,
+  Widget _buildMiniReport(ThemeData theme, String titleText, Color statusColor) {
+    final cs = theme.colorScheme;
+    return SizedBox(
+      width: 110,
       height: 110,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.5), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(Icons.description_rounded, size: 10, color: color),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            text,
-            style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, height: 1.2),
-          ),
-          const Spacer(),
-          Container(width: 70, height: 4, decoration: BoxDecoration(color: theme.colorScheme.onSurface.withOpacity(0.1), borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 3),
-          Container(width: 50, height: 4, decoration: BoxDecoration(color: theme.colorScheme.onSurface.withOpacity(0.1), borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 3),
-          Container(width: 60, height: 4, decoration: BoxDecoration(color: theme.colorScheme.onSurface.withOpacity(0.1), borderRadius: BorderRadius.circular(2))),
-        ],
+      child: GlassCard(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    titleText,
+                    style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: cs.onSurface),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(Icons.delete_outline, size: 10, color: cs.onSurfaceVariant.withOpacity(0.4)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.calendar_today_outlined, size: 8, color: cs.secondary.withOpacity(0.7)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '12-May-2026',
+                    style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, color: cs.onSurface),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.science_outlined, size: 8, color: cs.onSurface.withOpacity(0.7)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Lipid Profile',
+                    style: TextStyle(fontSize: 7, color: cs.onSurfaceVariant),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Container(width: 70, height: 3, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.08), borderRadius: BorderRadius.circular(1.5))),
+            const SizedBox(height: 3),
+            Container(width: 50, height: 3, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.08), borderRadius: BorderRadius.circular(1.5))),
+          ],
+        ),
       ),
     );
   }
 }
 
 // ─── 6. CONSULT AI ASSISTANT VISUAL ─────────────────────────────────────────
-class _ChatVisualWidget extends StatefulWidget {
-  const _ChatVisualWidget();
+class ChatVisualWidget extends StatefulWidget {
+  const ChatVisualWidget({super.key});
 
   @override
-  State<_ChatVisualWidget> createState() => _ChatVisualWidgetState();
+  State<ChatVisualWidget> createState() => _ChatVisualWidgetState();
 }
 
-class _ChatVisualWidgetState extends State<_ChatVisualWidget> with SingleTickerProviderStateMixin {
+class _ChatVisualWidgetState extends State<ChatVisualWidget> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   int _typingDotsCount = 0;
 
@@ -1278,78 +1356,204 @@ class _ChatVisualWidgetState extends State<_ChatVisualWidget> with SingleTickerP
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // User Bubble
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              margin: const EdgeInsets.only(left: 40),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Explain my hemoglobin test.',
-                style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // AI Response Bubble
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              margin: const EdgeInsets.only(right: 30),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
-                ),
-                border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Icon(Icons.psychology_rounded, size: 12, color: Colors.pink),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      'Your value is 12.0 g/dL. This is slightly low, which is commonly associated with...',
-                      style: TextStyle(
-                        fontSize: 9,
-                        height: 1.3,
-                        color: theme.colorScheme.onSurface.withOpacity(0.9),
+          // User Bubble Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Container(
+                  margin: const EdgeInsets.only(left: 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(4),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.primary.withOpacity(0.12),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  // Typist dots indicator
-                  Text(
-                    '.' * _typingDotsCount,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
-                    ),
+                  child: const Text(
+                    'Explain my hemoglobin test.',
+                    style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
                   ),
-                ],
+                ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.person_rounded, color: cs.primary, size: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // AI Response Bubble Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.accentGradient(context),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(color: cs.primary.withOpacity(0.25), blurRadius: 6, offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 12),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  margin: const EdgeInsets.only(right: 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withOpacity(0.6),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(4),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    border: Border.all(color: cs.outline.withOpacity(0.15)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Your value is 12.0 g/dL. This is slightly low, which is commonly associated with...',
+                          style: TextStyle(
+                            fontSize: 9,
+                            height: 1.3,
+                            color: cs.onSurface.withOpacity(0.9),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      // Typist dots indicator
+                      Text(
+                        '.' * _typingDotsCount,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: cs.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── 7. SETTINGS VISUAL WIDGET ──────────────────────────────────────────────
+class SettingsVisualWidget extends StatelessWidget {
+  const SettingsVisualWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(Icons.settings_rounded, color: cs.primary, size: 14),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Settings & Preferences',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GlassCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.straighten_rounded, size: 18, color: cs.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Biomarker Units',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSurface),
+                      ),
+                      Text(
+                        'Convert automatically to mmol/L',
+                        style: TextStyle(fontSize: 8, color: cs.onSurface.withOpacity(0.5)),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cs.primary.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    'mmol/L',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: cs.primary),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1357,3 +1561,73 @@ class _ChatVisualWidgetState extends State<_ChatVisualWidget> with SingleTickerP
     );
   }
 }
+
+// ─── 7. FILTER & REFRESH VISUAL ──────────────────────────────────────────────
+class FilterRefreshVisualWidget extends StatelessWidget {
+  const FilterRefreshVisualWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Mock Date Filter Button
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cs.primary, width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.date_range_rounded, size: 16, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Last 6 Months',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: cs.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Mock Refresh Button
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.refresh_rounded, size: 18, color: cs.onSurface),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Use these top dashboard controls to filter date ranges or pull the latest medical reports instantly.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1.4,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

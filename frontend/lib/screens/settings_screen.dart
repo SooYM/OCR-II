@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:animate_do/animate_do.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/gradient_button.dart';
@@ -10,7 +9,12 @@ import 'auth_screen.dart';
 import 'dictionary_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final VoidCallback? onTriggerGuide;
+
+  const SettingsScreen({
+    super.key,
+    this.onTriggerGuide,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -254,11 +258,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showUserGuide() {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => const UserGuideDialog(isFirstTime: false),
-    );
+    if (widget.onTriggerGuide != null) {
+      widget.onTriggerGuide!();
+    } else {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => const UserGuideDialog(isFirstTime: false),
+      );
+    }
   }
 
   void _showTermsAndConditions() {

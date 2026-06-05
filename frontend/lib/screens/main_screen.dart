@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:animate_do/animate_do.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
@@ -31,6 +32,13 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final GlobalKey<AiChatScreenState> _chatKey = GlobalKey<AiChatScreenState>();
+
+  // Onboarding tour state
+  bool _showTour = false;
+  int _tourStep = 0;
+  final List<GlobalKey> _navKeys = List.generate(5, (_) => GlobalKey());
+  final GlobalKey _dateFilterKey = GlobalKey();
+  final GlobalKey _refreshKey = GlobalKey();
 
   // Dashboard state
   List<MedicalReport> _reports = [];
@@ -73,11 +81,11 @@ class _MainScreenState extends State<MainScreen> {
     final bool hasSeenGuide = prefs.getBool('has_seen_user_guide_v1') ?? false;
     if (!hasSeenGuide) {
       if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const UserGuideDialog(isFirstTime: true),
-        );
+        setState(() {
+          _showTour = true;
+          _tourStep = 0;
+          _currentIndex = 1; // Start at Scan tab (first step of tour)
+        });
       }
     }
   }
@@ -166,7 +174,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    Widget mainContent = Scaffold(
       body: IndexedStack(
         index: _currentIndex,
         children: [
@@ -174,11 +182,22 @@ class _MainScreenState extends State<MainScreen> {
           const CaptureScreen(),
           AiChatScreen(key: _chatKey, dateRange: _selectedDateRange),
           const ReportHistoryScreen(),
-          const SettingsScreen(),
+          SettingsScreen(onTriggerGuide: _startTour),
         ],
       ),
       bottomNavigationBar: _buildBottomNavBar(),
     );
+
+    if (_showTour) {
+      mainContent = Stack(
+        children: [
+          mainContent,
+          _buildTourOverlay(),
+        ],
+      );
+    }
+
+    return mainContent;
   }
 
   Widget _buildDashboardTab() {
@@ -237,6 +256,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
           const SizedBox(width: 12),
           GestureDetector(
+            key: _dateFilterKey,
             onTap: _showSimplifiedDatePicker,
             child: Container(
               padding: const EdgeInsets.all(10),
@@ -256,6 +276,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
           const SizedBox(width: 8),
           GestureDetector(
+            key: _refreshKey,
             onTap: _fetchDashboardData,
             child: Container(
               padding: const EdgeInsets.all(10),
@@ -1003,6 +1024,59 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                 ),
               ),
+              if (_healthSummary != null && !_isLoadingSummary) ...[
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: _healthSummary!));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Summary copied to clipboard!',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        backgroundColor: const Color(0xFF4CAF50),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.copy_all_rounded,
+                          size: 14,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Copy',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 12),
@@ -1940,12 +2014,13 @@ class _MainScreenState extends State<MainScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              _buildNavItem(index: 0, icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard_rounded,
+              _buildNavItem(key: _navKeys[0], index: 0, icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard_rounded,
                   label: 'Dashboard', gradient: AppTheme.accentGradient(context)),
-              _buildNavItem(index: 1, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
+              _buildNavItem(key: _navKeys[1], index: 1, icon: Icons.document_scanner_outlined, activeIcon: Icons.document_scanner_rounded,
                   label: 'Scan', gradient: AppTheme.primaryGradient(context)),
               Expanded(
                 child: GestureDetector(
+                  key: _navKeys[2],
                   onTap: () => setState(() => _currentIndex = 2),
                   behavior: HitTestBehavior.opaque,
                   child: Column(
@@ -1973,9 +2048,9 @@ class _MainScreenState extends State<MainScreen> {
                   ),
                 ),
               ),
-              _buildNavItem(index: 3, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
+              _buildNavItem(key: _navKeys[3], index: 3, icon: Icons.history_outlined, activeIcon: Icons.history_rounded,
                   label: 'My Reports', gradient: const LinearGradient(colors: [AppTheme.warning, Color(0xFFFF8A65)])),
-              _buildNavItem(index: 4, icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded,
+              _buildNavItem(key: _navKeys[4], index: 4, icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded,
                   label: 'Settings', gradient: AppTheme.accentGradient(context)),
             ],
           ),
@@ -1987,10 +2062,12 @@ class _MainScreenState extends State<MainScreen> {
   Widget _buildNavItem({
     required int index, required IconData icon, required IconData activeIcon,
     required String label, required LinearGradient gradient,
+    Key? key,
   }) {
     final isActive = _currentIndex == index;
     return Expanded(
       child: GestureDetector(
+        key: key,
         onTap: () => setState(() => _currentIndex = index),
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
@@ -2027,6 +2104,501 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
     );
+  }
+
+  // ─── TOUR METHODS ──────────────────────────────────────────────────────────
+
+  void _startTour() {
+    setState(() {
+      _showTour = true;
+      _tourStep = 0;
+      _currentIndex = 1; // Start at Scan tab (first step of tour)
+    });
+  }
+
+  List<_TourStepConfig> _getTourStepConfig() {
+    return [
+      _TourStepConfig(
+        tabIndex: 1,
+        title: '1. Scan & Clean Up',
+        description: 'Take a picture of your health report or upload it from your phone. Our app automatically cleans up the image to make it easy to read:',
+        bullets: [
+          'Photo Tips: Keep the paper flat, straight, and under bright light.',
+          'Remove Shadows: Dark patches or uneven lighting are automatically cleared.',
+          'Smart Trim: Cut out blank spaces between rows to focus on the numbers.',
+          'Combine Pages: Multi-page reports are saved together as one record.',
+        ],
+        visualWidget: const ScanVisualWidget(),
+        iconColor: Colors.blue,
+        icon: Icons.document_scanner_rounded,
+      ),
+      _TourStepConfig(
+        tabIndex: 3,
+        title: '2. Check, Fix & Deduplicate',
+        description: 'Keep your report history neat, clean, and fully accurate by correcting data and blocking repeats:',
+        bullets: [
+          'Verify Results: Double-check clinical values and standard 24-hour time before saving.',
+          'Quick Correction: Simply tap any recognized field to type the correct name or value.',
+          'Block Duplicates: Automatically ignores duplicates based on identical lab numbers or test dates.',
+        ],
+        visualWidget: const VerifyVisualWidget(),
+        iconColor: Colors.teal,
+        icon: Icons.fact_check_rounded,
+      ),
+      _TourStepConfig(
+        tabIndex: 0,
+        title: '3. AI Health Summary',
+        description: 'Get a simple, easy-to-read summary of your test results at the top of your screen:',
+        bullets: [
+          'Simple Insights: Tells you if any of your health numbers look high or low.',
+          'Connecting the Dots: Shows how different test results might relate to one another.',
+          'Ask Questions: Tap the chat link next to the summary to ask the AI assistant about your results.',
+        ],
+        visualWidget: const SummaryVisualWidget(),
+        iconColor: Colors.amber.shade600,
+        icon: Icons.auto_awesome_rounded,
+      ),
+      _TourStepConfig(
+        tabIndex: 0,
+        title: '4. Track Your Progress',
+        description: 'Watch how your health changes over time using interactive graphs:',
+        bullets: [
+          'Compare Numbers: Show different markers (like good and bad cholesterol) on the same chart.',
+          'Filter Dates: Choose specific dates to see how you were doing then.',
+          'Easy Categories: Your health markers are sorted into simple groups (like Heart, Liver, Kidney, and blood tests).',
+        ],
+        visualWidget: const TrendsVisualWidget(),
+        iconColor: Colors.purple,
+        icon: Icons.trending_up_rounded,
+      ),
+      _TourStepConfig(
+        tabIndex: 0,
+        title: '5. Filter Date Ranges',
+        description: 'Narrow down the medical reports shown on your dashboard using date filters:',
+        bullets: [
+          'Choose Ranges: Tap the calendar icon to select quick date spans (e.g. Last 6 Months) or a custom duration.',
+          'Dynamic Charts: All summaries, biomarker grids, and trend charts instantly adjust to show data for the selected range.',
+        ],
+        visualWidget: const FilterRefreshVisualWidget(),
+        iconColor: Colors.blueGrey,
+        icon: Icons.date_range_rounded,
+        targetKey: _dateFilterKey,
+      ),
+      _TourStepConfig(
+        tabIndex: 0,
+        title: '6. Synchronize & Refresh',
+        description: 'Pull the latest processed medical reports into your dashboard view:',
+        bullets: [
+          'Refresh Data: Tap the refresh icon at the top to instantly reload all records from the server.',
+          'Pull-to-Refresh: You can also drag down on any empty space on the dashboard to trigger a quick refresh.',
+        ],
+        visualWidget: const FilterRefreshVisualWidget(),
+        iconColor: Colors.blueGrey,
+        icon: Icons.refresh_rounded,
+        targetKey: _refreshKey,
+      ),
+      _TourStepConfig(
+        tabIndex: 2,
+        title: '7. Chat with AI Assistant',
+        description: 'Talk to a private helper that explains complicated medical terms in plain language:',
+        bullets: [
+          'Personal Health Context: The AI looks at all your uploaded reports to understand your history.',
+          'Practical Tips: Ask for wellness ideas, food suggestions, or help understanding your trends.',
+          'Start Chatting: Ask things like "What is good cholesterol?" or "Explain my kidney test results."',
+        ],
+        visualWidget: const ChatVisualWidget(),
+        iconColor: Colors.pink,
+        icon: Icons.psychology_rounded,
+      ),
+      _TourStepConfig(
+        tabIndex: 4,
+        title: '8. Settings & Customization',
+        description: 'Personalize your clinical units, manage your account, and access helpful guides:',
+        bullets: [
+          'Metric or Imperial: Easily swap between standard measurement systems (e.g. mmol/L vs mg/dL).',
+          'App User Guide: Run this visual dashboard walk-through tour again at any time.',
+          'Security: Safely manage your profile details or log out of your session.',
+        ],
+        visualWidget: const SettingsVisualWidget(),
+        iconColor: Colors.blueGrey,
+        icon: Icons.settings_rounded,
+      ),
+    ];
+  }
+
+  Widget _buildTourOverlay() {
+    final mediaQuery = MediaQuery.of(context);
+    final width = mediaQuery.size.width;
+    final height = mediaQuery.size.height;
+    final bottomPadding = mediaQuery.padding.bottom;
+
+    final configs = _getTourStepConfig();
+    if (_tourStep < 0 || _tourStep >= configs.length) {
+      return const SizedBox.shrink();
+    }
+
+    final currentConfig = configs[_tourStep];
+    final highlightedTab = currentConfig.tabIndex;
+
+    // Mathematical horizontal column midpoint coordinates as reliable fallback
+    final colWidth = (width - 24.0) / 5;
+    double centerX = 12.0 + (highlightedTab + 0.5) * colWidth;
+    double centerY = height - bottomPadding - 32.0;
+    double radius = highlightedTab == 2 ? 42.0 : 38.0;
+
+    // Retrieve live coordinates from the widget's render box for absolute pixel perfection
+    final key = currentConfig.targetKey ?? _navKeys[highlightedTab];
+    final keyContext = key.currentContext;
+    if (keyContext != null) {
+      final renderBox = keyContext.findRenderObject() as RenderBox?;
+      if (renderBox != null && renderBox.hasSize) {
+        final position = renderBox.localToGlobal(Offset.zero);
+        final size = renderBox.size;
+        centerX = position.dx + size.width / 2;
+        centerY = position.dy + size.height / 2;
+        
+        // Custom radius calculation if targeting a specific smaller widget
+        if (currentConfig.targetKey != null) {
+          radius = (size.width > size.height ? size.width : size.height) / 2 + 8.0;
+        } else if (highlightedTab == 2) {
+          radius = 42.0;
+        } else {
+          radius = 38.0;
+        }
+      }
+    }
+
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () {},
+              behavior: HitTestBehavior.opaque,
+              child: CustomPaint(
+                painter: TourSpotlightPainter(
+                  center: Offset(centerX, centerY),
+                  radius: radius,
+                ),
+              ),
+            ),
+          ),
+          _buildTourCard(currentConfig, configs, centerY),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTourCard(_TourStepConfig config, List<_TourStepConfig> configs, double spotlightCenterY) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // Position card dynamically depending on if spotlight is at top or bottom half of screen
+    final double cardBottom = spotlightCenterY < screenHeight / 2
+        ? 80.0 // Position at bottom if spotlight is at top
+        : screenHeight - spotlightCenterY + 45.0; // Position above spotlight if spotlight is at bottom
+
+    return Positioned(
+      bottom: cardBottom,
+      left: 16,
+      right: 16,
+      child: FadeInUp(
+        duration: const Duration(milliseconds: 350),
+        child: GlassCard(
+          padding: EdgeInsets.zero,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: theme.colorScheme.outline.withOpacity(0.25)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [
+                        theme.colorScheme.surface.withOpacity(0.92),
+                        theme.colorScheme.surfaceContainerHighest.withOpacity(0.96),
+                      ]
+                    : [
+                        theme.colorScheme.surface.withOpacity(0.96),
+                        theme.colorScheme.surfaceContainerHighest.withOpacity(0.98),
+                      ],
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.auto_awesome_rounded,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'MedScan Guide',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${_tourStep + 1} / ${configs.length}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Center(
+                        child: Container(
+                          height: 130,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: config.iconColor.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: config.iconColor.withOpacity(0.12),
+                              width: 1,
+                            ),
+                          ),
+                          child: Center(child: config.visualWidget),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: config.iconColor.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              config.icon,
+                              size: 18,
+                              color: config.iconColor,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              config.title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        config.description,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withOpacity(0.85),
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...config.bullets.map((bullet) {
+                        final parts = bullet.split(':');
+                        final hasTitle = parts.length > 1;
+                        final bulletTitle = hasTitle ? parts[0] : '';
+                        final bulletBody = hasTitle ? parts.sublist(1).join(':') : bullet;
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 5.0, right: 6.0),
+                                child: Container(
+                                  width: 4,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: config.iconColor.withOpacity(0.7),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text.rich(
+                                  TextSpan(
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: theme.colorScheme.onSurfaceVariant.withOpacity(0.85),
+                                      height: 1.35,
+                                      fontFamily: 'Helvetica Neue',
+                                    ),
+                                    children: [
+                                      if (hasTitle)
+                                        TextSpan(
+                                          text: '$bulletTitle: ',
+                                          style: const TextStyle(fontWeight: FontWeight.w700),
+                                        ),
+                                      TextSpan(text: bulletBody),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (_tourStep > 0)
+                        TextButton(
+                          onPressed: () => _prevTourStep(configs),
+                          child: Text(
+                            'Back',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        )
+                      else
+                        TextButton(
+                          onPressed: _completeTour,
+                          child: Text(
+                            'Skip',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      Row(
+                        children: List.generate(
+                          configs.length,
+                          (index) => _buildTourDot(index),
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _nextTourStep(configs),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: theme.colorScheme.onPrimary,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                        ),
+                        child: Text(
+                          _tourStep == configs.length - 1 ? 'Got it!' : 'Next',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTourDot(int index) {
+    final theme = Theme.of(context);
+    final isActive = _tourStep == index;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      height: 5,
+      width: isActive ? 12 : 5,
+      decoration: BoxDecoration(
+        color: isActive
+            ? theme.colorScheme.primary
+            : theme.colorScheme.primary.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+
+  void _nextTourStep(List<_TourStepConfig> configs) {
+    if (_tourStep < configs.length - 1) {
+      setState(() {
+        _tourStep++;
+        _currentIndex = configs[_tourStep].tabIndex;
+      });
+    } else {
+      _completeTour();
+    }
+  }
+
+  void _prevTourStep(List<_TourStepConfig> configs) {
+    if (_tourStep > 0) {
+      setState(() {
+        _tourStep--;
+        _currentIndex = configs[_tourStep].tabIndex;
+      });
+    }
+  }
+
+  Future<void> _completeTour() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('has_seen_user_guide_v1', true);
+    setState(() {
+      _showTour = false;
+      _tourStep = 0;
+      _currentIndex = 0; // Go back to Dashboard after finishing the tour
+    });
   }
 }
 
@@ -2899,4 +3471,59 @@ String? _determineGender(List<MedicalReport> reports) {
     }
   }
   return null;
+}
+
+// ─── TOUR OVERLAY HELPER AND WIDGETS ────────────────────────────────────────
+
+class _TourStepConfig {
+  final int tabIndex;
+  final String title;
+  final String description;
+  final List<String> bullets;
+  final Widget visualWidget;
+  final Color iconColor;
+  final IconData icon;
+  final GlobalKey? targetKey;
+
+  _TourStepConfig({
+    required this.tabIndex,
+    required this.title,
+    required this.description,
+    required this.bullets,
+    required this.visualWidget,
+    required this.iconColor,
+    required this.icon,
+    this.targetKey,
+  });
+}
+
+class TourSpotlightPainter extends CustomPainter {
+  final Offset center;
+  final double radius;
+
+  TourSpotlightPainter({required this.center, required this.radius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(0.7)
+      ..style = PaintingStyle.fill;
+
+    final backgroundPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final holePath = Path()..addOval(Rect.fromCircle(center: center, radius: radius));
+
+    final finalPath = Path.combine(PathOperation.difference, backgroundPath, holePath);
+    canvas.drawPath(finalPath, paint);
+
+    final borderPaint = Paint()
+      ..color = Colors.amber.shade400
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(center, radius, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant TourSpotlightPainter oldDelegate) {
+    return oldDelegate.center != center || oldDelegate.radius != radius;
+  }
 }
