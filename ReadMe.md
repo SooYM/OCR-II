@@ -378,12 +378,12 @@ During user registration, the password input dynamically updates its style accor
 - **First-Time Check**: When the user launches the app for the first time (landing on `AuthScreen`) or accesses `MainScreen` after a fresh login, a post-frame callback queries local storage (`SharedPreferences`) for the `has_seen_user_guide_v1` flag.
 - **Onboarding Splash Dialog**: If the flag is not set, a non-dismissible onboarding `UserGuideDialog` is presented to orient the user before they proceed.
 - **Interactive Previews**: Rather than plain text, each slide includes a custom-drawn, animated widget to visually demonstrate app capabilities:
-  - *Scan & Enhance*: Viewfinder camera frame overlay with a green animated laser scan line.
-  - *Verify & Correct*: Interactive form field showing manual updates and typo corrections.
+  - *Scan & Clean Up*: Viewfinder camera frame overlay with a green animated laser scan line.
+  - *Check & Fix*: Interactive form field showing manual updates and typo corrections.
   - *AI Health Summary*: High-fidelity AI summary block highlighting out-of-range clinical flags.
-  - *Track Your Trends*: A custom `CustomPaint` spline graph showing biomarker trends and reference bands.
-  - *Smart Deduplication*: Animated stack comparison showing duplicate uploads blocked by a security shield.
-  - *Consult AI Assistant*: A mock chat container displaying prompt queries and typing bubble sequences.
+  - *Track Your Progress*: A custom `CustomPaint` spline graph showing biomarker trends and reference bands.
+  - *Block Duplicates*: Animated stack comparison showing duplicate uploads blocked by a security shield.
+  - *Chat with AI Assistant*: A mock chat container displaying prompt queries and typing bubble sequences.
 - **State Persistence**: Completing or skipping the onboarding flow persists the completed state, hiding it from future launches while keeping it accessible on-demand in **Settings -> App User Guide**.
 
 ---
