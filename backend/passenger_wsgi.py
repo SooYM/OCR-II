@@ -1,6 +1,11 @@
 import sys
 import os
 
+# Check if virtual environment python interpreter exists and redirect if we are not running it
+venv_python = os.path.join(os.path.dirname(__file__), 'venv', 'bin', 'python')
+if os.path.exists(venv_python) and sys.executable != venv_python:
+    os.execv(venv_python, [venv_python] + sys.argv)
+
 # Ensure the backend directory is in python path
 sys.path.insert(0, os.path.dirname(__file__))
 

@@ -6,11 +6,31 @@ const fs = require('fs');
 const TARGET_PORT = 8081; // Local port for Python FastAPI
 const PORT = process.env.PORT || 3000; // Port provided by Plesk / Phusion Passenger
 
-// 1. Self-healing Python Venv Setup (Runs if venv is missing)
 const venvPath = path.join(__dirname, 'venv');
-if (!fs.existsSync(venvPath)) {
-  console.log('[Proxy Setup] Python virtual environment not found. Creating and installing packages...');
+const pythonBin = process.platform === 'win32'
+  ? path.join(venvPath, 'Scripts', 'python')
+  : path.join(venvPath, 'bin', 'python');
+
+// 1. Self-healing Python Venv Setup (Runs if venv is missing or invalid)
+let venvValid = false;
+if (fs.existsSync(pythonBin)) {
   try {
+    // Test if the python binary is executable on this platform
+    execSync(`"${pythonBin}" -c "import sys"`, { stdio: 'ignore' });
+    venvValid = true;
+  } catch (error) {
+    console.log('[Proxy Setup] Python virtual environment found but is invalid/incompatible. Will recreate...');
+  }
+}
+
+if (!venvValid) {
+  console.log('[Proxy Setup] Python virtual environment not found or invalid. Creating and installing packages...');
+  try {
+    // Clear out the invalid venv if it exists
+    if (fs.existsSync(venvPath)) {
+      fs.rmSync(venvPath, { recursive: true, force: true });
+    }
+    
     execSync('python3 -m venv venv', { cwd: __dirname, stdio: 'inherit' });
     
     // Determine the pip path based on OS
@@ -27,9 +47,6 @@ if (!fs.existsSync(venvPath)) {
 }
 
 // 2. Determine Python path and spawn uvicorn FastAPI process
-const pythonBin = process.platform === 'win32'
-  ? path.join(venvPath, 'Scripts', 'python')
-  : path.join(venvPath, 'bin', 'python');
 const pythonCmd = fs.existsSync(pythonBin) ? pythonBin : 'python3';
 
 console.log(`[Proxy] Starting FastAPI backend using: ${pythonCmd}`);

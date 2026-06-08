@@ -41,6 +41,43 @@ try:
 except ImportError:
     HAS_GCP = False
 
+def import_pypdf():
+    try:
+        from pypdf import PdfReader
+        return PdfReader
+    except ImportError:
+        import subprocess
+        import sys
+        
+        # Check if we have a local deps folder (Node.js/PYTHONPATH approach)
+        deps_dir = os.path.join(os.path.dirname(__file__), 'deps')
+        # Check if we have a venv (virtualenv approach)
+        venv_dir = os.path.join(os.path.dirname(__file__), 'venv')
+        
+        cmd = [sys.executable, "-m", "pip", "install"]
+        
+        if os.path.exists(deps_dir):
+            cmd.extend(["--target", deps_dir])
+        elif os.path.exists(venv_dir):
+            venv_pip = os.path.join(venv_dir, 'bin', 'pip')
+            if sys.platform == 'win32':
+                venv_pip = os.path.join(venv_dir, 'Scripts', 'pip.exe')
+            if os.path.exists(venv_pip):
+                cmd = [venv_pip, "install"]
+                
+        cmd.append("pypdf")
+        print(f"[PDF Setup] Auto-installing pypdf using command: {cmd}")
+        try:
+            subprocess.check_call(cmd)
+            # Add deps_dir to sys.path if it exists and was used
+            if os.path.exists(deps_dir) and deps_dir not in sys.path:
+                sys.path.insert(0, deps_dir)
+            from pypdf import PdfReader
+            return PdfReader
+        except Exception as e:
+            print(f"[PDF Setup] Auto-installation of pypdf failed: {e}")
+            raise e
+
 # ─── Configuration ──────────────────────────────────────────────────────────
 
 load_dotenv()
@@ -627,12 +664,9 @@ async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[s
         for fp in file_paths:
             if fp.suffix.lower() == ".pdf":
                 try:
-                    from pypdf import PdfReader
-                except ImportError:
-                    import subprocess
-                    import sys
-                    subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
-                    from pypdf import PdfReader
+                    PdfReader = import_pypdf()
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"PDF parsing package pypdf not available: {e}")
                 reader = PdfReader(fp)
                 for page in reader.pages:
                     txt = (page.extract_text() or "").strip()
@@ -1485,17 +1519,9 @@ async def parse_medical_report_pdf_images_llm(images_data: list) -> Dict[str, An
 
 async def parse_medical_report_pdf(file_path: Path) -> Dict[str, Any]:
     try:
-        from pypdf import PdfReader
-    except ImportError:
-        import subprocess
-        import sys
-        print("[PDF Setup] Installing pypdf package dynamically...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
-            from pypdf import PdfReader
-        except Exception as e:
-            print(f"[PDF Setup] Auto-installation of pypdf failed: {e}")
-            raise HTTPException(status_code=500, detail=f"PDF parsing package pypdf not available: {e}")
+        PdfReader = import_pypdf()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF parsing package pypdf not available: {e}")
 
     try:
         reader = PdfReader(file_path)
