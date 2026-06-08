@@ -47,6 +47,10 @@ class _CaptureScreenState extends State<CaptureScreen>
     super.dispose();
   }
 
+  /// Picks report images from either the system [source] gallery or cameras.
+  ///
+  /// Utilizes the native document scanner plugin where possible. Falls back to a 
+  /// custom camera view controller on desktop platforms or on device capability issues.
   Future<void> _pickImage(ImageSource source) async {
     try {
       if (source == ImageSource.gallery) {
@@ -101,6 +105,9 @@ class _CaptureScreenState extends State<CaptureScreen>
     }
   }
 
+  /// Triggers the system file picker to select a local PDF report.
+  ///
+  /// Restricts selection to files ending in the `.pdf` extension.
   Future<void> _pickPDF() async {
     try {
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -132,6 +139,16 @@ class _CaptureScreenState extends State<CaptureScreen>
     setState(() => _selectedImages.clear());
   }
 
+  /// Launches the OCR and parsing pipelines for selected files.
+  ///
+  /// Executed in three modes depending on state settings and extensions:
+  /// 1. PDF Mode: directly posts the PDF payload.
+  /// 2. CamScanner Enhanced Mode: calls the API to preprocess each image individually 
+  ///    before submitting the processed absolute paths.
+  /// 3. Raw OCR Mode: posts raw image files directly.
+  /// 
+  /// Handles error responses, duplicates, name/gender/identity mismatches, and navigates
+  /// to the verification screen upon successful completion.
   Future<void> _processImages() async {
     if (_selectedImages.isEmpty) return;
 

@@ -82,6 +82,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     }
   }
 
+  /// Initializes the device's back camera.
+  ///
+  /// Requests device camera lists, filters for the main rear lens, configures 
+  /// high-resolution preview modes without audio, and applies flash defaults.
   Future<void> _initializeCamera() async {
     try {
       _cameras = await availableCameras();
@@ -166,6 +170,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     }
   }
 
+  /// Triggers shutter capture to take a photo.
+  ///
+  /// Executes a visual white flash overlay animation on top of the preview window
+  /// and pops the captured [XFile] to the calling screen.
   Future<void> _capturePhoto() async {
     if (_controller == null || !_isInitialized || _isTakingPicture) return;
 
@@ -199,6 +207,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     }
   }
 
+  /// Manages focus and exposure properties on manual screen tap.
+  ///
+  /// Calculates tap points normalized to [0.0, 1.0] relative to box layout dimensions 
+  /// and applies focus/exposure targets to the controller. Shows a focus ring UI.
   Future<void> _handleTapToFocus(TapDownDetails details) async {
     if (_controller == null || !_isInitialized) return;
 

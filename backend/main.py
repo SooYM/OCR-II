@@ -42,6 +42,14 @@ except ImportError:
     HAS_GCP = False
 
 def import_pypdf():
+    """
+    Dynamically imports the pypdf library's PdfReader.
+    If the package is not installed, it attempts to dynamically run pip install
+    within the target virtual environment or local dependency directory.
+    
+    Returns:
+        The imported PdfReader class.
+    """
     try:
         from pypdf import PdfReader
         return PdfReader
@@ -506,7 +514,24 @@ def encode_image(image_path: Path, do_upscale: bool = True) -> str:
     return b64
 
 async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
-    """Uses OpenAI Vision to parse an image directly into structured JSON by splitting it into halves using content-aware row-gap detection."""
+    """
+    Uses OpenAI Vision API to parse a report image into a structured JSON dictionary.
+    
+    Processing Steps:
+    1. Check if the file is a PDF. If so, route to `parse_medical_report_pdf`.
+    2. Split the image vertically into top and bottom halves using content-aware 
+       gap detection to preserve high readability for small-font text grids.
+    3. Construct a detailed, dynamic prompt targeting both demographic metadata
+       and clinical staging biomarker keys from the staging medical records schema.
+    4. Base64 encode the split images and dispatch them to the OpenAI Vision API.
+    5. Clean and normalize the response JSON via `normalize_structured_data`.
+    
+    Args:
+        file_path: Path to the input image file.
+        
+    Returns:
+        A normalized dictionary of extracted biomarkers and metadata.
+    """
     if file_path.suffix.lower() == ".pdf":
         return await parse_medical_report_pdf(file_path)
 
@@ -1164,7 +1189,23 @@ def backend_autocorrect_typo(val_str: str) -> str:
     return trimmed
 
 def normalize_structured_data(data: dict) -> dict:
-    """Ensure all required keys exist and return a structure friendly to the Flutter UI."""
+    """
+    Normalizes a flat JSON dictionary extracted from reports into a standard schema structure.
+    
+    Functions Performed:
+    1. Maps demographic variations (e.g. 'patient_id', 'sample_id', 'hospital_name').
+    2. Robustly extracts date and time (standardizes dates to YYYY-MM-DD and time to 24h format).
+    3. Normalizes gender keywords to standard "Male" or "Female".
+    4. Automatically cleans up common qualitative typos (e.g., standardizing 'nege' -> 'Negative').
+    5. Formats the data structure into a list of results suitable for the Flutter frontend, 
+       extracting values from units to align with dictionary definitions.
+       
+    Args:
+        data: The raw dictionary returned from the LLM extraction.
+        
+    Returns:
+        A cleaned, standardized dictionary containing results and metadata.
+    """
     # Robustly handle different possible input keys for collected and time
     collected_val = str(data.get("collected", data.get("date", ""))).strip()
     time_val = str(data.get("time", "")).strip()
@@ -1518,6 +1559,22 @@ async def parse_medical_report_pdf_images_llm(images_data: list) -> Dict[str, An
     return normalize_structured_data(extracted_data)
 
 async def parse_medical_report_pdf(file_path: Path) -> Dict[str, Any]:
+    """
+    Processes a PDF medical report by determining whether it is native-text or scanned.
+    
+    Algorithm:
+    1. Extracts text from each page.
+    2. If the total extracted text exceeds 150 characters, it classifies the PDF as 
+       text-based and uses the faster and cheaper text-only completion (`parse_medical_report_pdf_text_llm`).
+    3. If minimal or no text is extracted, it falls back to extracting the embedded 
+       scanned page images and running Vision-based OCR (`parse_medical_report_pdf_images_llm`).
+       
+    Args:
+        file_path: Path to the PDF document.
+        
+    Returns:
+        A normalized dictionary of extracted biomarkers.
+    """
     try:
         PdfReader = import_pypdf()
     except Exception as e:
@@ -1600,7 +1657,22 @@ async def update_report_in_db(report_id: str, update_dict: dict):
         conn.close()
 
 async def mark_report_sent(report_id: str):
-    """Mark a report as verified and sent."""
+    """
+    Finalizes the verification of a report and commits its measurements to the databases.
+    
+    Workflow:
+    1. Updates the verification status of the report to 'sent' and 'verified' (user_verified=1).
+    2. Filters and sanitizes the structured biomarkers against the DB schema datatypes.
+    3. Deletes any pre-existing medical record for this report to prevent constraint conflicts.
+    4. Executes a resilient insertion loop (up to 15 attempts) designed to recover from:
+       - Column definition changes (PGRST204 errors): automatically strips obsolete columns.
+       - Cast exceptions (22P02 errors): parses the exact Postgres error to locate the bad
+         value, attempts numeric recovery, or nullifies the column value.
+       - Format issues: applies aggressive numeric regex extraction as a final fallback.
+       
+    Args:
+        report_id: Alphanumeric UUID representing the verified report.
+    """
     report = await get_report_by_id(report_id)
     if not report:
         raise Exception("Report not found")

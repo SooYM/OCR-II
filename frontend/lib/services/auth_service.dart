@@ -27,6 +27,8 @@ class AuthService {
 
   // ─── Init (load from disk) ─────────────────────────────────────────────────
 
+  /// Initializes authentication state by loading cached JWT token and user profile
+  /// from local storage.
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString(_tokenKey);
@@ -38,6 +40,9 @@ class AuthService {
 
   // ─── Register ──────────────────────────────────────────────────────────────
 
+  /// Registers a new user account on the backend.
+  ///
+  /// Persists the returned JWT token and user profile parameters locally.
   static Future<Map<String, dynamic>> register(String email, String name, String password, String gender, String dob, String icNumber) async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/register'),
@@ -64,6 +69,9 @@ class AuthService {
 
   // ─── Login ─────────────────────────────────────────────────────────────────
 
+  /// Authenticates user credentials with the backend API.
+  ///
+  /// Caches the JWT bearer token and registered profile demographics locally.
   static Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/login'),
@@ -83,6 +91,10 @@ class AuthService {
 
   // ─── Validate Token ────────────────────────────────────────────────────────
 
+  /// Validates the local JWT token against the backend profile endpoint.
+  ///
+  /// Refreshes cached user demographics (DOB, NRIC, gender) if the token is valid.
+  /// Automatically logouts the user locally if the verification fails.
   static Future<bool> validateToken() async {
     if (_token == null) return false;
     try {
@@ -108,6 +120,7 @@ class AuthService {
 
   // ─── Logout ────────────────────────────────────────────────────────────────
 
+  /// Logs out the user by clearing the local session variables and persistent storage.
   static Future<void> logout() async {
     _token = null;
     _currentUser = null;
@@ -116,7 +129,9 @@ class AuthService {
     await prefs.remove(_userKey);
   }
 
-  /// Update user name and email.
+  /// Updates user profile settings (name and email) on the server.
+  ///
+  /// Synchronizes the local storage variables with the updated profile response.
   static Future<Map<String, dynamic>> updateProfile(String name, String email) async {
     final response = await http.put(
       Uri.parse('${ApiService.baseUrl}/api/auth/profile'),

@@ -59,8 +59,10 @@ class ApiService {
 
   // ─── Upload & Process ──────────────────────────────────────────────────────
 
-  /// Upload an image to the backend for OCR + LLM processing.
-  /// Returns a MedicalReport with structured data.
+  /// Uploads a single image report to the backend for OCR and LLM extraction.
+  ///
+  /// Takes an [imageFile] and optional [force] bypass parameter (to override 
+  /// name/gender mismatches). Returns a [MedicalReport] with structured data.
   static Future<MedicalReport> uploadReport(XFile imageFile, {bool force = false}) async {
     final uri = Uri.parse('$_baseUrl/api/upload${force ? "?force=true" : ""}');
     final request = http.MultipartRequest('POST', uri);
@@ -92,8 +94,10 @@ class ApiService {
 
   // ─── Upload Multiple Pages ─────────────────────────────────────────────────
 
-  /// Upload multiple page images for a single report.
-  /// The backend merges all pages via LLM into one unified report.
+  /// Uploads multiple page images belonging to a single medical report.
+  ///
+  /// The backend processes each page, performs content-aware splitting, 
+  /// and merges all extracted parameters via LLM into a unified [MedicalReport].
   static Future<MedicalReport> uploadMultipleReports(List<XFile> imageFiles, {bool force = false}) async {
     if (imageFiles.isEmpty) throw ApiException('No images provided', 400);
 
@@ -132,8 +136,11 @@ class ApiService {
 
   // ─── Scanner Preprocessing ──────────────────────────────────────────────────
 
-  /// Run document scanner preprocessing on an image file.
-  /// Returns a map with processed_image_url and filepath.
+  /// Runs the backend CamScanner-like edge detection and shadow-removal pipeline.
+  ///
+  /// Preprocesses [imageFile] under color or black-and-white [mode]. 
+  /// Returns a map containing the web-accessible URL and absolute server filepath 
+  /// of the preprocessed image asset.
   static Future<Map<String, dynamic>> preprocessImage(XFile imageFile, {String mode = 'color'}) async {
     final uri = Uri.parse('$_baseUrl/api/scanner/preprocess?mode=$mode');
     final request = http.MultipartRequest('POST', uri);
@@ -163,7 +170,8 @@ class ApiService {
     }
   }
 
-  /// Run OCR + LLM parsing on files already preprocessed on the backend.
+  /// Dispatches OCR and extraction requests for files already processed and 
+  /// saved on the server (e.g., from the manual edge-cropping view).
   static Future<MedicalReport> uploadPreprocessedReports(List<String> filepaths, List<String> filenames, {bool force = false}) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/upload-multi/preprocessed${force ? "?force=true" : ""}'),
@@ -202,7 +210,9 @@ class ApiService {
 
   // ─── Update Report ─────────────────────────────────────────────────────────
 
-  /// Update structured data for a report (tester corrections).
+  /// Updates the corrected structured medical data for a report.
+  ///
+  /// Used when saving user modifications on the verification screen.
   static Future<void> updateReport(String id, StructuredData data, {bool force = false}) async {
     final response = await http.put(
       Uri.parse('$_baseUrl/api/reports/$id${force ? "?force=true" : ""}'),
@@ -216,7 +226,10 @@ class ApiService {
 
   // ─── Send Report ──────────────────────────────────────────────────────────
 
-  /// Mark report as verified and sent — the final step.
+  /// Finalizes and commits the verified report.
+  ///
+  /// This triggers the backend database persistence routine to migrate the 
+  /// structured parameters into the primary staging tables.
   static Future<void> sendReport(String id) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/reports/$id/send'),

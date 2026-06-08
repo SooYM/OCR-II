@@ -78,6 +78,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
     }
   }
 
+  /// Autocorrects commonly misspelled qualitative test values (e.g. Negative, Positive, Trace, Clear).
+  /// Matches case-insensitively using prefix patterns to ensure clean DB inputs.
   String _autoCorrectTypo(String input) {
     final trimmed = input.trim();
     final lower = trimmed.toLowerCase();
@@ -113,7 +115,8 @@ class _VerifyScreenState extends State<VerifyScreen> {
   @override
   void initState() {
     super.initState();
-    // Copy structured data so we can edit it without modifying the original object reference
+    // Creates a deep copy of the report's structured data so that edits are non-destructive
+    // and can be fully discarded if the user decides to abort changes.
     _data = widget.report.structuredData != null
         ? StructuredData.fromJson(widget.report.structuredData!.toJson())
         : StructuredData(
@@ -174,7 +177,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
     _initialHasChanges = _hasChanges;
   }
 
-  /// Run each test result through the biomarker dictionary matcher.
+  /// Matches extracted test items against the standardized Medical Dictionary.
+  /// 
+  /// Automatically resolves raw OCR test names to standard naming schemas, cleans unit variations
+  /// based on allowed values, and sets gender-specific normal reference ranges.
   void _normalizeResults() {
     for (int i = 0; i < _data.results.length; i++) {
       final result = _data.results[i];
@@ -393,6 +399,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
     return null;
   }
 
+  /// Validates the patient identity extracted from the report against active user credentials.
+  ///
+  /// Performs three strict verification checks:
+  /// 1. Compares raw alphanumeric NRIC/Passport ID digits.
+  /// 2. Compares full Date of Birth parameters.
+  /// 3. Cross-references the DOB encoded in the user's NRIC format with the report's details.
   bool _checkIdentityMatch() {
     if (AuthService.currentUser == null) return true;
     final userDobStr = AuthService.currentUser!['dob'] as String?;
@@ -471,6 +483,14 @@ class _VerifyScreenState extends State<VerifyScreen> {
     }
   }
 
+  /// Finalizes formatting and submits the verified medical report to the backend.
+  ///
+  /// Coordinates the verification sequence:
+  /// 1. Normalizes collected dates (must match DD/MM/YYYY) and times (24h clock).
+  /// 2. Applies automatic qualitative spelling corrections to biomarker values.
+  /// 3. Runs name, gender, and identity matches. Shows warning dialogs if any fail.
+  /// 4. Prompts the user with a confirmation dialog (Save vs. Discard/Cancel).
+  /// 5. Dispatches updates and finalization calls to the API Service.
   Future<void> _handleSend() async {
     if (_data.date == null || _data.date!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -691,9 +711,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
     );
   }
 
-  /// Reusable bypass confirmation flow for verify screen mismatch dialogs.
-  /// Shows justification + first confirmation, then a second "Are you sure?" dialog.
-  /// On double-confirm, sets _forceSubmit = true and retries _handleSend.
+  /// Renders a two-step warning bypass modal for verification mismatch scenarios.
+  ///
+  /// Displays a detailed warning of the mismatch and requires two consecutive positive 
+  /// confirmations from the user to set [_forceSubmit] to true and bypass check restrictions.
   void _showBypassDialog(String title, IconData icon, Color iconColor, String justification) {
     showDialog(
       context: context,

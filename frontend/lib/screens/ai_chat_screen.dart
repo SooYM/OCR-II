@@ -36,6 +36,10 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
     _loadSessions();
   }
 
+  /// Initializes a new chat session by fetching the patient's global health summary.
+  ///
+  /// Clears active message states and inserts the layman medical overview as the 
+  /// initial assistant message.
   Future<void> _initNewChat() async {
     setState(() {
       _messages.clear();
@@ -67,6 +71,9 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
     }
   }
 
+  /// Queries the API for all historical chat sessions belonging to the user.
+  ///
+  /// Auto-restores the last active chat thread if it was updated within the last 4 hours.
   Future<void> _loadSessions() async {
     setState(() => _isLoadingHistory = true);
     try {
@@ -88,6 +95,7 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
     }
   }
 
+  /// Retrieves and displays the message history of a specific [session] ID.
   Future<void> _loadSessionMessages(ChatSession session) async {
     setState(() {
       _currentSessionId = session.id;
@@ -198,6 +206,15 @@ class AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixi
     super.dispose();
   }
 
+  /// Handles sending the user's message and streams the AI clinical response.
+  ///
+  /// Performs:
+  /// 1. Updates UI with user query and sets loading state.
+  /// 2. Resolves active dates filter parameters.
+  /// 3. Lazily initializes a database chat session if none exists.
+  /// 4. Subscribes to backend SSE stream (`analyzeHealthTrendsStream`) and appends 
+  ///    text tokens in real-time.
+  /// 5. Automatically triggers page down scroll sequences.
   Future<void> _sendMessage() async {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || _isStreaming) return;
