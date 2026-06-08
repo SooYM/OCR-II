@@ -11,6 +11,7 @@ import '../models/report_model.dart';
 import 'verify_screen.dart';
 import 'camera_capture_screen.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import 'package:file_picker/file_picker.dart';
 
 /// Screen 1: Capture or pick medical report images (supports multi-page).
 /// After processing, navigates to VerifyScreen with extracted data.
@@ -100,6 +101,29 @@ class _CaptureScreenState extends State<CaptureScreen>
     }
   }
 
+  Future<void> _pickPDF() async {
+    try {
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (result != null && result.files.single.path != null) {
+        final path = result.files.single.path!;
+        final name = result.files.single.name;
+        setState(() {
+          _selectedImages.clear();
+          _selectedImages.add(XFile(path, name: name));
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Theme.of(context).colorScheme.error, content: Text('Error picking PDF: $e')),
+        );
+      }
+    }
+  }
+
   void _removeImage(int index) {
     setState(() => _selectedImages.removeAt(index));
   }
@@ -119,8 +143,15 @@ class _CaptureScreenState extends State<CaptureScreen>
 
     try {
       MedicalReport report;
+      final hasPdf = _selectedImages.any((file) => file.path.toLowerCase().endsWith('.pdf'));
 
-      if (_enhanceScan) {
+      if (hasPdf) {
+        setState(() {
+          _statusMessage = 'Extracting medical data from PDF...';
+          _progress = 0.50;
+        });
+        report = await ApiService.uploadMultipleReports(_selectedImages);
+      } else if (_enhanceScan) {
         final List<String> filepaths = [];
         final List<String> filenames = [];
         bool preprocessFailed = false;
@@ -511,13 +542,23 @@ class _CaptureScreenState extends State<CaptureScreen>
                   isShort: isShort,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: _buildModeCard(
                   icon: Icons.photo_library_rounded,
                   label: 'Gallery',
                   color: Theme.of(context).colorScheme.secondary,
                   onTap: () => _pickImage(ImageSource.gallery),
+                  isShort: isShort,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildModeCard(
+                  icon: Icons.picture_as_pdf_rounded,
+                  label: 'PDF',
+                  color: Colors.redAccent,
+                  onTap: _pickPDF,
                   isShort: isShort,
                 ),
               ),
@@ -648,13 +689,23 @@ class _CaptureScreenState extends State<CaptureScreen>
                         isShort: false,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _buildModeCard(
                         icon: Icons.photo_library_rounded,
                         label: 'Gallery',
                         color: Theme.of(context).colorScheme.secondary,
                         onTap: () => _pickImage(ImageSource.gallery),
+                        isShort: false,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildModeCard(
+                        icon: Icons.picture_as_pdf_rounded,
+                        label: 'PDF',
+                        color: Colors.redAccent,
+                        onTap: _pickPDF,
                         isShort: false,
                       ),
                     ),
@@ -693,7 +744,14 @@ class _CaptureScreenState extends State<CaptureScreen>
           children: [
             Icon(icon, color: color, size: isShort ? 24 : 32),
             SizedBox(height: isShort ? 6 : 8),
-            Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: isShort ? 11 : 13)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: isShort ? 11 : 13),
+                maxLines: 1,
+              ),
+            ),
           ],
         ),
       ),
@@ -738,6 +796,8 @@ class _CaptureScreenState extends State<CaptureScreen>
   }
 
   Widget _buildImageItem(int index, {required bool isGrid}) {
+    final file = _selectedImages[index];
+    final isPdf = file.path.toLowerCase().endsWith('.pdf');
     return Container(
       margin: EdgeInsets.only(bottom: isGrid ? 0 : 16),
       decoration: BoxDecoration(
@@ -753,10 +813,35 @@ class _CaptureScreenState extends State<CaptureScreen>
           child: Stack(
             children: [
               Positioned.fill(
-                child: Image.file(
-                  File(_selectedImages[index].path),
-                  fit: BoxFit.cover,
-                ),
+                child: isPdf
+                    ? Container(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.picture_as_pdf_rounded, size: 48, color: Colors.redAccent),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              child: Text(
+                                file.name,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Image.file(
+                        File(file.path),
+                        fit: BoxFit.cover,
+                      ),
               ),
               Positioned(
                 top: 0, left: 0, right: 0,

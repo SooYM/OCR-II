@@ -470,6 +470,9 @@ def encode_image(image_path: Path, do_upscale: bool = True) -> str:
 
 async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
     """Uses OpenAI Vision to parse an image directly into structured JSON by splitting it into halves using content-aware row-gap detection."""
+    if file_path.suffix.lower() == ".pdf":
+        return await parse_medical_report_pdf(file_path)
+
     split_paths = split_image_at_gap(file_path)
     image_blocks = []
 
@@ -612,32 +615,91 @@ async def parse_medical_report_llm(file_path: Path) -> Dict[str, Any]:
 async def parse_medical_report_multi_llm(file_paths: TypingList[Path]) -> Dict[str, Any]:
     """Uses OpenAI Vision to parse MULTIPLE page images into a single structured JSON.
     Each page is split into halves using content-aware row-gap detection for better accuracy."""
-    # Build image content blocks for all pages, splitting each page into halves
+    # Check if there is any PDF in the files
+    has_pdf = any(fp.suffix.lower() == ".pdf" for fp in file_paths)
     image_blocks = []
     all_split_paths = []  # Track split files for cleanup
     total_sections = 0
-    
-    for i, fp in enumerate(file_paths):
-        # Split each page into halves using content-aware gap detection
-        page_splits = split_image_at_gap(fp)
-        all_split_paths.extend([sp for sp in page_splits if sp != fp])
-        
-        for j, sp in enumerate(page_splits):
-            section_label = f"Page {i+1}"
-            if len(page_splits) > 1:
-                section_label += f" ({'top half' if j == 0 else 'bottom half'})"
-            
-            b64 = encode_image(sp)
-            # Add a text label before each image so the LLM knows which section it is
+
+    if has_pdf:
+        combined_texts = []
+        combined_images = []
+        for fp in file_paths:
+            if fp.suffix.lower() == ".pdf":
+                try:
+                    from pypdf import PdfReader
+                except ImportError:
+                    import subprocess
+                    import sys
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
+                    from pypdf import PdfReader
+                reader = PdfReader(fp)
+                for page in reader.pages:
+                    txt = (page.extract_text() or "").strip()
+                    if len(txt) > 150:
+                        combined_texts.append(txt)
+                    if hasattr(page, "images"):
+                        for img in page.images:
+                            try:
+                                combined_images.append(img.data)
+                            except Exception:
+                                pass
+            else:
+                combined_images.append(fp)
+
+        if combined_texts and not combined_images:
+            merged_text = "\n\n".join(combined_texts)
+            return await parse_medical_report_pdf_text_llm(merged_text)
+
+        # Build image blocks for Vision
+        if combined_texts:
+            text_summary = "\n\n".join(combined_texts)
             image_blocks.append({
                 "type": "text",
-                "text": f"--- {section_label} ---"
+                "text": f"--- Extracted Text Content from PDF pages ---\n{text_summary}"
             })
-            image_blocks.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
-            })
-            total_sections += 1
+
+        for item in combined_images:
+            if isinstance(item, Path):
+                page_splits = split_image_at_gap(item)
+                all_split_paths.extend([sp for sp in page_splits if sp != item])
+                for sp in page_splits:
+                    b64 = encode_image(sp)
+                    image_blocks.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                    })
+                    total_sections += 1
+            else:
+                b64 = base64.b64encode(item).decode('utf-8')
+                image_blocks.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                })
+                total_sections += 1
+    else:
+        # Build image content blocks for all pages, splitting each page into halves
+        for i, fp in enumerate(file_paths):
+            # Split each page into halves using content-aware gap detection
+            page_splits = split_image_at_gap(fp)
+            all_split_paths.extend([sp for sp in page_splits if sp != fp])
+            
+            for j, sp in enumerate(page_splits):
+                section_label = f"Page {i+1}"
+                if len(page_splits) > 1:
+                    section_label += f" ({'top half' if j == 0 else 'bottom half'})"
+                
+                b64 = encode_image(sp)
+                # Add a text label before each image so the LLM knows which section it is
+                image_blocks.append({
+                    "type": "text",
+                    "text": f"--- {section_label} ---"
+                })
+                image_blocks.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                })
+                total_sections += 1
 
     # Dynamically build the prompt based on the schema
     # Define explicit metadata keys with descriptions to ensure high accuracy and no confusion
@@ -1254,6 +1316,217 @@ def get_clean_flat_data(data: dict) -> dict:
                 flat_data[k] = None
 
     return flat_data
+
+async def parse_medical_report_pdf_text_llm(text: str) -> Dict[str, Any]:
+    # We will build the metadata list and biomarker keys
+    metadata_descriptions = [
+        "patient_name (The full name of the patient as written on the report. If none is found, use '')",
+        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
+        "labreference (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in report_reference. If none is found, use '')",
+        "report_reference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in labreference. If none is found, use '')",
+        "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
+        "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
+        "age (The age of the patient as written on the report, e.g. '45' or '45 years'. If none is found, use '')",
+        "dob (The Date of Birth of the patient as written on the report, e.g. '1980-05-15' or '15/05/1980'. If none is found, use '')",
+        "ic_number (The Identity Card / NRIC / passport number of the patient as written on the report, e.g. '850512-14-5678' or similar NRIC/Passport. If none is found, use '')",
+        "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
+        "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
+        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')",
+        "is_medical_report (Either 'yes' or 'no'. Set to 'yes' if the document is a medical laboratory report, blood test report, urine test report, or clinical/health test report containing biometric measurements/markers. Set to 'no' if it is a general document, receipt, menu, certificate, recipe, or other non-medical document.)"
+    ]
+    
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number", "is_medical_report"]
+    biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
+    
+    all_keys = metadata_descriptions + biomarker_keys
+    keys_list = "\n".join([f"- {k}" for k in all_keys])
+
+    prompt = f"""
+    You are an expert medical data extraction assistant.
+    Extract medical data directly from the text of a medical lab report and return it as a JSON object.
+    Ensure you extract ALL test items accurately and do not miss any rows.
+    
+    The output MUST exactly match the following JSON keys. 
+    If a value is missing in the report, use an empty string "". 
+    If a unit is present on the report for a test, INCLUDE the unit in the string alongside the value (e.g., "5.17 mmol/L", "150 g/L").
+    DO NOT use null or omit keys.
+    
+    Fields to extract (all as strings):
+    {keys_list}
+
+    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND report_reference:
+    There are THREE separate identifier fields. Read the label on the report carefully before assigning:
+    1. 'medid' = PATIENT identifier. Labels: 'Patient ID', 'MRN', 'NRIC', 'Passport No', 'Patient Ref'.
+    2. 'labreference' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
+    3. 'report_reference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
+
+    CRITICAL WARNING ON TIMESTAMPS:
+    - Map the 'Collected' time to the 'time' key.
+    - Map the 'Reported' or 'Printed' time to the 'reported_time' key.
+    - If only one time exists, map to both keys.
+
+    IMPORTANT MAPPING RULES & EXAMPLES:
+    1. Standardize units in keys: e.g., if you see 'g/dL', map it to keys ending in '_g_dl'.
+    2. Do NOT convert units yourself. Extract the EXACT unit written on the report.
+    3. Map common names: 
+       - 'WBC' -> 'wbc_cells_ul'
+       - 'RBC' -> 'rbc_count_mil_ul'
+       - 'HGB' or 'Hemoglobin' -> 'hemoglobin_g_dl'
+       - 'Cholesterol' -> 'total_cholesterol_mg_dl'
+    4. EDGE CASES & SYMBOLS:
+       - If a result has a less-than/greater-than sign, include it: "< 0.3", "> 100".
+       - If a result is a textual qualitative value, extract it exactly as written.
+
+    EXTRACTED TEXT CONTENT:
+    {text}
+
+    Return ONLY the JSON object. Do not wrap in markdown tags.
+    """
+
+    response = llm_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You are an expert medical data extraction assistant. Return JSON only."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"}
+    )
+    content = response.choices[0].message.content
+    print(f"--- EXTRACTED JSON FROM PDF TEXT ---\n{content}\n------------------------------------")
+    extracted_data = json.loads(content)
+    return normalize_structured_data(extracted_data)
+
+async def parse_medical_report_pdf_images_llm(images_data: list) -> Dict[str, Any]:
+    image_blocks = []
+    for i, img_bytes in enumerate(images_data):
+        b64 = base64.b64encode(img_bytes).decode('utf-8')
+        image_blocks.append({
+            "type": "text",
+            "text": f"--- Page Image {i+1} ---"
+        })
+        image_blocks.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+        })
+
+    metadata_descriptions = [
+        "patient_name (The full name of the patient as written on the report. If none is found, use '')",
+        "medid (The Patient ID / Medical Record Number / NRIC / Passport / MRN / Patient Reference No. This is the unique identifier for the PATIENT themselves, NOT the report or lab sample. If none is found, use '')",
+        "labreference (The unique ID for the physical LAB SAMPLE / SPECIMEN that was tested. Typical labels on the report: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'. This identifies the tube/container of blood or urine. Do NOT put the Report No / Accession No / Reference No here — those belong in report_reference. If none is found, use '')",
+        "report_reference (The unique ID for this specific REPORT DOCUMENT. Typical labels on the report: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'. This identifies the printed report sheet itself. Do NOT put the Lab No / Lab Number / Specimen No here — those belong in labreference. If none is found, use '')",
+        "collected (The date when the sample was collected. If the sample collection date is not available on the report, USE the report printed/reported/completed date. This is the main date for the report. Format: YYYY-MM-DD or DD/MM/YYYY. If none is found, use '')",
+        "time (The time when the sample was collected/drawn (often labeled as 'Collected', 'Drawn', 'Collection Time', 'Date & Time Col'). This is the main test time. If no collection time is explicitly available, USE the reported/printed time here. Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "reported_time (The time when the report was printed, completed, or validated (often labeled as 'Reported', 'Printed', 'Completed', 'Approved Date/Time'). Format: HH:MM or HH:MM:SS. If none is found, use '')",
+        "gender (The patient's gender/sex, e.g. 'Male' or 'Female'. If none is found, use '')",
+        "age (The age of the patient as written on the report, e.g. '45' or '45 years'. If none is found, use '')",
+        "dob (The Date of Birth of the patient as written on the report, e.g. '1980-05-15' or '15/05/1980'. If none is found, use '')",
+        "ic_number (The Identity Card / NRIC / passport number of the patient as written on the report, e.g. '850512-14-5678' or similar NRIC/Passport. If none is found, use '')",
+        "test_name (The overall name of the medical/blood test, e.g. 'Full Blood Count', 'Liver Function Test', 'Renal Profile', 'Urine Test'. Generate a descriptive name if not explicitly written)",
+        "doctor_name (The name of the referring doctor, e.g. 'Dr. John Doe'. If none is found, use '')",
+        "hospital_name (The name of the hospital, clinic, or laboratory where the test was performed. If none is found, use '')",
+        "notes (Any general comments, remarks, or notes written on the report. If none is found, use '')",
+        "is_medical_report (Either 'yes' or 'no'. Set to 'yes' if the document is a medical laboratory report, blood test report, urine test report, or clinical/health test report containing biometric measurements/markers. Set to 'no' if it is a general document, receipt, menu, certificate, recipe, or other non-medical document.)"
+    ]
+    
+    metadata_keys_to_exclude = ["patient_name", "medid", "labreference", "report_reference", "collected", "time", "reported_time", "gender", "lab", "notes", "age", "dob", "ic_number", "is_medical_report"]
+    biomarker_keys = [k for k in STAGING_SCHEMA_KEYS if not k.startswith("original_") and k not in metadata_keys_to_exclude]
+    
+    all_keys = metadata_descriptions + biomarker_keys
+    keys_list = "\n".join([f"- {k}" for k in all_keys])
+
+    prompt = f"""
+    You are given image section(s) of a medical report extracted from a PDF.
+    Extract the medical data and return it as a JSON object.
+    Ensure you extract ALL test items accurately and do not miss any rows.
+    
+    The output MUST exactly match the following JSON keys. 
+    If a value is missing in the report, use an empty string "". 
+    If a unit is present on the report for a test, INCLUDE the unit in the string alongside the value (e.g., "5.17 mmol/L", "150 g/L").
+    DO NOT use null or omit keys.
+    
+    Fields to extract (all as strings):
+    {keys_list}
+
+    CRITICAL WARNING ON IDENTIFIERS — DO NOT SWAP labreference AND report_reference:
+    There are THREE separate identifier fields. Read the label on the report carefully before assigning:
+    1. 'medid' = PATIENT identifier. Labels: 'Patient ID', 'MRN', 'NRIC', 'Passport No', 'Patient Ref'.
+    2. 'labreference' = LAB SAMPLE/SPECIMEN identifier. Labels: 'Lab No', 'Lab Number', 'Specimen No', 'Specimen ID', 'Sample ID', 'Sample No'.
+    3. 'report_reference' = REPORT/DOCUMENT identifier. Labels: 'Report No', 'Accession No', 'Episode No', 'Reference No', 'Ref No'.
+
+    CRITICAL WARNING ON TIMESTAMPS:
+    - Map the 'Collected' time to the 'time' key.
+    - Map the 'Reported' or 'Printed' time to the 'reported_time' key.
+    - If only one time exists, map to both keys.
+
+    Return ONLY the JSON object. Do not wrap in markdown tags.
+    """
+
+    response = llm_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You are an expert medical data extraction assistant. Return JSON only."},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    *image_blocks
+                ]
+            }
+        ],
+        response_format={"type": "json_object"}
+    )
+    content = response.choices[0].message.content
+    print(f"--- EXTRACTED JSON FROM PDF IMAGES ---\n{content}\n--------------------------------------")
+    extracted_data = json.loads(content)
+    return normalize_structured_data(extracted_data)
+
+async def parse_medical_report_pdf(file_path: Path) -> Dict[str, Any]:
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        import subprocess
+        import sys
+        print("[PDF Setup] Installing pypdf package dynamically...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
+            from pypdf import PdfReader
+        except Exception as e:
+            print(f"[PDF Setup] Auto-installation of pypdf failed: {e}")
+            raise HTTPException(status_code=500, detail=f"PDF parsing package pypdf not available: {e}")
+
+    try:
+        reader = PdfReader(file_path)
+        extracted_text = ""
+        images_data = []
+
+        for i, page in enumerate(reader.pages):
+            text = page.extract_text()
+            if text:
+                extracted_text += f"\n--- Page {i+1} ---\n{text}"
+            
+            # Extract page images
+            if hasattr(page, "images"):
+                for img in page.images:
+                    try:
+                        images_data.append(img.data)
+                    except Exception as e:
+                        print(f"[PDF Extract] Error extracting image from page {i+1}: {e}")
+
+        clean_text = extracted_text.strip()
+        if len(clean_text) > 150:
+            print(f"[PDF Process] Text-based PDF detected ({len(clean_text)} chars). Using text completion.")
+            return await parse_medical_report_pdf_text_llm(clean_text)
+        elif images_data:
+            print(f"[PDF Process] Scanned PDF detected. Extracted {len(images_data)} images. Using Vision completion.")
+            return await parse_medical_report_pdf_images_llm(images_data)
+        else:
+            raise ValueError("PDF contains no readable text and no extractable images.")
+    except Exception as e:
+        print(f"[PDF Process] Error parsing PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse PDF document: {str(e)}")
 
 # ─── Storage Helpers ───────────────────────────────────────────────────────
 
@@ -2387,22 +2660,23 @@ async def generate_and_cache_health_summary(user_id: str) -> str:
     compiled_data = "\n\n".join(data_summary)
 
     prompt = f"""
-    You are an empathetic, warm, and highly professional clinical AI assistant. Your task is to provide a highly concise, information-dense, layman-friendly health summary for a patient based on their medical report history.
+    You are an empathetic, warm, and highly professional clinical AI assistant. Your task is to provide a detailed, comprehensive, layman-friendly health summary for a patient based on their medical report history.
 
     PATIENT MEDICAL HISTORY DATA:
     {compiled_data}
 
     YOUR TASKS:
-    1. SUMMARY: Provide a single direct sentence summarizing the overall health trajectory based on the latest data.
-    2. ABNORMAL BIOMARKERS & PHYSIOLOGICAL CORRELATIONS: Compactly identify biomarkers that are out of standard clinical reference ranges, stating their exact values. Explain in a single simple sentence how these out-of-range metrics physiologically connect (e.g. how lipid and glucose issues relate to metabolic energy).
-    3. 1-YEAR PREDICTION: Provide a concise, realistic, and constructive 1-year health prediction/outlook of the patient's status if they continue their current trajectory without changes (mentioning potential escalation risks or improvement pathways).
-    4. ACTIONABLE STEPS: Suggest exactly 2 simple, high-impact, and supportive lifestyle/dietary adjustments.
+    1. GENERAL HEALTH STATUS: Provide a detailed overview of the patient's current health status, summarizing key findings and the overall physiological trajectory.
+    2. LONGITUDINAL COMPARISONS: If there are multiple reports across different dates, compare the changes in key metrics (stating values on specific dates) to show trends.
+    3. DETAILED BIOMARKER ASSESSMENT: For any biomarkers that are out of standard reference ranges, state their exact values and what they mean. Explain how these out-of-range metrics physiologically connect (e.g. how lipid and glucose issues relate to metabolic energy or cardiovascular risk).
+    4. 1-YEAR HEALTH PREDICTION & RISKS: Provide a realistic, constructive 1-year health prediction outlining potential risks or improvements based on their current trajectory.
+    5. ACTIONABLE STEPS: Suggest exactly 3-4 simple, high-impact, supportive, and evidence-based lifestyle or dietary adjustments.
 
     CONSTRAINTS:
     - Tone/Language: Empathetic, supportive, and in simple layman terms. Use plain English; define any necessary medical terms instantly.
     - Style: Start directly with the analysis. STRICTLY avoid introductory sentences (like "Based on your reports...") or polite final remarks (like "Consult your doctor..."). 
-    - Formatting: Clean markdown. Use **bolding** for biomarker names and values/units. Use concise bullet points for scannability.
-    - Length: Word count MUST be between 130 to 220 words. Do not exceed this limit; it must fit compactly on a mobile dashboard screen while preserving all key clinical data points.
+    - Formatting: Clean markdown. Use clear section headers (e.g. "### Overall Trajectory", "### Biomarker Deep-Dive & Physiological Correlations", "### 1-Year Prediction & Risks", "### Actionable Steps"). Use **bolding** for biomarker names and values/units. Use lists for readability.
+    - Length: Maintain a word count between 300 to 500 words to ensure a thorough yet readable summary.
     - Do not include any HTML tags.
     """
 
