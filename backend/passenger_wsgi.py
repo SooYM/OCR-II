@@ -6,6 +6,13 @@ venv_python = os.path.join(os.path.dirname(__file__), 'venv', 'bin', 'python')
 if os.path.exists(venv_python) and sys.executable != venv_python:
     os.execv(venv_python, [venv_python] + sys.argv)
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env if present
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+
 # Ensure the backend directory is in python path
 sys.path.insert(0, os.path.dirname(__file__))
 
