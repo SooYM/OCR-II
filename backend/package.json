@@ -1,0 +1,10 @@
+{
+  "name": "medscan-backend-proxy",
+  "version": "1.0.0",
+  "description": "Node.js wrapper and proxy for Python FastAPI backend on Plesk",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {}
+}

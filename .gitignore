@@ -1,34 +1,80 @@
-# Python
+# ==========================================
+# MedScan Git Ignore Configuration
+# ==========================================
+
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.fleet/
+
+# Python & Virtual Environments
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Google Cloud
-service-account.json
-*.json
+# Flutter & Dart Build Artifacts
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+frontend/build/
+frontend/.dart_tool/
+frontend/.packages
+frontend/.pub-cache/
+frontend/.pub/
+frontend/analyze.txt
 
-# SQLite
+# Databases & Local Data Stores
 *.db
 *.db-journal
+*.sqlite
+*.sqlite3
 
-# Uploads
+# Uploads & Media Assets
 uploads/
+backend/uploads/
+*.png.tmp
+*.jpg.tmp
 
-# OS
-.DS_Store
+# Secrets & Service Accounts
+service-account.json
+*.pem
+*.key
+*.cert
 
-# Temporary, Scratch and Test Files
-test_*.py
-test_*.dart
+# Scratch & Temporary Testing Scripts
 scratch/
 untitled folder/
+test_*.py
+test_*.dart
 fix_dict.py
 update_converter.py
 update_units.py
@@ -38,6 +84,6 @@ supabase_filter_people.sql
 backend/populate_patricia_records.py
 backend/refresh_health_summaries.py
 
-# Deployment packages
+# Deployment Artifacts
 backend_deploy/
 backend_deploy.zip

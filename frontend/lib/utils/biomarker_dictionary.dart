@@ -1,14 +1,51 @@
-/// Standard biomarker data dictionary with fuzzy matching.
+/// Standard Clinical Biomarker Dictionary & Fuzzy Matching Engine.
+///
+/// This module provides a curated registry of 92+ clinical biomarkers across 14 categories,
+/// including standard keys, conventional and SI biological reference ranges, allowed units,
+/// aliases, and a hybrid Jaccard + word-overlap fuzzy search algorithm.
+///
+/// ### Simple Example:
+/// ```dart
+/// // Looking up a biomarker entry by standard database key
+/// final entry = BiomarkerDictionary.getEntryByKey('hemoglobin_g_dl');
+/// print('Biomarker: ${entry?.standardName}, Standard Unit: ${entry?.unit}');
+/// ```
+///
+/// ### Advanced Example:
+/// ```dart
+/// // Fuzzy matching an OCR-extracted test name with unit disambiguation
+/// final match = BiomarkerDictionary.fuzzyMatch('Tot Chol', extractedUnit: 'mmol/L');
+/// print('Matched Key: ${match?.key}, Standard Name: ${match?.standardName}');
+/// ```
+library biomarker_dictionary;
+
+/// An individual clinical biomarker dictionary definition.
 class BiomarkerEntry {
+  /// Target database staging column key (e.g. `'hemoglobin_g_dl'`).
   final String key;
+
+  /// Human-readable standard clinical parameter name (e.g. `'Hemoglobin'`).
   final String standardName;
+
+  /// Standard database measurement unit (e.g. `'g/dL'`).
   final String unit;
+
+  /// Conventional biological reference range string.
   final String? referenceRange;
+
+  /// International System of Units (SI) reference range string.
   final String? referenceRangeSI;
+
+  /// Alternate clinical names, abbreviations, and acronyms (e.g. `['Hb', 'HGB']`).
   final List<String> aliases;
+
+  /// Accepted laboratory units for unit compatibility scoring.
   final List<String> allowedUnits;
+
+  /// Layman clinical description explaining the diagnostic purpose of the biomarker.
   final String? description;
 
+  /// Constructs an immutable [BiomarkerEntry].
   const BiomarkerEntry({
     required this.key,
     required this.standardName,
@@ -21,6 +58,7 @@ class BiomarkerEntry {
   });
 }
 
+/// Curated registry and search index for medical laboratory biomarkers.
 class BiomarkerDictionary {
   static const Map<String, List<String>> medicalCategories = {
     'Urine': [

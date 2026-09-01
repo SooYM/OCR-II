@@ -1,7 +1,19 @@
 """
-Medical Report Digitization API
-Prototype backend — OCR processing, LLM parsing, BigQuery/SQLite storage.
-JWT authentication. Designed for tester flow: Login → Snap → Verify → Send.
+MedScan Medical Report Digitization & Health Intelligence API.
+
+This FastAPI microservice provides:
+1. Stateless JWT user authentication, demographic profile management, and account deactivation.
+2. OpenCV computer vision preprocessing (corner detection, perspective warping, illumination division, and CLAHE contrast equalization).
+3. Otsu horizontal projection whitespace row-gap splitting for dense laboratory documents.
+4. Multi-segment GPT-4o Vision OCR with strict JSON schema parsing and cross-page parameter merging.
+5. Automated typo autocorrection (Negative, Positive, Trace, Clear) and ISO date/time normalization.
+6. Multi-attribute duplicate prevention engine with 2% float tolerance and demographic cross-verification.
+7. Dual persistence architecture (Supabase PostgreSQL with RLS + SQLite local development fallback).
+8. Context-aware conversational AI health assistant with Server-Sent Events (SSE) token streaming.
+
+Example:
+    >>> # Launch API server with uvicorn
+    >>> # uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
 import os

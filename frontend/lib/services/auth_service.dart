@@ -1,9 +1,31 @@
+/// MedScan Authentication & Session Management Service.
+///
+/// Handles user registration, credentials authentication, stateless JWT bearer token
+/// caching, and offline profile synchronization.
+///
+/// ### Simple Example:
+/// ```dart
+/// // Logging in a user
+/// final user = await AuthService.login('jane.doe@example.com', 'SecurePassword123!');
+/// print('Welcome back, ${user['name']}!');
+/// ```
+///
+/// ### Advanced Example:
+/// ```dart
+/// // Validating token on startup with offline fallback
+/// final isValid = await AuthService.validateToken();
+/// if (!isValid && !AuthService.isLoggedIn) {
+///   Navigator.pushReplacementNamed(context, '/auth');
+/// }
+/// ```
+library auth_service;
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 
-/// Manages JWT-based authentication: login, register, token persistence.
+/// Singleton manager for authentication state, credentials, and token persistence.
 class AuthService {
   static const _tokenKey = 'medscan_auth_token';
   static const _userKey = 'medscan_user';
@@ -13,11 +35,16 @@ class AuthService {
 
   // ─── Token Access ──────────────────────────────────────────────────────────
 
+  /// The active JWT bearer token, or `null` if unauthenticated.
   static String? get token => _token;
+
+  /// The active user demographic profile dictionary.
   static Map<String, dynamic>? get currentUser => _currentUser;
+
+  /// Whether a user is currently authenticated with a cached token.
   static bool get isLoggedIn => _token != null;
 
-  /// Attach auth header to requests.
+  /// Default HTTP headers containing the active JWT bearer token.
   static Map<String, String> get authHeaders => {
     'Content-Type': 'application/json',
     'bypass-tunnel-reminder': 'true',
@@ -27,8 +54,9 @@ class AuthService {
 
   // ─── Init (load from disk) ─────────────────────────────────────────────────
 
-  /// Initializes authentication state by loading cached JWT token and user profile
-  /// from local storage.
+  /// Initializes authentication state by loading cached JWT token and profile data.
+  ///
+  /// Must be invoked at app bootstrap prior to building routes.
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString(_tokenKey);
@@ -40,10 +68,24 @@ class AuthService {
 
   // ─── Register ──────────────────────────────────────────────────────────────
 
-  /// Registers a new user account on the backend.
+  /// Registers a new user account with demographic baseline parameters.
   ///
-  /// Persists the returned JWT token and user profile parameters locally.
-  static Future<Map<String, dynamic>> register(String email, String name, String password, String gender, String dob, String icNumber) async {
+  /// * [email]: User email address.
+  /// * [name]: Full name (used for OCR patient matching).
+  /// * [password]: Account password (hashed via bcrypt on backend).
+  /// * [gender]: Biological sex (`'Male'` or `'Female'`).
+  /// * [dob]: Date of birth (`YYYY-MM-DD`).
+  /// * [icNumber]: National identity card or passport number.
+  /// * Returns: The registered user profile map.
+  /// * Throws: [AuthException] on validation failure or duplicate email.
+  static Future<Map<String, dynamic>> register(
+    String email,
+    String name,
+    String password,
+    String gender,
+    String dob,
+    String icNumber,
+  ) async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/register'),
       headers: {'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true'},
@@ -71,7 +113,10 @@ class AuthService {
 
   /// Authenticates user credentials with the backend API.
   ///
-  /// Caches the JWT bearer token and registered profile demographics locally.
+  /// * [email]: Registered email address.
+  /// * [password]: Plaintext password string.
+  /// * Returns: User demographic profile dictionary.
+  /// * Throws: [AuthException] on invalid credentials.
   static Future<Map<String, dynamic>> login(String email, String password) async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/login'),
@@ -91,10 +136,12 @@ class AuthService {
 
   // ─── Validate Token ────────────────────────────────────────────────────────
 
-  /// Validates the local JWT token against the backend profile endpoint.
+  /// Validates the active JWT token against the backend `/api/auth/me` endpoint.
   ///
   /// Refreshes cached user demographics (DOB, NRIC, gender) if the token is valid.
-  /// Automatically logouts the user locally if the verification fails.
+  /// Automatically logs out the user locally if rejected (e.g. expired or deactivated).
+  ///
+  /// * Returns: `true` if valid or offline-resilient, `false` if rejected.
   static Future<bool> validateToken() async {
     if (_token == null) return false;
     try {
@@ -105,7 +152,7 @@ class AuthService {
       if (response.statusCode == 200) {
         final user = jsonDecode(response.body);
         _currentUser = user;
-        // Persist refreshed user data so cached fields (ic_number, dob, etc.) stay current
+        // Persist refreshed user data so cached fields stay up-to-date
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_userKey, jsonEncode(user));
         return true;
@@ -113,14 +160,14 @@ class AuthService {
       await logout();
       return false;
     } catch (_) {
-      // Network error — still consider logged in (offline-friendly)
+      // Network error — preserve session to support offline usage
       return _token != null;
     }
   }
 
   // ─── Logout ────────────────────────────────────────────────────────────────
 
-  /// Logs out the user by clearing the local session variables and persistent storage.
+  /// Clears active credentials from memory and wipes persisted tokens from disk.
   static Future<void> logout() async {
     _token = null;
     _currentUser = null;
@@ -129,9 +176,11 @@ class AuthService {
     await prefs.remove(_userKey);
   }
 
-  /// Updates user profile settings (name and email) on the server.
+  /// Updates user profile name and email on the server.
   ///
-  /// Synchronizes the local storage variables with the updated profile response.
+  /// * [name]: New display name.
+  /// * [email]: New contact email.
+  /// * Returns: Updated user profile map.
   static Future<Map<String, dynamic>> updateProfile(String name, String email) async {
     final response = await http.put(
       Uri.parse('${ApiService.baseUrl}/api/auth/profile'),
@@ -151,7 +200,7 @@ class AuthService {
     }
   }
 
-  /// Deactivate account (mark as inactive).
+  /// Deactivates the user account on the backend and triggers local logout.
   static Future<void> deactivateAccount() async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/deactivate'),
@@ -166,7 +215,10 @@ class AuthService {
     }
   }
 
-  /// Change user password.
+  /// Updates user account password.
+  ///
+  /// * [currentPassword]: Existing password for verification.
+  /// * [newPassword]: New replacement password.
   static Future<void> changePassword(String currentPassword, String newPassword) async {
     final response = await http.post(
       Uri.parse('${ApiService.baseUrl}/api/auth/password'),
@@ -185,6 +237,7 @@ class AuthService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
+  /// Persists authentication state to local device storage.
   static Future<void> _saveAuth(String token, Map<String, dynamic> user) async {
     _token = token;
     _currentUser = user;
@@ -193,6 +246,7 @@ class AuthService {
     await prefs.setString(_userKey, jsonEncode(user));
   }
 
+  /// Parses error responses into clean user-facing error strings.
   static String _parseError(http.Response response) {
     try {
       final body = jsonDecode(response.body);
@@ -203,9 +257,15 @@ class AuthService {
   }
 }
 
+/// Custom exception thrown on authentication failures.
 class AuthException implements Exception {
+  /// User-facing error message.
   final String message;
+
+  /// HTTP status code.
   final int statusCode;
+
+  /// Constructs an [AuthException].
   AuthException(this.message, this.statusCode);
 
   @override

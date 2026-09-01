@@ -1,15 +1,50 @@
+/// Bidirectional Clinical Unit Conversion Engine.
+///
+/// This module normalizes diverse medical laboratory measurement units
+/// (SI vs Conventional) to standard units across 92+ parameters.
+///
+/// ### Simple Example:
+/// ```dart
+/// // Converting total cholesterol from mmol/L to standard mg/dL
+/// final result = UnitConverter.convert('total_cholesterol_mg_dl', '5.17', 'mmol/L', 'mg/dL');
+/// print(result.convertedValue); // '200'
+/// ```
+///
+/// ### Advanced Example:
+/// ```dart
+/// // Converting non-linear HbA1c reference range between % and mmol/mol
+/// final convertedRange = UnitConverter.convertRange('hba1c_pct', '4.0 - 5.6', '%', 'mmol/mol');
+/// print(convertedRange); // '20 - 38'
+/// ```
+library unit_converter;
+
 import 'biomarker_dictionary.dart';
 
+/// Container encapsulating the outcome of a biomarker unit transformation.
 class ConversionResult {
+  /// The input value prior to conversion.
   final String originalValue;
+
+  /// The resulting value after applying conversion factors.
   final String convertedValue;
+
+  /// Whether a mathematical transformation was executed.
   final bool wasConverted;
 
+  /// Constructs a [ConversionResult].
   ConversionResult(this.originalValue, this.convertedValue, this.wasConverted);
 }
 
+/// Core clinical unit converter utility class providing bidirectional linear
+/// and polynomial transformations.
 class UnitConverter {
-  /// Bidirectional unit conversion for biomarker values.
+  /// Converts a numeric biomarker measurement from [extractedUnit] to [standardUnit].
+  ///
+  /// * [key]: Biomarker database column key (e.g. `'total_cholesterol_mg_dl'`).
+  /// * [rawValue]: Raw string containing numeric value, optionally with symbols (e.g. `"< 3.8"`).
+  /// * [extractedUnit]: Unit extracted from the lab report (e.g. `'mmol/L'`).
+  /// * [standardUnit]: Target database standard unit (e.g. `'mg/dL'`).
+  /// * Returns: A [ConversionResult] with converted or original value.
   static ConversionResult convert(String key, String rawValue, String? extractedUnit, String standardUnit) {
     if (extractedUnit == null || extractedUnit.isEmpty) {
       return ConversionResult(rawValue, rawValue, false);
@@ -18,11 +53,12 @@ class UnitConverter {
     final extUnit = _normalizeUnit(extractedUnit);
     final stdUnit = _normalizeUnit(standardUnit);
 
+    // No conversion needed if units match
     if (extUnit == stdUnit) {
       return ConversionResult(rawValue, rawValue, false);
     }
 
-    // Extract numeric portion with optional prefix/suffix (e.g. "< 3.8" -> prefix="< ", number=3.8)
+    // Extract numeric portion with optional leading/trailing symbols (e.g. "< 3.8" -> prefix="< ", number=3.8)
     final regex = RegExp(r'^([^\d\.]*)([0-9]*\.?[0-9]+)([^\d\.]*)$');
     final match = regex.firstMatch(rawValue.trim());
 
@@ -40,7 +76,7 @@ class UnitConverter {
     double convertedNumber = number;
     bool didConvert = false;
 
-    // --- Helper: bidirectional linear conversion ---
+    // Helper: bidirectional linear transformation
     // units1 -> units2: multiply by factor
     // units2 -> units1: divide by factor
     bool tryConvert(List<String> units1, List<String> units2, double factor) {
@@ -55,17 +91,17 @@ class UnitConverter {
     }
 
     // ─── LIPID PROFILE ───────────────────────────────────
-    // Cholesterol: 1 mmol/L = 38.67 mg/dL
+    // Cholesterol: 1 mmol/L = 38.67 mg/dL (molecular weight approx 386.65 g/mol)
     if (['total_cholesterol_mg_dl', 'hdl_mg_dl', 'ldl_mg_dl', 'vldl_mg_dl', 'non_hdl_mg_dl'].contains(key)) {
       didConvert = tryConvert(['mmol/l'], ['mg/dl'], 38.67);
     }
-    // Triglycerides: 1 mmol/L = 88.57 mg/dL
+    // Triglycerides: 1 mmol/L = 88.57 mg/dL (molecular weight approx 885.7 g/mol)
     else if (key == 'triglycerides_mg_dl') {
       didConvert = tryConvert(['mmol/l'], ['mg/dl'], 88.57);
     }
 
     // ─── GLUCOSE ─────────────────────────────────────────
-    // Glucose: 1 mmol/L = 18.018 mg/dL
+    // Glucose: 1 mmol/L = 18.018 mg/dL (molecular weight approx 180.16 g/mol)
     else if (['fasting_glucose_mg_dl', 'random_glucose_mg_dl', 'postprandial_glucose_mg_dl', 'fbs_mg_dl', 'plbs_mg_dl', 'estimated_avg_glucose_mg_dl'].contains(key)) {
       didConvert = tryConvert(['mmol/l'], ['mg/dl'], 18.018);
     }
@@ -79,7 +115,7 @@ class UnitConverter {
     else if (key == 'urea_mg_dl') {
       didConvert = tryConvert(['mmol/l'], ['mg/dl'], 6.006);
     }
-    // BUN: 1 mg/dL = 0.357 mmol/L
+    // Blood Urea Nitrogen (BUN): 1 mg/dL = 0.357 mmol/L (Factor = 2.80)
     else if (key == 'bun_mg_dl') {
       didConvert = tryConvert(['mmol/l'], ['mg/dl'], 2.8);
     }
@@ -87,7 +123,7 @@ class UnitConverter {
     else if (key == 'uric_acid_mg_dl') {
       didConvert = tryConvert(['umol/l', 'µmol/l'], ['mg/dl'], 1 / 59.48);
     }
-    // Sodium/Potassium/Chloride: mmol/L = mEq/L (1:1 for monovalent ions)
+    // Monovalent Electrolytes (Na+, K+, Cl-): mmol/L = mEq/L (1:1 equivalent)
     else if (['sodium_mmol_l', 'potassium_mmol_l', 'chloride_mmol_l'].contains(key)) {
       didConvert = tryConvert(['mmol/l'], ['meq/l'], 1.0);
     }
@@ -95,7 +131,7 @@ class UnitConverter {
     else if (key == 'egfr_ml_min_173m2') {
       didConvert = tryConvert(['ml/s/1.73m²', 'ml/s/1.73m2'], ['ml/min/1.73m²', 'ml/min/1.73m2'], 60.0);
     }
-    // Urine Creatinine: 1 mg/dL = 0.08842 mmol/L
+    // Urine Creatinine: 1 mg/dL = 0.08842 mmol/L (factor = 11.312)
     else if (key == 'urine_creatinine_mg_dl') {
       didConvert = tryConvert(['mmol/l'], ['mg/dl'], 11.312);
     }
@@ -105,11 +141,11 @@ class UnitConverter {
     else if (['bilirubin_total_mg_dl', 'bilirubin_direct_mg_dl', 'bilirubin_indirect_mg_dl'].contains(key)) {
       didConvert = tryConvert(['umol/l', 'µmol/l'], ['mg/dl'], 1 / 17.1);
     }
-    // Enzymes ALP/ALT/AST/GGT: 1 U/L = 0.0167 µkat/L (1/60)
+    // Enzymes (ALP, ALT, AST, GGT): 1 U/L = 0.0167 µkat/L (60 U/L = 1 µkat/L)
     else if (['alp_u_l', 'alt_sgpt_u_l', 'ast_sgot_u_l', 'ggt_u_l'].contains(key)) {
       didConvert = tryConvert(['µkat/l', 'ukat/l'], ['u/l'], 60.0);
     }
-    // Proteins (Total Protein, Albumin, Globulin): 1 g/dL = 10 g/L
+    // Total Proteins / Albumin: 1 g/dL = 10 g/L
     else if (['protein_total_g_dl', 'albumin_g_dl', 'globulin_g_dl'].contains(key)) {
       didConvert = tryConvert(['g/l'], ['g/dl'], 1 / 10.0);
     }
@@ -119,25 +155,21 @@ class UnitConverter {
     else if (['hemoglobin_g_dl', 'mchc_g_dl'].contains(key)) {
       didConvert = tryConvert(['g/l'], ['g/dl'], 1 / 10.0);
     }
-    // RBC Count: 1 mil/µL = 1 × 10^12/L (1:1)
+    // RBC Count: 1 mil/µL = 1 × 10^12/L (1:1 equivalence)
     else if (key == 'rbc_count_mil_ul') {
       didConvert = tryConvert(['mil/ul', 'mil/µl'], ['10^12/l'], 1.0);
     }
-    // WBC: 1000 cells/µL = 1 × 10^9/L
-    else if (key == 'wbc_cells_ul') {
+    // WBC & Absolute differential counts: 10^9/L = 1,000 cells/µL
+    else if (['wbc_cells_ul', 'abs_neutrophils', 'abs_lymphocytes', 'abs_monocytes', 'abs_eosinophils', 'abs_basophils'].contains(key)) {
       didConvert = tryConvert(['10^9/l'], ['cells/ul', 'cells/µl'], 1000.0);
     }
-    // Absolute counts (Neutrophils, Lymphocytes, Monocytes, Eosinophils, Basophils): cells/µL → 10^9/L
-    else if (['abs_neutrophils', 'abs_lymphocytes', 'abs_monocytes', 'abs_eosinophils', 'abs_basophils'].contains(key)) {
-      didConvert = tryConvert(['10^9/l'], ['cells/ul', 'cells/µl'], 1000.0);
-    }
-    // Platelet Count: 1 ×10³/µL = 1 × 10^9/L (1:1)
+    // Platelet Count: 1 × 10³/µL = 1 × 10^9/L (1:1 equivalence)
     else if (key == 'platelet_count_x10_3_ul') {
       didConvert = tryConvert(['x10³/ul', 'x10^3/ul'], ['10^9/l'], 1.0);
     }
 
     // ─── IRON PROFILE ────────────────────────────────────
-    // Iron/UIBC/TIBC: 1 µg/dL = 0.179 µmol/L (factor = 5.587)
+    // Iron / UIBC / TIBC: 1 µg/dL = 0.179 µmol/L (Factor = 5.587)
     else if (['iron_ug_dl', 'uibc_ug_dl', 'tibc_ug_dl'].contains(key)) {
       didConvert = tryConvert(['umol/l', 'µmol/l'], ['ug/dl', 'µg/dl'], 5.59);
     }
@@ -159,12 +191,12 @@ class UnitConverter {
     else if (key == 'tt4_ug_dl') {
       didConvert = tryConvert(['nmol/l'], ['ug/dl', 'µg/dl'], 1 / 12.87);
     }
-    // TSH: µIU/mL = mIU/L (1:1, same unit different notation)
+    // TSH: µIU/mL = mIU/L (1:1 notation equivalent)
     else if (key == 'tsh_uiu_ml') {
       didConvert = tryConvert(['uiu/ml', 'µiu/ml'], ['miu/l'], 1.0);
     }
 
-    // ─── ADDED CONVERSIONS ───────────────────────────────
+    // ─── SPECIALIZED CLINICAL RATIOS ─────────────────────
     else if (key == 'proteins') {
       didConvert = tryConvert(['g/l'], ['mg/dl'], 0.01);
     }
@@ -184,7 +216,7 @@ class UnitConverter {
       didConvert = tryConvert(['ml/l'], ['%'], 10.0);
     }
 
-    // ─── HbA1c (Non-linear conversion) ───────────────────
+    // ─── HbA1c (Non-linear IFCC ↔ NGSP Master Equation) ──
     // NGSP (%) ↔ IFCC (mmol/mol): mmol/mol = (% - 2.152) / 0.09148
     else if (key == 'hba1c_pct') {
       if (['%'].contains(extUnit) && ['mmol/mol'].contains(stdUnit)) {
@@ -203,11 +235,12 @@ class UnitConverter {
     return ConversionResult(rawValue, rawValue, false);
   }
 
+  /// Normalizes unit strings by removing whitespace and lowercasing.
   static String _normalizeUnit(String unit) {
     return unit.toLowerCase().replaceAll(' ', '');
   }
 
-  /// Smart number formatting based on magnitude
+  /// Formats numeric values with adaptive precision based on magnitude.
   static String _formatNumber(double n) {
     String result;
     if (n.abs() >= 100) {
@@ -219,7 +252,7 @@ class UnitConverter {
     } else {
       result = n.toStringAsFixed(3);
     }
-    // Remove trailing zeros after decimal point
+    // Remove redundant trailing zeroes after decimal point
     if (result.contains('.')) {
       result = result.replaceAll(RegExp(r'0+$'), '');
       result = result.replaceAll(RegExp(r'\.$'), '');
@@ -227,7 +260,13 @@ class UnitConverter {
     return result;
   }
 
-  /// Converts a reference range string from one unit to another
+  /// Converts a biological reference range string between units.
+  ///
+  /// * [key]: Biomarker parameter identifier.
+  /// * [range]: Raw reference range string (e.g. `'4.0 - 6.0'`).
+  /// * [fromUnit]: Original unit.
+  /// * [toUnit]: Target unit.
+  /// * Returns: The converted reference range string.
   static String convertRange(String key, String range, String fromUnit, String toUnit) {
     if (range.isEmpty || fromUnit == toUnit) return range;
 
@@ -252,7 +291,7 @@ class UnitConverter {
       }
     } catch (_) {}
 
-    // Fallback to regex-based numeric conversion
+    // Fallback to regex-based numeric scale conversion
     final regex = RegExp(r'(\d*\.?\d+)');
     
     return range.replaceAllMapped(regex, (match) {

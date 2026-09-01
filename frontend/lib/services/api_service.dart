@@ -1,3 +1,32 @@
+/// MedScan REST API Communication Gateway.
+///
+/// This service coordinates all network communication between the Flutter client
+/// and the FastAPI backend:
+/// 1. Multipart image and multi-page document uploads with OCR ingestion.
+/// 2. Computer vision scanner preprocessing (CamScanner shadow removal).
+/// 3. Human-in-the-loop report verification updates and finalization.
+/// 4. Server-Sent Events (SSE) token-by-token streaming for conversational AI health analytics.
+///
+/// ### Simple Example:
+/// ```dart
+/// // Fetch all digitized reports for the authenticated user
+/// final reports = await ApiService.fetchMyReports();
+/// for (final r in reports) {
+///   print('Report: ${r.filename}, Date: ${r.structuredData?.date}');
+/// }
+/// ```
+///
+/// ### Advanced Example:
+/// ```dart
+/// // Streaming AI health analysis response token-by-token
+/// ApiService.analyzeHealthTrendsStream(query: 'Summarize my liver markers')
+///   .listen(
+///     (token) => stdout.write(token),
+///     onError: (e) => print('Stream failed: $e'),
+///   );
+/// ```
+library api_service;
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -7,18 +36,22 @@ import '../models/report_model.dart';
 import '../models/chat_models.dart';
 import 'auth_service.dart';
 
-/// API service with JWT auth.
-/// Base URL is configurable at runtime for localtunnel changes.
+/// Centralized API service with JWT authentication and dynamic host routing.
+///
+/// The base URL can be altered at runtime via the settings screen to accommodate
+/// development tunnels (localtunnel, ngrok) without requiring application rebuilds.
 class ApiService {
   static const _urlKey = 'medscan_base_url';
 
-  // Default URL — update this or change at runtime via the settings icon
+  // Default production or testing backend URL
   static String _baseUrl = 'https://aihubdev.qiu.edu.my/backend';
 
-  /// Get the current base URL.
+  /// Returns the current backend base URL string.
   static String get baseUrl => _baseUrl;
 
-  /// Load the base URL from storage
+  /// Loads the persisted base URL from local storage.
+  ///
+  /// Must be called during application startup prior to executing API calls.
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString(_urlKey);
@@ -27,16 +60,20 @@ class ApiService {
     }
   }
 
-  /// Update the base URL at runtime (no rebuild needed).
+  /// Updates the active base URL at runtime and persists it across app restarts.
+  ///
+  /// * [url]: New backend URL string. Trailing slashes are automatically stripped.
   static Future<void> setBaseUrl(String url) async {
-    // Strip trailing slash
+    // Strip trailing slash to maintain clean endpoint URI concatenation
     _baseUrl = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_urlKey, _baseUrl);
   }
 
+  /// Default HTTP headers injected into requests, including tunnel bypasses and JWT token.
   static Map<String, String> get _headers => {
     'Content-Type': 'application/json',
+    // Bypass interstitial reminder warning pages served by free tunneling proxies
     'bypass-tunnel-reminder': 'true',
     'ngrok-skip-browser-warning': 'true',
     if (AuthService.token != null) 'Authorization': 'Bearer ${AuthService.token}',
@@ -44,7 +81,9 @@ class ApiService {
 
   // ─── Health Check ─────────────────────────────────────────────────────────
 
-  /// Ping the server to check connectivity.
+  /// Pings the backend root endpoint to verify network reachability.
+  ///
+  /// * Returns: `true` if server responds with HTTP 200 within 5 seconds, `false` otherwise.
   static Future<bool> checkConnection() async {
     try {
       final response = await http.get(
@@ -61,8 +100,10 @@ class ApiService {
 
   /// Uploads a single image report to the backend for OCR and LLM extraction.
   ///
-  /// Takes an [imageFile] and optional [force] bypass parameter (to override 
-  /// name/gender mismatches). Returns a [MedicalReport] with structured data.
+  /// * [imageFile]: The local image file to upload.
+  /// * [force]: Optional flag to bypass identity verification mismatch warnings.
+  /// * Returns: A [MedicalReport] containing extracted structured medical parameters.
+  /// * Throws: [ApiException] if the server rejects the upload or extraction fails.
   static Future<MedicalReport> uploadReport(XFile imageFile, {bool force = false}) async {
     final uri = Uri.parse('$_baseUrl/api/upload${force ? "?force=true" : ""}');
     final request = http.MultipartRequest('POST', uri);
@@ -81,6 +122,7 @@ class ApiService {
       ),
     );
 
+    // High timeout (180s) to allow for OpenCV preprocessing + multi-segment GPT-4o Vision OCR
     final streamedResponse = await request.send().timeout(const Duration(seconds: 180));
     final response = await http.Response.fromStream(streamedResponse);
 
@@ -94,14 +136,19 @@ class ApiService {
 
   // ─── Upload Multiple Pages ─────────────────────────────────────────────────
 
-  /// Uploads multiple page images belonging to a single medical report.
+  /// Uploads multiple page images belonging to a single multi-page medical report.
   ///
-  /// The backend processes each page, performs content-aware splitting, 
-  /// and merges all extracted parameters via LLM into a unified [MedicalReport].
+  /// The backend preprocesses every page, performs content-aware splitting, merges
+  /// extracted parameters across pages, and returns a unified [MedicalReport].
+  ///
+  /// * [imageFiles]: List of [XFile] images in page sequence order.
+  /// * [force]: Set true to bypass demographic mismatch warnings.
+  /// * Returns: A unified [MedicalReport].
+  /// * Throws: [ApiException] on network or processing failure.
   static Future<MedicalReport> uploadMultipleReports(List<XFile> imageFiles, {bool force = false}) async {
     if (imageFiles.isEmpty) throw ApiException('No images provided', 400);
 
-    // If only 1 image, use the original single-upload endpoint
+    // Optimization: Route 1-page reports through the simpler single-upload endpoint
     if (imageFiles.length == 1) return uploadReport(imageFiles.first, force: force);
 
     final uri = Uri.parse('$_baseUrl/api/upload-multi${force ? "?force=true" : ""}');
@@ -138,9 +185,10 @@ class ApiService {
 
   /// Runs the backend CamScanner-like edge detection and shadow-removal pipeline.
   ///
-  /// Preprocesses [imageFile] under color or black-and-white [mode]. 
-  /// Returns a map containing the web-accessible URL and absolute server filepath 
-  /// of the preprocessed image asset.
+  /// * [imageFile]: Input raw camera photo.
+  /// * [mode]: Enhancement mode (`'color'` for illumination division, `'bw'` for adaptive thresholding).
+  /// * Returns: Map containing `processed_image_url`, `server_filepath`, and corner metadata.
+  /// * Throws: [ApiException] if processing fails.
   static Future<Map<String, dynamic>> preprocessImage(XFile imageFile, {String mode = 'color'}) async {
     final uri = Uri.parse('$_baseUrl/api/scanner/preprocess?mode=$mode');
     final request = http.MultipartRequest('POST', uri);
@@ -170,8 +218,12 @@ class ApiService {
     }
   }
 
-  /// Dispatches OCR and extraction requests for files already processed and 
-  /// saved on the server (e.g., from the manual edge-cropping view).
+  /// Dispatches OCR extraction for files already preprocessed and saved on the server.
+  ///
+  /// * [filepaths]: Absolute file paths on the server filesystem.
+  /// * [filenames]: Display filenames.
+  /// * [force]: Bypass identity mismatch flags.
+  /// * Returns: Extracted [MedicalReport].
   static Future<MedicalReport> uploadPreprocessedReports(List<String> filepaths, List<String> filenames, {bool force = false}) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/upload-multi/preprocessed${force ? "?force=true" : ""}'),
@@ -192,8 +244,9 @@ class ApiService {
 
   // ─── Manual Report (No OCR) ────────────────────────────────────────────────
 
-  /// Create a blank report for manual entry (no OCR/LLM).
-  /// Returns a MedicalReport with empty structured data.
+  /// Creates a blank report structure for direct manual laboratory entry.
+  ///
+  /// * Returns: A [MedicalReport] with empty [StructuredData] containers.
   static Future<MedicalReport> createManualReport() async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/reports/manual'),
@@ -210,9 +263,12 @@ class ApiService {
 
   // ─── Update Report ─────────────────────────────────────────────────────────
 
-  /// Updates the corrected structured medical data for a report.
+  /// Updates corrected structured clinical data for an existing report.
   ///
-  /// Used when saving user modifications on the verification screen.
+  /// * [id]: The report UUID.
+  /// * [data]: The modified [StructuredData] payload from the verification screen.
+  /// * [force]: Bypass mismatch warnings.
+  /// * Throws: [ApiException] if update fails.
   static Future<void> updateReport(String id, StructuredData data, {bool force = false}) async {
     final response = await http.put(
       Uri.parse('$_baseUrl/api/reports/$id${force ? "?force=true" : ""}'),
@@ -228,8 +284,11 @@ class ApiService {
 
   /// Finalizes and commits the verified report.
   ///
-  /// This triggers the backend database persistence routine to migrate the 
-  /// structured parameters into the primary staging tables.
+  /// Triggers backend duplicate analysis, toggles `user_verified = 1`, and persists
+  /// the 92 standardized biomarkers into `staging_medical_records`.
+  ///
+  /// * [id]: Report UUID to finalize.
+  /// * Throws: [ApiException] if database commit fails.
   static Future<void> sendReport(String id) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/reports/$id/send'),
@@ -242,7 +301,10 @@ class ApiService {
 
   // ─── My Reports ─────────────────────────────────────────────────────────────
 
-  /// Fetch all reports for the current logged-in user.
+  /// Fetches all reports belonging to the current authenticated user.
+  ///
+  /// * Returns: List of [MedicalReport] records.
+  /// * Throws: [ApiException] if retrieval fails.
   static Future<List<MedicalReport>> fetchMyReports() async {
     final response = await http.get(
       Uri.parse('$_baseUrl/api/reports/my'),
@@ -260,7 +322,9 @@ class ApiService {
 
   // ─── Health Analysis ──────────────────────────────────────────────────────
 
-  /// Fetch layman AI health summary of the user's latest reports.
+  /// Fetches a high-level layman AI health summary of the patient's latest records.
+  ///
+  /// * Returns: Markdown summary string.
   static Future<String> fetchHealthSummary() async {
     final response = await http.get(
       Uri.parse('$_baseUrl/api/reports/health-summary'),
@@ -276,7 +340,12 @@ class ApiService {
     }
   }
 
-  /// Fetch AI analysis of health trends using LLM, optionally with a specific user query.
+  /// Fetches an AI analysis of health trends using LLM completions.
+  ///
+  /// * [query]: Optional specific clinical question.
+  /// * [startDate]: Optional start date filter (`YYYY-MM-DD`).
+  /// * [endDate]: Optional end date filter (`YYYY-MM-DD`).
+  /// * Returns: AI generated analysis string.
   static Future<String> analyzeHealthTrends({String? query, String? startDate, String? endDate}) async {
     final Map<String, String> params = {};
     if (query != null && query.isNotEmpty) params['query'] = query;
@@ -289,7 +358,7 @@ class ApiService {
     final response = await http.get(
       uri,
       headers: _headers,
-    ).timeout(const Duration(seconds: 45)); // LLM can be slow
+    ).timeout(const Duration(seconds: 45));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -300,7 +369,14 @@ class ApiService {
     }
   }
 
-  /// Stream AI analysis token-by-token via SSE, including chat history.
+  /// Streams an AI health analysis response token-by-token via Server-Sent Events (SSE).
+  ///
+  /// * [query]: The user query to analyze.
+  /// * [startDate]: Optional beginning of date window.
+  /// * [endDate]: Optional end of date window.
+  /// * [messages]: Conversational history array for multi-turn context.
+  /// * [sessionId]: Persistent chat thread ID.
+  /// * Returns: A [Stream] yielding individual token strings as they arrive.
   static Stream<String> analyzeHealthTrendsStream({
     String? query,
     String? startDate,
@@ -360,6 +436,10 @@ class ApiService {
 
   // ─── Chat Sessions ────────────────────────────────────────────────────────
 
+  /// Creates a new conversational chat session.
+  ///
+  /// * [title]: Topic summary title.
+  /// * Returns: The newly created [ChatSession].
   static Future<ChatSession> createChatSession(String title) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/api/chat/sessions'),
@@ -380,6 +460,9 @@ class ApiService {
     }
   }
 
+  /// Fetches all chat sessions for the authenticated user.
+  ///
+  /// * Returns: List of [ChatSession] items.
   static Future<List<ChatSession>> getChatSessions() async {
     final response = await http.get(
       Uri.parse('$_baseUrl/api/chat/sessions'),
@@ -395,6 +478,10 @@ class ApiService {
     }
   }
 
+  /// Fetches all historical messages belonging to a chat session.
+  ///
+  /// * [sessionId]: Session UUID.
+  /// * Returns: List of [ChatMessage] items ordered chronologically.
   static Future<List<ChatMessage>> getChatMessages(String sessionId) async {
     final response = await http.get(
       Uri.parse('$_baseUrl/api/chat/sessions/$sessionId/messages'),
@@ -410,7 +497,9 @@ class ApiService {
     }
   }
 
-  /// Delete a chat session and all its messages
+  /// Deletes a chat session and all its child messages.
+  ///
+  /// * [sessionId]: Target session UUID.
   static Future<void> deleteChatSession(String sessionId) async {
     final response = await http.delete(
       Uri.parse('$_baseUrl/api/chat/sessions/$sessionId'),
@@ -423,7 +512,9 @@ class ApiService {
     }
   }
 
-  /// Delete a report by ID
+  /// Deletes a medical report and its staging database rows.
+  ///
+  /// * [reportId]: Target report UUID.
   static Future<void> deleteReport(String reportId) async {
     final response = await http.delete(
       Uri.parse('$_baseUrl/api/reports/$reportId'),
@@ -438,6 +529,7 @@ class ApiService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
+  /// Extracts error message from response JSON bodies or falls back to status code.
   static String _parseError(http.Response response) {
     try {
       final body = jsonDecode(response.body);
@@ -448,9 +540,15 @@ class ApiService {
   }
 }
 
+/// Custom exception thrown on MedScan REST API network failures.
 class ApiException implements Exception {
+  /// User-facing or technical error description.
   final String message;
+
+  /// HTTP status code returned by the server.
   final int statusCode;
+
+  /// Constructs an [ApiException].
   ApiException(this.message, this.statusCode);
 
   @override

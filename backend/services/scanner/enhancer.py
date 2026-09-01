@@ -1,36 +1,55 @@
+"""
+Computer Vision Document Enhancement & Illumination Module.
+
+Provides illumination normalization via morphological background division,
+adaptive Gaussian thresholding for high-contrast scan effects, and cubic
+interpolation upscaling for high-fidelity OCR ingestion.
+
+Example:
+    >>> from services.scanner.enhancer import enhance_color, upscale_if_small
+    >>> clean_doc = enhance_color(warped_image)
+    >>> ready_doc = upscale_if_small(clean_doc, min_height=800)
+"""
+
 import cv2
 import numpy as np
 
-def enhance_color(image):
+
+def enhance_color(image: np.ndarray) -> np.ndarray:
     """
-    Applies a color scanner (CamScanner) effect by removing shadows and uneven lighting.
-    Uses background division to normalize light across the document while keeping colors.
+    Normalizes uneven lighting and shadow gradients across color documents.
+
+    Applies morphological dilation with a 7x7 structuring element and a 21x21 median
+    filter to compute the background illumination map per channel. Dividing each channel
+    by its background map eliminates shadows while preserving color ink and stamps.
+
+    Args:
+        image: Source BGR image array.
+
+    Returns:
+        Illumination-corrected and sharpened BGR image.
     """
-    # Split the image into individual channels
     channels = cv2.split(image)
     result_channels = []
     
     # Process each color channel separately to normalize lighting
     for channel in channels:
-        # 1. Dilate to find background elements (remove small foreground details like text)
+        # 1. Dilate to bridge foreground text and isolate background illumination
         dilated = cv2.dilate(channel, np.ones((7, 7), np.uint8))
         
-        # 2. Apply a large median blur to create a smooth illumination background map
+        # 2. Apply a large median blur to smooth out the background map
         bg_map = cv2.medianBlur(dilated, 21)
         
-        # 3. Divide the channel by the background map.
-        # This divides original values by background, scaling to 255.
-        # Result: Background becomes white (255), while foreground text remains dark.
+        # 3. Divide channel by estimated background map to normalize lighting to 255
         diff = cv2.divide(channel, bg_map, scale=255)
         
-        # 4. Normalize the contrast to maximize dynamic range
+        # 4. Normalize contrast to span the full 0-255 dynamic range
         norm = cv2.normalize(diff, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
         result_channels.append(norm)
         
-    # Merge channels back
     merged = cv2.merge(result_channels)
     
-    # 5. Apply a subtle sharpening filter to make text pop
+    # 5. Apply subtle Laplacian sharpening to crispen text edges
     sharpen_kernel = np.array([
         [0, -1, 0],
         [-1, 5, -1],
@@ -40,39 +59,44 @@ def enhance_color(image):
     
     return sharpened
 
-def enhance_bw(image):
+
+def enhance_bw(image: np.ndarray) -> np.ndarray:
     """
-    Applies a high-contrast black and white adaptive thresholding filter (Scan effect).
+    Applies adaptive Gaussian thresholding to produce a high-contrast black & white scan.
+
+    Args:
+        image: Source BGR image.
+
+    Returns:
+        High-contrast BGR image containing pure black text on white background.
     """
-    # 1. Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # 2. Apply adaptive Gaussian thresholding
-    # block size = 11, constant subtract = 2
+    # Adaptive Gaussian thresholding (neighborhood=11, C=2)
     thresh = cv2.adaptiveThreshold(
         gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
         cv2.THRESH_BINARY, 11, 2
     )
     
-    # 3. Optional: apply a bilateral filter or simple median filter to remove minor noise dots
+    # Median filter to eliminate salt-and-pepper noise dots
     denoised = cv2.medianBlur(thresh, 3)
     
-    # Convert back to BGR so it has the same channel count
     return cv2.cvtColor(denoised, cv2.COLOR_GRAY2BGR)
 
-def upscale_if_small(image, min_height=800):
+
+def upscale_if_small(image: np.ndarray, min_height: int = 800) -> np.ndarray:
     """
-    Upscales an image if its height is below min_height.
-    This is useful for split halves that may be too small for the Vision API
-    to read clearly. Uses INTER_CUBIC for high-quality upscaling.
-    
+    Upscales an image proportionally if its vertical resolution is below min_height.
+
+    Ensures that sliced page segments retain sufficient pixel density for small font
+    character recognition by the Vision API.
+
     Args:
-        image: Input BGR image (numpy array).
-        min_height: Minimum acceptable height in pixels. Images shorter than
-                   this will be upscaled proportionally.
-    
+        image: Input BGR image array.
+        min_height: Minimum target height threshold in pixels.
+
     Returns:
-        The original image if tall enough, or the upscaled image.
+        The original image if height >= min_height, or the bicubic upscaled array.
     """
     h, w = image.shape[:2]
     if h >= min_height:
@@ -82,6 +106,6 @@ def upscale_if_small(image, min_height=800):
     new_w = int(w * scale)
     new_h = min_height
     
+    # Use high-quality bicubic interpolation for sharp character strokes
     upscaled = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-    print(f"[ENHANCER] Upscaled image from {w}x{h} to {new_w}x{new_h} (scale={scale:.2f}x)")
     return upscaled
