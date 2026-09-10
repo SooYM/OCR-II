@@ -2,7 +2,7 @@
 
 ## 1. Overview & Storage Strategy
 
-MedScan employs a hybrid relational database architecture designed to separate operational transaction handling (document ingestion, verification, real-time AI chat) from longitudinal clinical analytics and healthcare reporting.
+MedScan employs a dual relational & dimensional database architecture designed to separate operational transaction handling (document ingestion, human verification, real-time AI chat) from longitudinal clinical analytics and healthcare business intelligence.
 
 * **Operational Engine (OLTP - Production)**: **Supabase PostgreSQL 15+** with Row Level Security (RLS) and JSONB indexing.
 * **Fallback Engine (OLTP - Local Dev)**: **SQLite3** (`medical_reports.db`) supporting standard SQL syntax and offline prototyping.
@@ -10,154 +10,155 @@ MedScan employs a hybrid relational database architecture designed to separate o
 
 ---
 
-## 2. Operational Entity-Relationship (ER) Diagram (OLTP)
+## 2. Operational Schema (OLTP)
 
 This schema handles user authentication, raw document storage, human verification, and interactive chat sessions.
 
+### 2.1 Field-to-Field Key Linkage Diagram
+
 ```mermaid
-erDiagram
-    USERS ||--o{ REPORTS : "owns (REPORTS.user_id -> USERS.id)"
-    USERS ||--o{ CHAT_SESSIONS : "initiates (CHAT_SESSIONS.user_id -> USERS.id)"
-    CHAT_SESSIONS ||--o{ CHAT_MESSAGES : "contains (CHAT_MESSAGES.session_id -> CHAT_SESSIONS.id)"
-    REPORTS ||--o| STAGING_MEDICAL_RECORDS : "persists to (STAGING_MEDICAL_RECORDS.report_id -> REPORTS.id)"
+flowchart LR
+    classDef userTable fill:#e8f4f8,stroke:#0d6efd,stroke-width:2px;
+    classDef reportTable fill:#f8f9fa,stroke:#495057,stroke-width:2px;
+    classDef chatTable fill:#fff3cd,stroke:#ffc107,stroke-width:2px;
+    classDef stagingTable fill:#d1e7dd,stroke:#198754,stroke-width:2px;
 
-    USERS {
-        uuid id PK "Primary Key"
-        text email UK "Unique email for auth"
-        text name "Patient full name"
-        text gender "Male | Female"
-        date dob "Date of Birth (YYYY-MM-DD)"
-        text ic_number "NRIC / Passport"
-        text password_hash "Bcrypt password hash"
-        text status "active | inactive"
-        text health_summary "Cached AI medical summary"
-        timestamptz created_at "Account creation timestamp"
-    }
+    subgraph USERS ["users (Auth & Profiles)"]
+        U_ID["🔑 id (PK)"]:::userTable
+        U_EMAIL["email (UK)"]:::userTable
+        U_NAME["name"]:::userTable
+        U_GENDER["gender"]:::userTable
+        U_DOB["dob"]:::userTable
+        U_IC["ic_number"]:::userTable
+        U_PWD["password_hash"]:::userTable
+        U_STAT["status"]:::userTable
+        U_SUMM["health_summary"]:::userTable
+        U_TIME["created_at"]:::userTable
+    end
 
-    REPORTS {
-        uuid id PK "Primary Key"
-        uuid user_id FK "Foreign Key -> USERS.id (ON DELETE CASCADE)"
-        text filename "Uploaded image/PDF filename"
-        timestamptz upload_time "Ingestion timestamp"
-        text status "completed | name_mismatch | sent"
-        text raw_text "Raw OCR text dump"
-        jsonb structured_data "Extracted JSON payload"
-        integer user_verified "0 = Unverified, 1 = Verified & Sent"
-        text file_path "Local server storage relative path"
-    }
+    subgraph REPORTS ["reports (Uploaded Documents)"]
+        R_ID["🔑 id (PK)"]:::reportTable
+        R_UID["🔗 user_id (FK)"]:::reportTable
+        R_FILE["filename"]:::reportTable
+        R_TIME["upload_time"]:::reportTable
+        R_STAT["status"]:::reportTable
+        R_RAW["raw_text"]:::reportTable
+        R_SD["structured_data (JSONB)"]:::reportTable
+        R_VER["user_verified (0 | 1)"]:::reportTable
+        R_PATH["file_path"]:::reportTable
+    end
 
-    STAGING_MEDICAL_RECORDS {
-        uuid staging_record_id PK "Primary Key"
-        uuid report_id FK "Foreign Key -> REPORTS.id (UNIQUE, ON DELETE CASCADE)"
-        bigint medid "Numeric MRN (from patient_id)"
-        text original_medid "Raw patient identifier string"
-        text labreference "Normalized specimen sample ID"
-        text original_labreference "Raw extracted lab sample ID"
-        text report_reference "Accession / Episode No"
-        text lab "Hospital / Clinic name (from hospital_name)"
-        date collected "Collection date (YYYY-MM-DD)"
-        time time "Collection time (HH:MM:SS)"
-        time reported_time "Lab validation time (HH:MM:SS)"
-        text gender "Male | Female"
-        numeric hemoglobin_g_dl "CBC Hemoglobin (g/dL)"
-        numeric total_cholesterol_mg_dl "Total Cholesterol (mg/dL)"
-        numeric creatinine_mg_dl "Kidney Creatinine (mg/dL)"
-        numeric fasting_glucose_mg_dl "Fasting Glucose (mg/dL)"
-        text urine_colour "Urine Color"
-        text proteins "Urine Protein Qualitative Dipstick"
-    }
+    subgraph STAGING ["staging_medical_records (92-Column Staging)"]
+        S_ID["🔑 staging_record_id (PK)"]:::stagingTable
+        S_RID["🔗 report_id (FK, UNIQUE)"]:::stagingTable
+        S_MEDID["medid (BIGINT)"]:::stagingTable
+        S_LABREF["labreference"]:::stagingTable
+        S_REPREF["report_reference"]:::stagingTable
+        S_LAB["lab (Hospital/Clinic)"]:::stagingTable
+        S_COL["collected (DATE)"]:::stagingTable
+        S_TIME["time (TIME)"]:::stagingTable
+        S_GENDER["gender"]:::stagingTable
+        S_BIO["... 92 Biomarker Columns"]:::stagingTable
+    end
 
-    CHAT_SESSIONS {
-        uuid id PK "Primary Key"
-        uuid user_id FK "Foreign Key -> USERS.id (ON DELETE CASCADE)"
-        text title "Conversation summary heading"
-        timestamptz created_at "Thread creation timestamp"
-    }
+    subgraph CHAT_SESSIONS ["chat_sessions (Consultations)"]
+        CS_ID["🔑 id (PK)"]:::chatTable
+        CS_UID["🔗 user_id (FK)"]:::chatTable
+        CS_TITLE["title"]:::chatTable
+        CS_TIME["created_at"]:::chatTable
+    end
 
-    CHAT_MESSAGES {
-        uuid id PK "Primary Key"
-        uuid session_id FK "Foreign Key -> CHAT_SESSIONS.id (ON DELETE CASCADE)"
-        text role "user | assistant"
-        text content "Markdown message body"
-        timestamptz timestamp "Message send timestamp"
-    }
+    subgraph CHAT_MESSAGES ["chat_messages (Turn History)"]
+        CM_ID["🔑 id (PK)"]:::chatTable
+        CM_SID["🔗 session_id (FK)"]:::chatTable
+        CM_ROLE["role (user | assistant)"]:::chatTable
+        CM_CONT["content (Markdown)"]:::chatTable
+        CM_TIME["timestamp"]:::chatTable
+    end
+
+    U_ID ===>|user_id| R_UID
+    U_ID ===>|user_id| CS_UID
+    CS_ID ===>|session_id| CM_SID
+    R_ID ===>|report_id| S_RID
 ```
 
 ---
 
-## 3. Dimensional Star Schema Diagram (OLAP / Analytics)
+## 3. Dimensional Star Schema (OLAP / Clinical Analytics)
 
-For large-scale longitudinal healthcare analytics, BigQuery data warehousing, and business intelligence (Metabase, Tableau, Superset), the wide staging table is projected into a **Dimensional Star Schema**:
+For large-scale longitudinal healthcare analytics, BigQuery data warehousing, and business intelligence (Metabase, Tableau, Superset), the medical records are modeled into a **Dimensional Star Schema**:
+
+### 3.1 Field-to-Field Star Schema Diagram
 
 ```mermaid
-erDiagram
-    DIM_PATIENT ||--o{ FACT_LAB_RESULTS : "patient_id (DIM_PATIENT.patient_id -> FACT_LAB_RESULTS.patient_id)"
-    DIM_DATE ||--o{ FACT_LAB_RESULTS : "date_key (DIM_DATE.date_key -> FACT_LAB_RESULTS.date_key)"
-    DIM_FACILITY ||--o{ FACT_LAB_RESULTS : "facility_id (DIM_FACILITY.facility_id -> FACT_LAB_RESULTS.facility_id)"
-    DIM_BIOMARKER ||--o{ FACT_LAB_RESULTS : "biomarker_key (DIM_BIOMARKER.biomarker_key -> FACT_LAB_RESULTS.biomarker_key)"
-    DIM_REPORT ||--o{ FACT_LAB_RESULTS : "report_id (DIM_REPORT.report_id -> FACT_LAB_RESULTS.report_id)"
+flowchart LR
+    classDef fact fill:#d1e7dd,stroke:#0f5132,stroke-width:2px;
+    classDef dim fill:#cfe2ff,stroke:#084298,stroke-width:2px;
 
-    FACT_LAB_RESULTS {
-        uuid fact_id PK "Fact Record Primary Key"
-        uuid report_id FK "FK -> DIM_REPORT.report_id"
-        uuid patient_id FK "FK -> DIM_PATIENT.patient_id"
-        integer date_key FK "FK -> DIM_DATE.date_key (YYYYMMDD)"
-        uuid facility_id FK "FK -> DIM_FACILITY.facility_id"
-        text biomarker_key FK "FK -> DIM_BIOMARKER.biomarker_key"
-        numeric value_numeric "Normalized numerical value"
-        text value_text "Qualitative text value (e.g. Negative, 1+)"
-        text unit "Standard unit (e.g. mg/dL, g/dL)"
-        boolean is_abnormal "Flag set if value exceeds standard range"
-        numeric ref_low "Reference range lower boundary"
-        numeric ref_high "Reference range upper boundary"
-    }
+    subgraph DIM_PATIENT ["dim_patient"]
+        DP_PID["🔑 patient_id (PK)"]:::dim
+        DP_UID["user_id (FK)"]:::dim
+        DP_NAME["full_name"]:::dim
+        DP_GENDER["gender"]:::dim
+        DP_DOB["date_of_birth"]:::dim
+        DP_IC["ic_number"]:::dim
+    end
 
-    DIM_PATIENT {
-        uuid patient_id PK "Primary Key"
-        uuid user_id FK "FK -> USERS.id"
-        text full_name "Patient Full Name"
-        text gender "Male | Female"
-        date date_of_birth "DOB (YYYY-MM-DD)"
-        text ic_number "NRIC / Passport Number"
-    }
+    subgraph DIM_DATE ["dim_date"]
+        DD_KEY["🔑 date_key (PK)"]:::dim
+        DD_DATE["full_date"]:::dim
+        DD_YEAR["year"]:::dim
+        DD_MONTH["month"]:::dim
+        DD_DAY["day"]:::dim
+        DD_DNAME["day_name"]:::dim
+        DD_QTR["quarter"]:::dim
+    end
 
-    DIM_BIOMARKER {
-        text biomarker_key PK "Primary Key (e.g. hemoglobin_g_dl)"
-        text standard_name "Standard Display Name (e.g. Hemoglobin)"
-        text category "Category (CBC, Lipid, Liver, Kidney, etc.)"
-        text standard_unit "Conventional Unit (e.g. g/dL)"
-        text conventional_range "Conventional Ref Range (e.g. 13.8 - 17.2)"
-        text si_unit "SI Unit (e.g. g/L)"
-        text si_range "SI Ref Range (e.g. 138 - 172)"
-    }
+    subgraph DIM_FACILITY ["dim_facility"]
+        DF_ID["🔑 facility_id (PK)"]:::dim
+        DF_NAME["lab_name"]:::dim
+        DF_DOC["doctor_name"]:::dim
+        DF_GRP["hospital_group"]:::dim
+        DF_LOC["location"]:::dim
+    end
 
-    DIM_FACILITY {
-        uuid facility_id PK "Primary Key"
-        text lab_name "Laboratory / Clinic Name"
-        text doctor_name "Ordering Doctor / Pathologist"
-        text hospital_group "Hospital Network"
-        text location "City / State / Region"
-    }
+    subgraph DIM_BIOMARKER ["dim_biomarker"]
+        DB_KEY["🔑 biomarker_key (PK)"]:::dim
+        DB_NAME["standard_name"]:::dim
+        DB_CAT["category"]:::dim
+        DB_UNIT["standard_unit"]:::dim
+        DB_RANGE["conventional_range"]:::dim
+        DB_SIUNIT["si_unit"]:::dim
+    end
 
-    DIM_DATE {
-        integer date_key PK "Primary Key (YYYYMMDD, e.g. 20260910)"
-        date full_date "Calendar Date (2026-09-10)"
-        integer year "2026"
-        integer month "9"
-        integer day "10"
-        text day_name "Thursday"
-        text month_name "September"
-        integer quarter "3"
-        boolean is_weekend "False"
-    }
+    subgraph DIM_REPORT ["dim_report"]
+        DR_ID["🔑 report_id (PK)"]:::dim
+        DR_FILE["filename"]:::dim
+        DR_TIME["upload_time"]:::dim
+        DR_STAT["status"]:::dim
+        DR_VER["user_verified"]:::dim
+    end
 
-    DIM_REPORT {
-        uuid report_id PK "Primary Key"
-        text filename "Source Filename"
-        timestamptz upload_time "Ingestion Timestamp"
-        text status "Status Code (completed, sent)"
-        integer user_verified "Verification State (1 = Verified)"
-    }
+    subgraph FACT_LAB_RESULTS ["fact_lab_results (Atomic Fact Table)"]
+        F_FID["🔑 fact_id (PK)"]:::fact
+        F_PID["🔗 patient_id (FK)"]:::fact
+        F_RID["🔗 report_id (FK)"]:::fact
+        F_DKEY["🔗 date_key (FK)"]:::fact
+        F_FACID["🔗 facility_id (FK)"]:::fact
+        F_BKEY["🔗 biomarker_key (FK)"]:::fact
+        F_VALN["value_numeric"]:::fact
+        F_VALT["value_text"]:::fact
+        F_UNIT["unit"]:::fact
+        F_ABN["is_abnormal"]:::fact
+        F_LOW["ref_low"]:::fact
+        F_HIGH["ref_high"]:::fact
+    end
+
+    DP_PID ===>|patient_id| F_PID
+    DD_KEY ===>|date_key| F_DKEY
+    DF_ID ===>|facility_id| F_FACID
+    DB_KEY ===>|biomarker_key| F_BKEY
+    DR_ID ===>|report_id| F_RID
 ```
 
 ---
