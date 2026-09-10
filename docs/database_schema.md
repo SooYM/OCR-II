@@ -2,14 +2,17 @@
 
 ## 1. Overview & Storage Strategy
 
-MedScan uses a relational database architecture designed to decouple administrative document tracking from high-performance longitudinal time-series analytics.
+MedScan employs a hybrid relational database architecture designed to separate operational transaction handling (document ingestion, verification, real-time AI chat) from longitudinal clinical analytics and healthcare reporting.
 
-* **Primary Engine (Production)**: **Supabase PostgreSQL 15+** with Row Level Security (RLS) and JSONB indexing.
-* **Fallback Engine (Development / Testing)**: **SQLite3** (`medical_reports.db`) supporting standard SQL syntax and offline prototyping.
+* **Operational Engine (OLTP - Production)**: **Supabase PostgreSQL 15+** with Row Level Security (RLS) and JSONB indexing.
+* **Fallback Engine (OLTP - Local Dev)**: **SQLite3** (`medical_reports.db`) supporting standard SQL syntax and offline prototyping.
+* **Analytical Architecture (OLAP - Data Warehouse)**: **Dimensional Star Schema** designed for BigQuery, PostgreSQL Views, and multi-year clinical trend analytics.
 
 ---
 
-## 2. Entity-Relationship (ER) Diagram
+## 2. Operational Entity-Relationship (ER) Diagram (OLTP)
+
+This schema handles user authentication, raw document storage, human verification, and interactive chat sessions.
 
 ```mermaid
 erDiagram
@@ -82,29 +85,106 @@ erDiagram
 
 ---
 
-## 3. Cross-Layer Naming & Data Mapping Reference
+## 3. Dimensional Star Schema Diagram (OLAP / Analytics)
 
-The following table documents field name correspondences across the presentation layer (Flutter client `StructuredData`), FastAPI OCR ingestion layer, and the `staging_medical_records` SQL database schema:
+For large-scale longitudinal healthcare analytics, BigQuery data warehousing, and business intelligence (Metabase, Tableau, Superset), the wide staging table is projected into a **Dimensional Star Schema**:
 
-| Conceptual Field | Flutter `StructuredData` (JSON) | FastAPI Parser (`metadata`) | `staging_medical_records` (SQL Column) | Data Type & Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Primary Key** | `id` | `id` | `staging_record_id` | `UUID PK` |
-| **Report Parent FK** | `reportId` | `report_id` | `report_id` | `UUID FK UNIQUE` $\rightarrow$ `reports.id` |
-| **Patient MRN (Numeric)** | `patientId` | `medid` | `medid` | `BIGINT` (Normalized digits) |
-| **Patient MRN (Raw String)**| `patientId` | `original_medid` | `original_medid` | `TEXT` (Raw string with letters/dashes) |
-| **Lab Sample ID** | `labreference` | `labreference` | `labreference` | `TEXT` (Sample tube barcode/identifier) |
-| **Raw Sample ID** | `labreference` | `original_labreference` | `original_labreference` | `TEXT` (Unprocessed sample ID) |
-| **Report Accession No** | `reportReference` | `report_reference` | `report_reference` | `TEXT` (Printed report accession code) |
-| **Hospital / Clinic Name** | `hospitalName` | `hospital_name` / `lab` | `lab` | `TEXT` (Issuing medical institution) |
-| **Specimen Collection Date**| `date` / `collected` | `collected` | `collected` | `DATE` (`YYYY-MM-DD`) |
-| **Specimen Collection Time**| `time` | `time` | `time` | `TIME` (`HH:MM:SS`) |
-| **Validation / Sign-off Time**| *(none)* | `reported_time` | `reported_time` | `TIME` (`HH:MM:SS`) |
-| **Patient Gender** | `gender` | `gender` | `gender` | `TEXT` (`'Male'` / `'Female'`) |
-| **Biomarker Measurements** | `results: [{key, value, unit}]`| `final_data[key]` | *Individual columns* (e.g. `hemoglobin_g_dl`) | `NUMERIC` / `TEXT` (Normalized to standard units) |
+```mermaid
+erDiagram
+    DIM_PATIENT ||--o{ FACT_LAB_RESULTS : "patient_id (DIM_PATIENT.patient_id -> FACT_LAB_RESULTS.patient_id)"
+    DIM_DATE ||--o{ FACT_LAB_RESULTS : "date_key (DIM_DATE.date_key -> FACT_LAB_RESULTS.date_key)"
+    DIM_FACILITY ||--o{ FACT_LAB_RESULTS : "facility_id (DIM_FACILITY.facility_id -> FACT_LAB_RESULTS.facility_id)"
+    DIM_BIOMARKER ||--o{ FACT_LAB_RESULTS : "biomarker_key (DIM_BIOMARKER.biomarker_key -> FACT_LAB_RESULTS.biomarker_key)"
+    DIM_REPORT ||--o{ FACT_LAB_RESULTS : "report_id (DIM_REPORT.report_id -> FACT_LAB_RESULTS.report_id)"
+
+    FACT_LAB_RESULTS {
+        uuid fact_id PK "Fact Record Primary Key"
+        uuid report_id FK "FK -> DIM_REPORT.report_id"
+        uuid patient_id FK "FK -> DIM_PATIENT.patient_id"
+        integer date_key FK "FK -> DIM_DATE.date_key (YYYYMMDD)"
+        uuid facility_id FK "FK -> DIM_FACILITY.facility_id"
+        text biomarker_key FK "FK -> DIM_BIOMARKER.biomarker_key"
+        numeric value_numeric "Normalized numerical value"
+        text value_text "Qualitative text value (e.g. Negative, 1+)"
+        text unit "Standard unit (e.g. mg/dL, g/dL)"
+        boolean is_abnormal "Flag set if value exceeds standard range"
+        numeric ref_low "Reference range lower boundary"
+        numeric ref_high "Reference range upper boundary"
+    }
+
+    DIM_PATIENT {
+        uuid patient_id PK "Primary Key"
+        uuid user_id FK "FK -> USERS.id"
+        text full_name "Patient Full Name"
+        text gender "Male | Female"
+        date date_of_birth "DOB (YYYY-MM-DD)"
+        text ic_number "NRIC / Passport Number"
+    }
+
+    DIM_BIOMARKER {
+        text biomarker_key PK "Primary Key (e.g. hemoglobin_g_dl)"
+        text standard_name "Standard Display Name (e.g. Hemoglobin)"
+        text category "Category (CBC, Lipid, Liver, Kidney, etc.)"
+        text standard_unit "Conventional Unit (e.g. g/dL)"
+        text conventional_range "Conventional Ref Range (e.g. 13.8 - 17.2)"
+        text si_unit "SI Unit (e.g. g/L)"
+        text si_range "SI Ref Range (e.g. 138 - 172)"
+    }
+
+    DIM_FACILITY {
+        uuid facility_id PK "Primary Key"
+        text lab_name "Laboratory / Clinic Name"
+        text doctor_name "Ordering Doctor / Pathologist"
+        text hospital_group "Hospital Network"
+        text location "City / State / Region"
+    }
+
+    DIM_DATE {
+        integer date_key PK "Primary Key (YYYYMMDD, e.g. 20260910)"
+        date full_date "Calendar Date (2026-09-10)"
+        integer year "2026"
+        integer month "9"
+        integer day "10"
+        text day_name "Thursday"
+        text month_name "September"
+        integer quarter "3"
+        boolean is_weekend "False"
+    }
+
+    DIM_REPORT {
+        uuid report_id PK "Primary Key"
+        text filename "Source Filename"
+        timestamptz upload_time "Ingestion Timestamp"
+        text status "Status Code (completed, sent)"
+        integer user_verified "Verification State (1 = Verified)"
+    }
+```
 
 ---
 
-## 4. Master PostgreSQL DDL (Supabase)
+## 4. Cross-Layer Naming & Data Mapping Reference
+
+The following table documents the exact field mappings between presentation layer (Flutter client `StructuredData`), FastAPI backend OCR parser, and SQL database schemas:
+
+| Conceptual Field | Flutter `StructuredData` (JSON) | FastAPI Parser (`metadata`) | `staging_medical_records` (SQL) | Star Schema Dimension / Fact |
+| :--- | :--- | :--- | :--- | :--- |
+| **Primary Key** | `id` | `id` | `staging_record_id` | `FACT_LAB_RESULTS.fact_id` |
+| **Report Parent FK** | `reportId` | `report_id` | `report_id` | `FACT_LAB_RESULTS.report_id` |
+| **Patient MRN (Numeric)** | `patientId` | `medid` | `medid` | `DIM_PATIENT.patient_id` |
+| **Patient MRN (Raw String)**| `patientId` | `original_medid` | `original_medid` | `DIM_PATIENT.ic_number` / MRN |
+| **Lab Sample ID** | `labreference` | `labreference` | `labreference` | `FACT_LAB_RESULTS.labreference` |
+| **Raw Sample ID** | `labreference` | `original_labreference` | `original_labreference` | *(Audit field)* |
+| **Report Accession No** | `reportReference` | `report_reference` | `report_reference` | `DIM_REPORT.report_reference` |
+| **Hospital / Clinic Name** | `hospitalName` | `hospital_name` / `lab` | `lab` | `DIM_FACILITY.lab_name` |
+| **Specimen Collection Date**| `date` / `collected` | `collected` | `collected` | `DIM_DATE.full_date` / `date_key` |
+| **Specimen Collection Time**| `time` | `time` | `time` | `FACT_LAB_RESULTS.time` |
+| **Validation / Sign-off Time**| *(none)* | `reported_time` | `reported_time` | `FACT_LAB_RESULTS.reported_time` |
+| **Patient Gender** | `gender` | `gender` | `gender` | `DIM_PATIENT.gender` |
+| **Biomarker Measurements** | `results: [{key, value, unit}]`| `final_data[key]` | *Individual columns* (e.g. `hemoglobin_g_dl`)| `FACT_LAB_RESULTS.value_numeric` + `biomarker_key` |
+
+---
+
+## 5. Master PostgreSQL DDL (Supabase)
 
 ```sql
 -- Enable UUID generation
@@ -321,7 +401,136 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE staging_medical_records TO anon, a
 
 ---
 
-## 5. Local Development SQLite DDL
+## 6. Dimensional Star Schema View Definitions (PostgreSQL OLAP)
+
+To query the data warehouse via Star Schema without altering the operational backend write path, the following PostgreSQL Views project the normalized relational tables into facts and dimensions:
+
+```sql
+-- 1. DIM_PATIENT VIEW
+CREATE OR REPLACE VIEW dim_patient AS
+SELECT 
+    u.id AS patient_id,
+    u.id AS user_id,
+    u.name AS full_name,
+    u.gender,
+    u.dob AS date_of_birth,
+    u.ic_number,
+    u.created_at AS registered_at
+FROM users u;
+
+-- 2. DIM_FACILITY VIEW
+CREATE OR REPLACE VIEW dim_facility AS
+SELECT DISTINCT
+    md5(COALESCE(lab, 'Unknown Facility'))::uuid AS facility_id,
+    COALESCE(lab, 'Unknown Facility') AS lab_name,
+    NULL::TEXT AS doctor_name,
+    NULL::TEXT AS hospital_group,
+    NULL::TEXT AS location
+FROM staging_medical_records;
+
+-- 3. DIM_DATE VIEW
+CREATE OR REPLACE VIEW dim_date AS
+SELECT DISTINCT
+    TO_CHAR(collected, 'YYYYMMDD')::INTEGER AS date_key,
+    collected AS full_date,
+    EXTRACT(YEAR FROM collected)::INTEGER AS year,
+    EXTRACT(MONTH FROM collected)::INTEGER AS month,
+    EXTRACT(DAY FROM collected)::INTEGER AS day,
+    TO_CHAR(collected, 'Day') AS day_name,
+    TO_CHAR(collected, 'Month') AS month_name,
+    EXTRACT(QUARTER FROM collected)::INTEGER AS quarter,
+    CASE WHEN EXTRACT(ISODOW FROM collected) IN (6, 7) THEN TRUE ELSE FALSE END AS is_weekend
+FROM staging_medical_records
+WHERE collected IS NOT NULL;
+
+-- 4. DIM_REPORT VIEW
+CREATE OR REPLACE VIEW dim_report AS
+SELECT
+    r.id AS report_id,
+    r.filename,
+    r.upload_time,
+    r.status,
+    r.user_verified
+FROM reports r;
+
+-- 5. FACT_LAB_RESULTS (UNPIVOTED CLINICAL FACTS)
+CREATE OR REPLACE VIEW fact_lab_results AS
+WITH raw_facts AS (
+    SELECT 
+        s.staging_record_id AS fact_id,
+        s.report_id,
+        r.user_id AS patient_id,
+        TO_CHAR(s.collected, 'YYYYMMDD')::INTEGER AS date_key,
+        md5(COALESCE(s.lab, 'Unknown Facility'))::uuid AS facility_id,
+        s.time,
+        s.reported_time,
+        kv.key AS biomarker_key,
+        CASE WHEN kv.value ~ '^[0-9]+(\.[0-9]+)?$' THEN kv.value::NUMERIC ELSE NULL END AS value_numeric,
+        kv.value AS value_text
+    FROM staging_medical_records s
+    JOIN reports r ON s.report_id = r.id
+    CROSS JOIN LATERAL jsonb_each_text(to_jsonb(s)) AS kv(key, value)
+    WHERE kv.key NOT IN (
+        'staging_record_id', 'report_id', 'medid', 'original_medid', 
+        'labreference', 'original_labreference', 'report_reference', 
+        'lab', 'collected', 'time', 'reported_time', 'gender'
+    )
+    AND kv.value IS NOT NULL AND TRIM(kv.value) != ''
+)
+SELECT 
+    fact_id,
+    report_id,
+    patient_id,
+    date_key,
+    facility_id,
+    time,
+    reported_time,
+    biomarker_key,
+    value_numeric,
+    value_text
+FROM raw_facts;
+```
+
+---
+
+## 7. Sample Analytical Queries using Star Schema
+
+### 7.1 Multi-Year Patient HbA1c Longitudinal Progression
+```sql
+SELECT 
+    d.full_date,
+    p.full_name,
+    f.value_numeric AS hba1c_percentage,
+    CASE 
+        WHEN f.value_numeric < 5.7 THEN 'Normal'
+        WHEN f.value_numeric BETWEEN 5.7 AND 6.4 THEN 'Prediabetes'
+        ELSE 'Diabetes'
+    END AS clinical_tier
+FROM fact_lab_results f
+JOIN dim_patient p ON f.patient_id = p.patient_id
+JOIN dim_date d ON f.date_key = d.date_key
+WHERE f.biomarker_key = 'hba1c_pct'
+  AND p.user_id = 'c1234567-89ab-cdef-0123-456789abcdef'
+ORDER BY d.full_date ASC;
+```
+
+### 7.2 Abnormal Lipid Profile Distribution Across Clinic Facilities
+```sql
+SELECT 
+    fac.lab_name,
+    COUNT(f.fact_id) AS total_cholesterol_tests,
+    AVG(f.value_numeric) AS average_cholesterol_mg_dl,
+    COUNT(CASE WHEN f.value_numeric > 200 THEN 1 END) AS high_cholesterol_count
+FROM fact_lab_results f
+JOIN dim_facility fac ON f.facility_id = fac.facility_id
+WHERE f.biomarker_key = 'total_cholesterol_mg_dl'
+GROUP BY fac.lab_name
+ORDER BY total_cholesterol_tests DESC;
+```
+
+---
+
+## 8. Local Development SQLite DDL
 
 ```sql
 PRAGMA foreign_keys = ON;
