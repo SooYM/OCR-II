@@ -241,6 +241,8 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
 def init_local_db():
     conn = sqlite3.connect(str(DB_PATH))
     cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -251,13 +253,14 @@ def init_local_db():
             gender TEXT,
             dob DATE,
             ic_number TEXT,
+            health_summary TEXT,
             created_at TEXT NOT NULL
         )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reports (
             id TEXT PRIMARY KEY,
-            user_id TEXT,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             filename TEXT NOT NULL,
             upload_time TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'processing',
@@ -303,12 +306,12 @@ def init_local_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS health_summary_cache (
             user_id TEXT PRIMARY KEY,
             summary TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
 
@@ -317,7 +320,8 @@ def init_local_db():
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            title TEXT NOT NULL
+            title TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
     cursor.execute("""
@@ -326,7 +330,119 @@ def init_local_db():
             session_id TEXT NOT NULL,
             role TEXT NOT NULL,
             content TEXT NOT NULL,
-            timestamp TEXT NOT NULL
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+        )
+    """)
+
+    # 92-column staging table for local SQLite fallback
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS staging_medical_records (
+            staging_record_id TEXT PRIMARY KEY,
+            report_id TEXT NOT NULL UNIQUE REFERENCES reports(id) ON DELETE CASCADE,
+            medid INTEGER,
+            original_medid TEXT,
+            labreference TEXT,
+            original_labreference TEXT,
+            report_reference TEXT,
+            lab TEXT,
+            collected DATE,
+            time TIME,
+            reported_time TIME,
+            gender TEXT,
+            urine_colour TEXT,
+            appearance TEXT,
+            specific_gravity REAL,
+            ph REAL,
+            proteins TEXT,
+            glucose TEXT,
+            bilirubin TEXT,
+            ketones TEXT,
+            blood TEXT,
+            urobilinogen TEXT,
+            nitrites TEXT,
+            wbc_pus_cells_hpf TEXT,
+            rbc TEXT,
+            epithelial_cells_hpf TEXT,
+            casts TEXT,
+            crystals TEXT,
+            others TEXT,
+            hemoglobin_g_dl REAL,
+            rbc_count_mil_ul REAL,
+            hematocrit_pct REAL,
+            mcv_fl REAL,
+            mch_pg REAL,
+            mchc_g_dl REAL,
+            rdw_cv_pct REAL,
+            rdw_sd_fl REAL,
+            wbc_cells_ul REAL,
+            neutrophils_pct REAL,
+            lymphocytes_pct REAL,
+            eosinophils_pct REAL,
+            monocytes_pct REAL,
+            basophils_pct REAL,
+            abs_neutrophils REAL,
+            abs_lymphocytes REAL,
+            abs_monocytes REAL,
+            abs_eosinophils REAL,
+            abs_basophils REAL,
+            platelet_count_x10_3_ul REAL,
+            mpv_fl REAL,
+            platelet_rdw_pct REAL,
+            pct_pct REAL,
+            p_lcr_pct REAL,
+            img_pct REAL,
+            imm_pct REAL,
+            iml_pct REAL,
+            lic_pct REAL,
+            total_cholesterol_mg_dl REAL,
+            hdl_mg_dl REAL,
+            ldl_mg_dl REAL,
+            vldl_mg_dl REAL,
+            triglycerides_mg_dl REAL,
+            non_hdl_mg_dl REAL,
+            total_hdl_ratio REAL,
+            ldl_hdl_ratio REAL,
+            hdl_ldl_ratio REAL,
+            bilirubin_total_mg_dl REAL,
+            bilirubin_direct_mg_dl REAL,
+            bilirubin_indirect_mg_dl REAL,
+            alp_u_l REAL,
+            alt_sgpt_u_l REAL,
+            ast_sgot_u_l REAL,
+            ggt_u_l REAL,
+            protein_total_g_dl REAL,
+            albumin_g_dl REAL,
+            globulin_g_dl REAL,
+            a_g_ratio REAL,
+            creatinine_mg_dl REAL,
+            urea_mg_dl REAL,
+            bun_mg_dl REAL,
+            bun_creatinine_ratio REAL,
+            sodium_mmol_l REAL,
+            potassium_mmol_l REAL,
+            chloride_mmol_l REAL,
+            uric_acid_mg_dl REAL,
+            egfr_ml_min_173m2 REAL,
+            iron_ug_dl REAL,
+            uibc_ug_dl REAL,
+            tibc_ug_dl REAL,
+            transferrin_saturation_pct REAL,
+            hba1c_pct REAL,
+            estimated_avg_glucose_mg_dl REAL,
+            hbf_pct REAL,
+            urine_albumin_mg_l REAL,
+            urine_creatinine_mg_dl REAL,
+            albumin_creatinine_ratio REAL,
+            calcium_mg_dl REAL,
+            phosphorus_mg_dl REAL,
+            tt3_ng_dl REAL,
+            tt4_ug_dl REAL,
+            tsh_uiu_ml REAL,
+            fasting_glucose_mg_dl REAL,
+            postprandial_glucose_mg_dl REAL,
+            fbs_mg_dl REAL,
+            plbs_mg_dl REAL
         )
     """)
     conn.commit()
@@ -1815,6 +1931,20 @@ async def mark_report_sent(report_id: str):
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
         cursor.execute("UPDATE reports SET user_verified = 1, status = 'sent' WHERE id = ?", (report_id,))
+        if report.get("structured_data"):
+            sd = report["structured_data"]
+            final_data = get_clean_flat_data(sd)
+            final_data["report_id"] = report_id
+            final_data["staging_record_id"] = str(uuid.uuid4())
+            cursor.execute("DELETE FROM staging_medical_records WHERE report_id = ?", (report_id,))
+            cols = [k for k in final_data.keys() if k in STAGING_SCHEMA_KEYS or k in ("report_id", "staging_record_id")]
+            if cols:
+                placeholders = ", ".join(["?"] * len(cols))
+                col_names = ", ".join(cols)
+                cursor.execute(
+                    f"INSERT INTO staging_medical_records ({col_names}) VALUES ({placeholders})",
+                    [final_data[c] for c in cols]
+                )
         conn.commit()
         conn.close()
 
